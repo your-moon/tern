@@ -1,0 +1,363 @@
+// Adapted from zeron crates/ui/src/shell/command_palette.rs (palette card, header, footer,
+// overlay) and crates/engine/src/repos.rs (nucleo ranking) (MIT).
+//! ⌘K host picker: type to fuzzy-filter `~/.ssh/config` hosts, Enter connects.
+
+use gpui::prelude::FluentBuilder;
+use gpui::{
+    AnyElement, App, Context, FocusHandle, FontWeight, InteractiveElement, IntoElement,
+    KeyDownEvent, ParentElement, Pixels, ScrollHandle, SharedString, Size,
+    StatefulInteractiveElement, Styled, Window, actions, anchored, deferred, div, hsla, point, px,
+};
+use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
+use nucleo_matcher::{Config, Matcher, Utf32Str};
+use tern_ssh::HostEntry;
+
+use crate::shell::Shell;
+use crate::sidebar;
+use crate::theme::Theme;
+
+actions!(tern, [ToggleHostPicker]);
+
+pub struct Picker {
+    query: String,
+    active: usize,
+    focus: FocusHandle,
+    scroll: ScrollHandle,
+}
+
+impl Picker {
+    pub fn new(cx: &mut App) -> Self {
+        Self {
+            query: String::new(),
+            active: 0,
+            focus: cx.focus_handle(),
+            scroll: ScrollHandle::new(),
+        }
+    }
+
+    pub fn focus(&self) -> &FocusHandle {
+        &self.focus
+    }
+
+    pub fn query(&self) -> &str {
+        &self.query
+    }
+}
+
+/// What a keystroke does to an open picker.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Key {
+    Move(isize),
+    Pick,
+    Close,
+    Erase,
+    Type(String),
+    Ignore,
+}
+
+/// Arrows and readline's ⌃N/⌃P move, as in zeron's `classify_key`; any other keystroke that
+/// produces text without ⌘ or ⌃ is typed into the query.
+pub fn classify(event: &KeyDownEvent) -> Key {
+    let ks = &event.keystroke;
+    let mods = &ks.modifiers;
+    match ks.key.as_str() {
+        "up" => Key::Move(-1),
+        "down" => Key::Move(1),
+        "p" if mods.control => Key::Move(-1),
+        "n" if mods.control => Key::Move(1),
+        "enter" => Key::Pick,
+        "escape" => Key::Close,
+        "backspace" => Key::Erase,
+        _ if mods.platform || mods.control => Key::Ignore,
+        _ => match &ks.key_char {
+            Some(text) if !text.chars().any(char::is_control) => Key::Type(text.clone()),
+            _ => Key::Ignore,
+        },
+    }
+}
+
+/// Indices into `hosts` that match `query`, best first. An empty query keeps config order.
+/// Each host is matched as "alias user@hostname", so either the name or the address finds it.
+pub fn rank(query: &str, hosts: &[HostEntry]) -> Vec<usize> {
+    if query.trim().is_empty() {
+        return (0..hosts.len()).collect();
+    }
+    let mut matcher = Matcher::new(Config::DEFAULT);
+    let pattern = Pattern::parse(query, CaseMatching::Smart, Normalization::Smart);
+    let mut buf = Vec::new();
+    let mut scored: Vec<(u32, usize)> = hosts
+        .iter()
+        .enumerate()
+        .filter_map(|(ix, host)| {
+            let haystack = format!("{} {}", host.alias, sidebar::address(host));
+            pattern
+                .score(Utf32Str::new(&haystack, &mut buf), &mut matcher)
+                .map(|score| (score, ix))
+        })
+        .collect();
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+    scored.into_iter().map(|(_, ix)| ix).collect()
+}
+
+impl Shell {
+    pub fn on_picker_key(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let key = classify(event);
+        if key == Key::Ignore {
+            return;
+        }
+        cx.stop_propagation();
+        let matches = rank(&self.picker_query(), self.hosts());
+        let Some(picker) = self.picker_mut() else {
+            return;
+        };
+        match key {
+            Key::Move(delta) => {
+                if !matches.is_empty() {
+                    picker.active = crate::tabs::step(picker.active, matches.len(), delta);
+                    picker.scroll.scroll_to_item(picker.active);
+                }
+            }
+            Key::Type(text) => {
+                picker.query.push_str(&text);
+                picker.active = 0;
+            }
+            Key::Erase => {
+                picker.query.pop();
+                picker.active = 0;
+            }
+            Key::Pick => {
+                let chosen = matches
+                    .get(picker.active)
+                    .map(|&ix| self.hosts()[ix].clone());
+                self.close_picker(window, cx);
+                if let Some(host) = chosen {
+                    self.connect_host(host, window, cx);
+                }
+                return;
+            }
+            Key::Close => return self.close_picker(window, cx),
+            Key::Ignore => {}
+        }
+        cx.notify();
+    }
+}
+
+/// Results list height: zeron's `palette_results_height`.
+fn results_height(viewport: Size<Pixels>) -> f32 {
+    (f32::from(viewport.height) - 180.0).clamp(100.0, 360.0)
+}
+
+pub fn render(
+    picker: &Picker,
+    hosts: &[HostEntry],
+    viewport: Size<Pixels>,
+    t: &Theme,
+    cx: &mut Context<Shell>,
+) -> AnyElement {
+    let matches = rank(&picker.query, hosts);
+    let active = picker.active.min(matches.len().saturating_sub(1));
+    let rows = matches.iter().enumerate().map(|(row, &ix)| {
+        let host = &hosts[ix];
+        let target = host.clone();
+        div()
+            .id(("pick", row))
+            .mx(px(4.))
+            .px(px(12.))
+            .py(px(4.))
+            .min_h(px(30.))
+            .rounded(px(10.))
+            .flex()
+            .items_center()
+            .gap(px(10.))
+            .cursor_pointer()
+            .when(row == active, |el| el.bg(t.row_active))
+            .hover(|s| s.bg(t.row_active))
+            .on_click(cx.listener(move |shell, _, window, cx| {
+                shell.close_picker(window, cx);
+                shell.connect_host(target.clone(), window, cx);
+            }))
+            .child(
+                div()
+                    .text_sm()
+                    .font_weight(FontWeight::MEDIUM)
+                    .child(SharedString::from(host.alias.clone())),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .text_xs()
+                    .text_color(t.muted)
+                    .child(SharedString::from(sidebar::address(host))),
+            )
+    });
+    let query: SharedString = if picker.query.is_empty() {
+        "Connect to a host…".into()
+    } else {
+        picker.query.clone().into()
+    };
+    let card = div()
+        .id("host-picker")
+        .track_focus(&picker.focus)
+        .w(px(560.0_f32.min(f32::from(viewport.width) - 32.0)))
+        .flex()
+        .flex_col()
+        .rounded(px(16.))
+        .border_1()
+        .border_color(t.border)
+        .bg(t.popup)
+        .text_color(t.text)
+        .on_key_down(cx.listener(Shell::on_picker_key))
+        .on_mouse_down_out(cx.listener(|shell, _, window, cx| shell.close_picker(window, cx)))
+        .child(
+            div()
+                .min_h(px(44.))
+                .px(px(16.))
+                .py(px(8.))
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .border_b_1()
+                .border_color(t.hairline)
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .truncate()
+                        .text_size(px(14.))
+                        .when(picker.query.is_empty(), |el| el.text_color(t.faint))
+                        .child(query),
+                )
+                .child(kbd("⌘K", t)),
+        )
+        .child(
+            div()
+                .id("picker-results")
+                .py(px(8.))
+                .max_h(px(results_height(viewport)))
+                .overflow_y_scroll()
+                .track_scroll(&picker.scroll)
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .children(rows)
+                .when(matches.is_empty(), |el| {
+                    el.child(
+                        div()
+                            .py(px(24.))
+                            .flex()
+                            .justify_center()
+                            .text_sm()
+                            .text_color(t.muted)
+                            .child("No hosts match"),
+                    )
+                }),
+        )
+        .child(
+            div()
+                .px(px(16.))
+                .py(px(7.))
+                .border_t_1()
+                .border_color(t.hairline)
+                .flex()
+                .items_center()
+                .gap(px(12.))
+                .child(hint("↑ ↓", "Navigate", t))
+                .child(hint("↵", "Connect", t))
+                .child(hint("Esc", "Close", t)),
+        );
+    deferred(
+        anchored().position(point(px(0.), px(0.))).child(
+            div()
+                .occlude()
+                .w(viewport.width)
+                .h(viewport.height)
+                .bg(hsla(0., 0., 0., 0.35))
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(card),
+        ),
+    )
+    .priority(2)
+    .into_any_element()
+}
+
+fn kbd(keys: &'static str, t: &Theme) -> impl IntoElement + use<> {
+    div()
+        .px(px(5.))
+        .rounded(px(4.))
+        .bg(t.row_hover)
+        .text_size(px(10.))
+        .text_color(t.muted)
+        .child(keys)
+}
+
+fn hint(keys: &'static str, label: &'static str, t: &Theme) -> impl IntoElement + use<> {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(5.))
+        .child(kbd(keys, t))
+        .child(div().text_size(px(10.)).text_color(t.muted).child(label))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rank;
+    use tern_ssh::HostEntry;
+
+    fn host(alias: &str, host_name: &str) -> HostEntry {
+        HostEntry {
+            alias: alias.into(),
+            host_name: host_name.into(),
+            port: 22,
+            user: Some("deploy".into()),
+            identity_files: Vec::new(),
+            proxy_command: None,
+        }
+    }
+
+    fn hosts() -> Vec<HostEntry> {
+        vec![
+            host("grape", "203.0.113.40"),
+            host("strong-b", "192.168.1.40"),
+            host("grape-2", "203.0.113.41"),
+            host("tino_charge", "10.0.0.7"),
+        ]
+    }
+
+    #[test]
+    fn empty_query_keeps_config_order() {
+        assert_eq!(rank("", &hosts()), vec![0, 1, 2, 3]);
+        assert_eq!(rank("  ", &hosts()), vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn fuzzy_query_finds_scattered_letters_and_drops_the_rest() {
+        // "stb" is not a substring of anything; only a fuzzy match finds strong-b.
+        assert_eq!(rank("stb", &hosts()), vec![1]);
+        assert_eq!(rank("tch", &hosts()), vec![3]);
+    }
+
+    #[test]
+    fn address_is_searchable() {
+        assert_eq!(rank("113.41", &hosts()), vec![2]);
+    }
+
+    #[test]
+    fn better_match_ranks_first_regardless_of_config_order() {
+        // Both match "strong"; the scattered one is listed first, the contiguous one wins.
+        let hosts = vec![
+            host("s-t-r-o-n-g", "10.0.0.1"),
+            host("strong-b", "10.0.0.2"),
+        ];
+        assert_eq!(rank("strong", &hosts), vec![1, 0]);
+    }
+}

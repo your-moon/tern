@@ -1,8 +1,11 @@
 //! tern: a fast, low-memory SSH terminal.
 
+#[cfg(debug_assertions)]
+mod devkeys;
 mod fonts;
 mod login;
 mod menus;
+mod picker;
 mod runtime;
 mod session;
 mod shell;
@@ -22,6 +25,11 @@ fn main() {
         fonts::register(cx);
         menus::init(cx);
         cx.bind_keys(tabs::bindings());
+        cx.bind_keys([gpui::KeyBinding::new(
+            "cmd-k",
+            picker::ToggleHostPicker,
+            None,
+        )]);
         if let Err(e) = runtime::SshRuntime::install(cx) {
             tracing::error!(error = %e, "ssh_runtime_start_failed");
             cx.quit();
@@ -40,6 +48,8 @@ fn main() {
                 shell.connect_target(&target, window, cx)
             });
         }
+        #[cfg(debug_assertions)]
+        devkeys::replay(window, cx);
         cx.on_window_closed(|cx, _| {
             if cx.windows().is_empty() {
                 cx.quit();

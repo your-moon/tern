@@ -120,7 +120,7 @@ fn row(
 }
 
 /// `user@host` with the port only when it is not 22, as `ssh` would be typed.
-fn address(host: &HostEntry) -> String {
+pub fn address(host: &HostEntry) -> String {
     let user = host
         .user
         .as_deref()

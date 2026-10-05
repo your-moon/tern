@@ -9,6 +9,7 @@ rust-version.workspace = true
 [dependencies]
 anyhow = "1"
 gpui = { package = "gpui-pre", version = "=0.3.8" }
+nucleo-matcher = "0.3"
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8", features = ["font-kit", "runtime_shaders"] }
 tern-ssh.workspace = true
 tern-term.workspace = true

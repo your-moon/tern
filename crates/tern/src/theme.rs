@@ -39,6 +39,12 @@ pub struct Theme {
     /// Row washes (zeron `wash(0.10)` active, `wash(0.05)` hover).
     pub row_active: Hsla,
     pub row_hover: Hsla,
+    /// Divider inside floating cards (zeron `hairline(0.06)`, dark).
+    pub hairline: Hsla,
+    /// Floating card fill. zeron frosts its palette over a 16 px backdrop blur; tern has no
+    /// per-element blur, so this is the shell colour lifted and opaque: any transparency lets
+    /// the panel's text show through unblurred.
+    pub popup: Hsla,
     pub terminal_background: Hsla,
 }
 
@@ -55,6 +61,8 @@ impl Theme {
             border: hsla(0.0, 0.0, 1.0, 0.08),
             row_active: hsla(0.0, 0.0, 0.92, 0.10),
             row_hover: hsla(0.0, 0.0, 0.92, 0.05),
+            hairline: hsla(0.0, 0.0, 1.0, 0.06),
+            popup: hsla(0.0, 0.0, 0.09, 1.0),
             terminal_background: hex(0x090909),
         }
     }

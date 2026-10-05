@@ -15,6 +15,8 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 - `tern`: login questions (unknown host key, password, key passphrase, keyboard-interactive) are asked inside the terminal with OpenSSH's wording; Backspace edits, Ctrl-C cancels.
 - `tern`: session tabs in the titlebar with status dots; clicking a host with a live tab switches to it. ⌘W closes, ⌘1–9 and ⌘⇧[ / ⌘⇧] or ⌃Tab switch, middle-click closes.
 - `tern`: a closed tab says "Press Enter to reconnect"; Enter dials the same host again in the same terminal, keeping its scrollback. Clicking a host whose tab is closed reconnects that tab instead of opening another.
+- `tern`: ⌘K host picker: fuzzy search (nucleo, as zeron and helix) over host names and addresses; ↑/↓ or ⌃N/⌃P move, Enter connects, Esc or a click outside closes. Card, header, footer and list height are zeron's command palette values.
+- `tern`: shortcuts work before the first tab is open and after the last one closes; the window itself now holds focus when no terminal does.
 - `tern`: a macOS menu bar (Hide, Hide Others, Show All, Quit, Minimize, Zoom) with ⌘Q, ⌘H, ⌥⌘H and ⌘M.
 - `tern-term`: `local_demo <command>` for visual checks; scripted runs never take keyboard focus.
 - Project: craft gates (`clippy -D warnings`, file-size and attribution checks, `cargo deny`), CI, architecture diagram, UI spec and measured performance notes.
