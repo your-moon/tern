@@ -19,7 +19,15 @@ use crate::tabs::{self, ActivateTab, CloseTab, NextTab, PrevTab, TabInfo};
 use crate::theme::{PANEL_RADIUS, SPACE_SM, Theme, UI_FONT};
 use crate::{sidebar, titlebar};
 
-actions!(tern, [ToggleSidebar]);
+actions!(
+    tern,
+    [
+        ToggleSidebar,
+        IncreaseFontSize,
+        DecreaseFontSize,
+        ResetFontSize
+    ]
+);
 
 pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
     let bounds = Bounds::centered(None, size(px(1320.), px(880.)), cx);
@@ -109,7 +117,8 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let session = Session::open(spec, &self.theme, window, cx);
+        let theme = self.terminal_theme();
+        let session = Session::open(spec, theme, window, cx);
         let repaint = cx.observe(&session, |_, _, cx| cx.notify());
         self.tabs.push(Tab {
             alias,
@@ -249,6 +258,21 @@ impl Shell {
             )
     }
 
+    fn terminal_theme(&self) -> tern_term::TerminalTheme {
+        self.theme.terminal(self.settings.terminal_font_size)
+    }
+
+    /// Font size applies to every tab at once; each terminal re-measures its cells and the
+    /// remote side is told the new grid size.
+    fn change_font(&mut self, change: impl FnOnce(&mut Settings), cx: &mut Context<Self>) {
+        self.update_settings(change, cx);
+        let theme = self.terminal_theme();
+        for tab in &self.tabs {
+            let view = tab.session.read(cx).view.clone();
+            view.update(cx, |v, cx| v.set_theme(theme.clone(), cx));
+        }
+    }
+
     pub fn hosts(&self) -> &[HostEntry] {
         &self.hosts
     }
@@ -342,6 +366,15 @@ impl Render for Shell {
             .on_action(cx.listener(|s, a: &ActivateTab, w, cx| s.activate_tab(a.0, w, cx)))
             .on_action(cx.listener(|s, _: &ToggleHostPicker, w, cx| s.toggle_picker(w, cx)))
             .on_action(cx.listener(|s, _: &ToggleSidebar, _, cx| s.toggle_sidebar(cx)))
+            .on_action(cx.listener(|s, _: &IncreaseFontSize, _, cx| {
+                s.change_font(|st| st.step_font(1.0), cx)
+            }))
+            .on_action(cx.listener(|s, _: &DecreaseFontSize, _, cx| {
+                s.change_font(|st| st.step_font(-1.0), cx)
+            }))
+            .on_action(cx.listener(|s, _: &ResetFontSize, _, cx| {
+                s.change_font(|st| st.terminal_font_size = settings::FONT_DEFAULT, cx)
+            }))
             .on_drag_move(
                 cx.listener(|s, e: &gpui::DragMoveEvent<SidebarResize>, _, cx| {
                     s.on_sidebar_drag(f32::from(e.event.position.x), cx)

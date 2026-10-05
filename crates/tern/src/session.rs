@@ -7,7 +7,7 @@ use tern_term::{Terminal, TerminalEvent, TerminalView};
 
 use crate::login::Login;
 use crate::runtime::SshRuntime;
-use crate::theme::Theme;
+use tern_term::TerminalTheme;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
@@ -31,7 +31,7 @@ pub struct Session {
 impl Session {
     pub fn open(
         spec: ConnectSpec,
-        theme: &Theme,
+        theme: TerminalTheme,
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
@@ -42,7 +42,7 @@ impl Session {
             pixel_height: 0,
         };
         let terminal = cx.new(|_| Terminal::new(size.cols, size.rows));
-        let view = cx.new(|cx| TerminalView::new(terminal.clone(), theme.terminal(), window, cx));
+        let view = cx.new(|cx| TerminalView::new(terminal.clone(), theme, window, cx));
         cx.new(|cx| {
             let subscription = cx.subscribe(&terminal, |this: &mut Self, _, event, cx| {
                 this.on_terminal_event(event, cx);

@@ -9,6 +9,10 @@ use serde::{Deserialize, Serialize};
 pub const SIDEBAR_MIN: f32 = 224.0;
 pub const SIDEBAR_MAX: f32 = 400.0;
 pub const SIDEBAR_DEFAULT: f32 = 256.0;
+/// zeron `typography::FONT_SIZE_MIN/MAX` and `TERMINAL_FONT_SIZE_DEFAULT`.
+pub const FONT_MIN: f32 = 8.0;
+pub const FONT_MAX: f32 = 32.0;
+pub const FONT_DEFAULT: f32 = 13.0;
 const FILE_NAME: &str = "settings.json";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -16,6 +20,7 @@ const FILE_NAME: &str = "settings.json";
 pub struct Settings {
     pub sidebar_width: f32,
     pub sidebar_collapsed: bool,
+    pub terminal_font_size: f32,
 }
 
 impl Default for Settings {
@@ -23,6 +28,7 @@ impl Default for Settings {
         Self {
             sidebar_width: SIDEBAR_DEFAULT,
             sidebar_collapsed: false,
+            terminal_font_size: FONT_DEFAULT,
         }
     }
 }
@@ -61,7 +67,14 @@ impl Settings {
             SIDEBAR_MAX,
             SIDEBAR_DEFAULT,
         );
+        self.terminal_font_size =
+            clamp_or(self.terminal_font_size, FONT_MIN, FONT_MAX, FONT_DEFAULT);
         self
+    }
+
+    /// One point larger or smaller, held inside the legal range.
+    pub fn step_font(&mut self, delta: f32) {
+        self.terminal_font_size = (self.terminal_font_size + delta).clamp(FONT_MIN, FONT_MAX);
     }
 }
 
@@ -104,6 +117,7 @@ mod tests {
         let saved = Settings {
             sidebar_width: 312.0,
             sidebar_collapsed: true,
+            terminal_font_size: 15.0,
         };
         saved.save(&dir).unwrap();
         assert_eq!(Settings::load(&dir), saved);
@@ -146,5 +160,20 @@ mod tests {
         assert_eq!(at(9000.0), SIDEBAR_MAX);
         assert_eq!(at(300.0), 300.0);
         assert_eq!(at(f32::NAN), SIDEBAR_DEFAULT);
+    }
+
+    #[test]
+    fn font_steps_stop_at_the_bounds() {
+        let mut s = Settings::default();
+        s.step_font(1.0);
+        assert_eq!(s.terminal_font_size, FONT_DEFAULT + 1.0);
+        s.terminal_font_size = FONT_MAX;
+        s.step_font(1.0);
+        assert_eq!(s.terminal_font_size, FONT_MAX);
+        s.terminal_font_size = FONT_MIN;
+        s.step_font(-1.0);
+        assert_eq!(s.terminal_font_size, FONT_MIN);
+        s.terminal_font_size = 99.0;
+        assert_eq!(s.clamped().terminal_font_size, FONT_MAX);
     }
 }

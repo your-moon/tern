@@ -66,13 +66,14 @@ impl Theme {
         }
     }
 
-    pub fn terminal(&self) -> TerminalTheme {
+    pub fn terminal(&self, font_size: f32) -> TerminalTheme {
         let mut t = TerminalTheme {
             background: self.terminal_background,
             foreground: self.text,
             cursor: self.text,
             selection: self.accent.opacity(0.35),
             font_family: MONO_FONT.into(),
+            font_size,
             ..TerminalTheme::default()
         };
         for (slot, color) in t.ansi.iter_mut().zip(ANSI_DARK) {

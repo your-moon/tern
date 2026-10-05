@@ -30,6 +30,10 @@ fn main() {
         cx.bind_keys([
             gpui::KeyBinding::new("cmd-k", picker::ToggleHostPicker, None),
             gpui::KeyBinding::new("cmd-b", shell::ToggleSidebar, None),
+            gpui::KeyBinding::new("cmd-=", shell::IncreaseFontSize, None),
+            gpui::KeyBinding::new("cmd-+", shell::IncreaseFontSize, None),
+            gpui::KeyBinding::new("cmd--", shell::DecreaseFontSize, None),
+            gpui::KeyBinding::new("cmd-0", shell::ResetFontSize, None),
         ]);
         if let Err(e) = runtime::SshRuntime::install(cx) {
             tracing::error!(error = %e, "ssh_runtime_start_failed");
