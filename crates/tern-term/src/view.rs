@@ -52,7 +52,8 @@ struct SelectionDrag {
 
 pub struct TerminalView {
     pub(crate) terminal: Entity<Terminal>,
-    pub(crate) theme: TerminalTheme,
+    /// macOS: Option sends ESC-prefixed keys (Meta) instead of composing characters.
+    option_as_meta: bool,
     focus_handle: FocusHandle,
     geometry: Option<GridGeometry>,
     resize_task: Option<Task<()>>,
@@ -79,14 +80,14 @@ impl TerminalView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        terminal.update(cx, |t, _| t.set_theme(&theme));
+        terminal.update(cx, |t, _| t.set_theme(theme));
         let focus_handle = cx.focus_handle();
         window.focus(&focus_handle, cx);
         // Repaint exactly when the model changes.
         let subscription = cx.observe(&terminal, |_, _, cx| cx.notify());
         Self {
             terminal,
-            theme,
+            option_as_meta: true,
             focus_handle,
             geometry: None,
             resize_task: None,
@@ -103,9 +104,12 @@ impl TerminalView {
     }
 
     pub fn set_theme(&mut self, theme: TerminalTheme, cx: &mut Context<Self>) {
-        self.terminal.update(cx, |t, _| t.set_theme(&theme));
-        self.theme = theme;
+        self.terminal.update(cx, |t, _| t.set_theme(theme));
         cx.notify();
+    }
+
+    pub fn set_option_as_meta(&mut self, on: bool) {
+        self.option_as_meta = on;
     }
 
     fn mode(&self, cx: &App) -> TermMode {
@@ -159,7 +163,7 @@ impl TerminalView {
             return;
         }
         let mode = self.mode(cx);
-        let bytes = keystroke_bytes(ks, mode, self.theme.option_as_meta);
+        let bytes = keystroke_bytes(ks, mode, self.option_as_meta);
         if let Some(bytes) = bytes {
             self.send_input(bytes, cx);
             cx.stop_propagation();
@@ -488,7 +492,7 @@ impl Render for TerminalView {
         div()
             .id("tern-terminal")
             .size_full()
-            .bg(self.theme.background)
+            .bg(self.terminal.read(cx).theme().background)
             .key_context("Terminal")
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::on_key_down))

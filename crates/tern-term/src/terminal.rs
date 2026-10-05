@@ -274,8 +274,13 @@ impl Terminal {
     }
 
     /// Set the palette used to answer color queries.
-    pub fn set_theme(&mut self, theme: &TerminalTheme) {
-        self.theme = theme.clone();
+    /// The palette, owned here because OSC 4/10/11 colour queries are answered from it.
+    pub fn theme(&self) -> &TerminalTheme {
+        &self.theme
+    }
+
+    pub fn set_theme(&mut self, theme: TerminalTheme) {
+        self.theme = theme;
     }
 
     /// Send bytes to the remote side (keyboard, paste, mouse reports).
