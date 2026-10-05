@@ -6,6 +6,7 @@ members = ["crates/*"]
 version = "0.1.0"
 edition = "2024"
 license = "GPL-3.0-or-later"
+rust-version = "1.99"
 repository = "https://github.com/your-moon/tern"
 
 # Craft gates. Every crate opts in with `[lints] workspace = true`.
@@ -23,3 +24,15 @@ print_stdout = "deny"
 print_stderr = "deny"
 large_futures = "warn"
 needless_pass_by_value = "warn"
+
+# Small, fast release binary. Measured, not assumed: see docs/perf.md.
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+debug = false
+incremental = false
+
+[profile.dev.package."*"]
+opt-level = 2   # deps optimised even in dev, so the terminal is usable while developing
