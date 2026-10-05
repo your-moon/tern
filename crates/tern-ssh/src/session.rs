@@ -134,13 +134,13 @@ async fn run_inner(
     });
 
     tracing::info!(host = %spec.host, port = spec.port, user = %spec.user, "ssh_connecting");
-    let proxy = config::resolve(config::load_config().as_ref(), &spec.host).proxy_command;
+    let proxy = spec.proxy_command.as_deref();
     // Held for the whole session so the proxy process lives as long as the connection.
     let mut _proxy_child: Option<Child> = None;
     let connecting = async {
         match proxy {
             Some(cmd) => {
-                let cmd = config::expand_proxy_command(&cmd, &spec.host, spec.port, &spec.user);
+                let cmd = config::expand_proxy_command(cmd, &spec.host, spec.port, &spec.user);
                 tracing::debug!("ssh_proxy_command_start");
                 let (child, stream) = spawn_proxy(&cmd)?;
                 _proxy_child = Some(child);
@@ -154,7 +154,10 @@ async fn run_inner(
     let connected = tokio::time::timeout(CONNECT_TIMEOUT, connecting)
         .await
         .map_err(|_| Failure::ConnectTimeout)??;
-    let mut session = connected?;
+    let mut session = match connected {
+        Ok(s) => s,
+        Err(e) => return Err(proxy_exit(&mut _proxy_child).unwrap_or(e)),
+    };
 
     let identity_files = spec.identity_files.clone();
     Authenticator::new(&mut session, &spec.user, &spec.host, identity_files, events)
@@ -228,6 +231,13 @@ async fn run_inner(
     outbox.flush().await;
     disconnect(&session).await;
     Ok(Outcome { exit_status, error })
+}
+
+/// A proxy that died during the handshake explains the failure better than russh's
+/// "Disconnected".
+fn proxy_exit(child: &mut Option<Child>) -> Option<Failure> {
+    let status = child.as_mut()?.try_wait().ok()??;
+    Some(Failure::Proxy(status.to_string()))
 }
 
 async fn disconnect(session: &Handle<Handler>) {

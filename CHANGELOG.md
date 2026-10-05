@@ -12,6 +12,10 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 - `tern-term`: `local_demo <command>` for visual checks; scripted runs never take keyboard focus.
 - Project: craft gates (`clippy -D warnings`, file-size and attribution checks, `cargo deny`), CI, architecture diagram, UI spec and measured performance notes.
 
+### Fixed
+
+- `tern-ssh`: a `~/.ssh/config` alias with both `HostName` and its own `ProxyCommand` now uses that proxy instead of dialling `HostName` directly; a proxy that dies during the handshake is reported with its exit status (#7).
+
 ### Security
 
 - A changed host key is a hard stop with no override.
