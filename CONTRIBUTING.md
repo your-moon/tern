@@ -17,6 +17,12 @@ cargo test --workspace
 scripts/check-craft.sh
 ```
 
+Enable the pre-push hook once per clone so a push that would fail CI is refused locally:
+
+```sh
+git config core.hooksPath scripts/hooks
+```
+
 All four must pass; CI runs the same commands plus `cargo deny`. [CRAFT.md](CRAFT.md) explains the rules behind them: no panics or `unsafe` in shipped code, no file over 800 lines, bounded memory, comments only where they say why.
 
 - **Tests:** put unit tests beside the code. For risky logic (key encoding, host-key checks, parsing, buffering), break the code on purpose and confirm the test fails before you submit.

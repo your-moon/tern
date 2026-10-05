@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Refuses a push that would fail CI. Enable once per clone: git config core.hooksPath scripts/hooks
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+export CARGO_INCREMENTAL=0
+echo "pre-push: fmt"     && cargo fmt --all --check
+echo "pre-push: clippy"  && cargo clippy -q --workspace --all-targets -- -D warnings
+echo "pre-push: test"    && cargo test -q --workspace >/dev/null
+echo "pre-push: craft"   && scripts/check-craft.sh
+if command -v cargo-deny >/dev/null; then echo "pre-push: deny" && cargo deny check -s 2>/dev/null; fi
+echo "pre-push: all gates passed"
