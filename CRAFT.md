@@ -16,7 +16,8 @@ tern is held to a higher bar than the projects it copies from. These rules are e
   - Every channel between SSH and UI is **bounded**. A fast `cat` must apply backpressure to the
     socket, never pile up in an unbounded queue.
   - One tokio runtime, on one dedicated thread, for all SSH I/O. No thread per connection.
-  - No per-frame allocation in paint: reuse buffers; don't clone the grid to draw it.
+  - Per-frame work is bounded by the viewport, never by scrollback or history. GPUI's prepaint
+    allocates per frame by design (quads, shaped text), so the rule is about scale, not zero.
   - No new dependency without `default-features = false` and only the features used.
   - Optimise only with a measurement before and after, recorded in `docs/perf.md`.
 - **Security is not optional.** Host-key changes are a hard stop. Secrets never reach logs.

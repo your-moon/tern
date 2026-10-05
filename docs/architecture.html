@@ -217,7 +217,7 @@ ul.gates li::before{content:"";position:absolute;left:0;top:18px;width:7px;heigh
 <tr><td>One cell = 24 B</td><td class="mono ref">alacritty_terminal 0.26 term/cell.rs:303</td></tr>
 <tr><td>Rows allocated full-width, grown lazily in &ge;1,000-row chunks</td><td class="mono ref">grid/storage.rs:133</td></tr>
 <tr><td>Full scrollback at 200 cols: 10,000 lines = 48 MB/tab; 5,000 lines = 24 MB/tab, hence default 5,000</td><td></td></tr>
-<tr><td>Idle = idle: no per-frame loop, no per-frame allocation in paint</td><td></td></tr>
+<tr><td>Idle = idle: no per-frame loop; per-frame paint work bounded by the viewport</td><td></td></tr>
 </tbody>
 </table>
 </div>
