@@ -28,7 +28,15 @@ fn main() {
         })
         .expect("openpty");
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+    // `local_demo <command…>` runs the command through the shell, so the view can be
+    // checked without injecting keystrokes.
+    let script: Vec<String> = std::env::args().skip(1).collect();
     let mut cmd = CommandBuilder::new(shell);
+    let scripted = !script.is_empty();
+    if scripted {
+        // stdin from /dev/null: nothing typed into the window can reach the script.
+        cmd.args(["-c", &format!("exec </dev/null; {}", script.join(" "))]);
+    }
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
     let mut child = pair.slave.spawn_command(cmd).expect("spawn shell");
@@ -66,8 +74,11 @@ fn main() {
             .detach();
         }
         let bounds = Bounds::centered(None, size(px(900.), px(560.)), cx);
+        // With a script the demo is a visual check: it must not take keyboard focus, or keys
+        // typed elsewhere land in its shell.
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
+            focus: !scripted,
             ..Default::default()
         };
         let terminal_slot = Rc::new(RefCell::new(None));
@@ -116,6 +127,8 @@ fn main() {
             }
         })
         .detach();
-        cx.activate(true);
+        if !scripted {
+            cx.activate(true);
+        }
     });
 }
