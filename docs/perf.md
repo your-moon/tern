@@ -33,7 +33,9 @@ That is 0.13% of a 60 fps frame, with no steady-state memory, so it stays (#3 cl
 
 ## Budget
 
-Idle RSS with one connected tab, release build, measured with `scripts/measure-rss.sh`.
+Idle memory with one connected tab, release build: RSS from `scripts/measure-rss.sh` (30 s
+window, after connecting) and `footprint -p` (phys_footprint, what Activity Monitor shows; RSS
+also counts shared framework pages).
 The first measurement sets the baseline; every release records a new row and may not regress >10%.
 
 | Date | Commit | Scenario | RSS |
@@ -43,3 +45,10 @@ The first measurement sets the baseline; every release records a new row and may
 | 2026-10-05 | tern-term | `local_demo` release, one idle local shell, 900×560 window (GPUI + fonts + Metal, no SSH) | 82 MB |
 | 2026-10-05 | tern (window shell, #10) | `tern` release, empty main window 1320×880, no session | 66 MB |
 | — | — | app with one idle tab | not yet measured |
+| 2026-10-05 | 2fbea6e | no tab | 84.4 MB RSS · 44 MB footprint |
+| 2026-10-05 | 2fbea6e | one tab, connected to a LAN host, idle shell | 86.6 MB RSS (peak 91.7) · 49 MB footprint |
+
+Baseline, set by the second row: **49 MB footprint / 87 MB RSS**. Measured on an M4 Pro,
+macOS 26.6.2, with the screen locked, so no frames were being composited. A connected tab
+costs about 5 MB over an empty window. phys_footprint_peak reached 153 MB during start-up
+and connection; that transient is not explained yet (likely shader and font atlas set-up).
