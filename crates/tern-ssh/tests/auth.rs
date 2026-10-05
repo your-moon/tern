@@ -11,7 +11,7 @@ use russh::keys::ssh_key::LineEnding;
 use russh::keys::{Algorithm, PrivateKey, PublicKey};
 use russh::server::{self, Auth, Msg, Response, Session};
 use russh::{Channel, ChannelId, MethodKind, MethodSet};
-use tern_ssh::{ConnectSpec, Prompt, SecretString, SessionEvent, TermSize};
+use tern_ssh::{ChallengePrompt, ConnectSpec, Prompt, SecretString, SessionEvent, TermSize};
 
 #[derive(Clone)]
 enum Want {
@@ -111,6 +111,7 @@ enum Ask {
     HostKey,
     Password,
     Passphrase,
+    Challenge(Vec<ChallengePrompt>),
 }
 
 /// Logs in, answering secret prompts from `answers` in order (`None` cancels).
@@ -148,6 +149,11 @@ async fn login(
                 SessionEvent::Prompt(Prompt::Password { reply, .. }) => {
                     asked.push(Ask::Password);
                     let _ = reply.send(answers.next().flatten());
+                }
+                SessionEvent::Prompt(Prompt::Challenge { prompts, reply, .. }) => {
+                    let answer = answers.next().flatten().map(|a| vec![a; prompts.len()]);
+                    asked.push(Ask::Challenge(prompts));
+                    let _ = reply.send(answer);
                 }
                 SessionEvent::Prompt(Prompt::KeyPassphrase { reply, .. }) => {
                     asked.push(Ask::Passphrase);
@@ -201,12 +207,16 @@ async fn cancelling_the_password_prompt_ends_the_login() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn keyboard_interactive_code_is_accepted() {
+async fn keyboard_interactive_shows_the_servers_prompt() {
     let port = serve(Want::Code("123456"), MethodKind::KeyboardInteractive).await;
     let dir = tempfile::tempdir().unwrap();
     let (asked, error) = login(port, unused_key(&dir), &[Some("123456")]).await;
     assert_eq!(error, None);
-    assert_eq!(asked, [Ask::HostKey, Ask::Password]);
+    let code = ChallengePrompt {
+        text: "Verification code: ".into(),
+        echo: false,
+    };
+    assert_eq!(asked, [Ask::HostKey, Ask::Challenge(vec![code])]);
 }
 
 #[tokio::test(flavor = "multi_thread")]

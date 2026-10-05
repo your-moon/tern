@@ -55,6 +55,13 @@ pub struct TermSize {
 
 /// A question for the user. Dropping the reply sender counts as cancelling.
 /// Secrets are [`SecretString`] (zeroized on drop, redacted in `Debug`).
+/// One question in a [`Prompt::Challenge`]; `echo` is false for secrets such as codes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChallengePrompt {
+    pub text: String,
+    pub echo: bool,
+}
+
 #[derive(Debug)]
 pub enum Prompt {
     Password {
@@ -65,6 +72,14 @@ pub enum Prompt {
     KeyPassphrase {
         path: PathBuf,
         reply: oneshot::Sender<Option<SecretString>>,
+    },
+    /// A keyboard-interactive round (RFC 4256), shown as the server wrote it. Reply with one
+    /// answer per prompt, in order.
+    Challenge {
+        name: String,
+        instructions: String,
+        prompts: Vec<ChallengePrompt>,
+        reply: oneshot::Sender<Option<Vec<SecretString>>>,
     },
     UnknownHostKey {
         host: String,

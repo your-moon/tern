@@ -14,7 +14,7 @@ use secrecy::{ExposeSecret, SecretString};
 
 use crate::error::Failure;
 use crate::hostkey::Handler;
-use crate::{Prompt, SessionEvent};
+use crate::{ChallengePrompt, Prompt, SessionEvent};
 
 const MAX_TRIES: usize = 3;
 
@@ -245,15 +245,22 @@ impl<'a> Authenticator<'a> {
                     self.remaining = remaining_methods;
                     return Ok(Kbd::Rejected { prompted });
                 }
-                KeyboardInteractiveAuthResponse::InfoRequest { prompts, .. } => {
-                    let mut answers = Vec::with_capacity(prompts.len());
-                    for _ in &prompts {
+                KeyboardInteractiveAuthResponse::InfoRequest {
+                    name,
+                    instructions,
+                    prompts,
+                } => {
+                    // A round with no prompts still needs an (empty) response.
+                    let answers = if prompts.is_empty() {
+                        Vec::new()
+                    } else {
                         prompted = true;
-                        let Some(a) = self.ask_password().await? else {
+                        let Some(answers) = self.ask_challenge(name, instructions, prompts).await?
+                        else {
                             return Err(Failure::AuthCancelled);
                         };
-                        answers.push(a.expose_secret().to_string());
-                    }
+                        answers
+                    };
                     resp = self
                         .session
                         .authenticate_keyboard_interactive_respond(answers)
@@ -261,6 +268,38 @@ impl<'a> Authenticator<'a> {
                 }
             }
         }
+    }
+
+    async fn ask_challenge(
+        &self,
+        name: String,
+        instructions: String,
+        prompts: Vec<russh::client::Prompt>,
+    ) -> Result<Option<Vec<String>>, Failure> {
+        let expected = prompts.len();
+        let prompts = prompts
+            .into_iter()
+            .map(|p| ChallengePrompt {
+                text: p.prompt,
+                echo: p.echo,
+            })
+            .collect();
+        let (tx, rx) = oneshot::channel();
+        self.events
+            .send(SessionEvent::Prompt(Prompt::Challenge {
+                name,
+                instructions,
+                prompts,
+                reply: tx,
+            }))
+            .await
+            .map_err(|_| Failure::UiGone)?;
+        Ok(rx
+            .await
+            .ok()
+            .flatten()
+            .filter(|a| a.len() == expected)
+            .map(|a| a.iter().map(|s| s.expose_secret().to_string()).collect()))
     }
 
     async fn ask_password(&self) -> Result<Option<SecretString>, Failure> {

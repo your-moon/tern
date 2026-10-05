@@ -64,6 +64,19 @@ async fn answer(prompt: Prompt) {
             eprint!("Passphrase for {}: ", path.display());
             let _ = reply.send(read_reply(true).map(SecretString::from));
         }
+        Prompt::Challenge { name, instructions, prompts, reply } => {
+            for line in [name, instructions].iter().filter(|l| !l.is_empty()) {
+                eprintln!("{line}");
+            }
+            let answers: Option<Vec<SecretString>> = prompts
+                .iter()
+                .map(|p| {
+                    eprint!("{}", p.text);
+                    read_reply(!p.echo).map(SecretString::from)
+                })
+                .collect();
+            let _ = reply.send(answers);
+        }
         Prompt::UnknownHostKey { host, port, algorithm, fingerprint_sha256, reply } => {
             eprint!("The authenticity of {host}:{port} can't be established.\n{algorithm} key fingerprint is {fingerprint_sha256}.\nContinue connecting (yes/no)? ");
             let _ = reply.send(read_reply(false).is_some_and(|a| a == "yes"));
