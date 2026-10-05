@@ -136,13 +136,16 @@ async fn main() -> ExitCode {
         eprintln!("usage: connect [user@]host[:port]");
         return ExitCode::from(2);
     };
-    let spec = match ConnectSpec::parse(&target) {
+    let mut spec = match ConnectSpec::parse(&target) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("connect: {e}");
             return ExitCode::from(2);
         }
     };
+
+    // Example-only convenience for trying host-key behaviour without touching ~/.ssh.
+    spec.known_hosts = std::env::var_os("TERN_KNOWN_HOSTS").map(std::path::PathBuf::from);
 
     let is_tty = std::io::stdin().is_terminal();
     let (handle, events) = tern_ssh::connect(spec, term_size(), &tokio::runtime::Handle::current());

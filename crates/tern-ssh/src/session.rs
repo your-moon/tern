@@ -15,7 +15,7 @@ use tokio::time::Instant;
 use crate::authn::Authenticator;
 use crate::config;
 use crate::error::Failure;
-use crate::hostkey::{Handler, known_algorithms, known_hosts_override};
+use crate::hostkey::{Handler, known_algorithms};
 use crate::outbox::Outbox;
 use crate::{ConnectSpec, SessionEvent, TermSize};
 
@@ -104,7 +104,7 @@ async fn run_inner(
     cmds: &mut mpsc::Receiver<Command>,
     events: &async_channel::Sender<SessionEvent>,
 ) -> Result<Outcome, Failure> {
-    let known_hosts = known_hosts_override();
+    let known_hosts = spec.known_hosts.clone();
     let handler = Handler {
         host: spec.host.clone(),
         port: spec.port,
