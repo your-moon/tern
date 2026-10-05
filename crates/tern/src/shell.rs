@@ -59,6 +59,9 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
             sidebar_tween: None,
         })
     })?;
+    window.update(cx, |shell, _, cx| {
+        cx.set_reduce_motion(shell.settings.reduce_motion)
+    })?;
     // With no tab open nothing else holds focus, and gpui only dispatches key bindings along
     // the focused element's path, so the shell itself must be focused for ⌘K to work.
     window.update(cx, |shell, window, cx| window.focus(&shell.focus, cx))?;

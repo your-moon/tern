@@ -21,6 +21,8 @@ pub struct Settings {
     pub sidebar_width: f32,
     pub sidebar_collapsed: bool,
     pub terminal_font_size: f32,
+    /// Hold looping animations still. macOS's own setting is not read yet (#18).
+    pub reduce_motion: bool,
 }
 
 impl Default for Settings {
@@ -29,6 +31,7 @@ impl Default for Settings {
             sidebar_width: SIDEBAR_DEFAULT,
             sidebar_collapsed: false,
             terminal_font_size: FONT_DEFAULT,
+            reduce_motion: false,
         }
     }
 }
@@ -118,6 +121,7 @@ mod tests {
             sidebar_width: 312.0,
             sidebar_collapsed: true,
             terminal_font_size: 15.0,
+            reduce_motion: true,
         };
         saved.save(&dir).unwrap();
         assert_eq!(Settings::load(&dir), saved);

@@ -1,10 +1,13 @@
 // Adapted from zeron crates/ui/src/shell.rs (JumpSession slot action, titlebar group rhythm) (MIT).
 //! Session tabs in the titlebar strip and the shortcuts that move between them.
 
+use std::time::Duration;
+
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    Action, Context, FontWeight, InteractiveElement, IntoElement, KeyBinding, MouseButton,
-    ParentElement, SharedString, StatefulInteractiveElement, Styled, actions, div, px,
+    Action, Animation, AnimationExt, AnyElement, Context, ElementId, FontWeight,
+    InteractiveElement, IntoElement, KeyBinding, MouseButton, ParentElement, SharedString,
+    StatefulInteractiveElement, Styled, actions, div, pulsating_between, px,
 };
 
 use crate::session::Status;
@@ -86,7 +89,7 @@ fn tab_pill(
             MouseButton::Middle,
             cx.listener(move |shell, _, window, cx| shell.close_tab_at(ix, window, cx)),
         )
-        .child(status_dot(&tab.status, t))
+        .child(status_dot(("tab-dot", ix), &tab.status, t))
         .child(
             div()
                 .max_w(px(160.))
@@ -116,13 +119,30 @@ fn tab_pill(
         )
 }
 
-pub fn status_dot(status: &Status, t: &Theme) -> impl IntoElement + use<> {
+/// zeron's `zeron-pulse` loader: 2.4 s, opacity 0.08 → 1.
+const PULSE: Duration = Duration::from_millis(2400);
+
+/// A connecting dot breathes; gpui holds it still when `App::reduce_motion` is set. Synced, so
+/// a host's tab dot and sidebar dot pulse together.
+pub fn status_dot(id: impl Into<ElementId>, status: &Status, t: &Theme) -> AnyElement {
     let color = match status {
         Status::Connected => t.success,
         Status::Connecting => t.accent,
         Status::Closed => t.danger,
     };
-    div().flex_none().size(px(6.)).rounded_full().bg(color)
+    let dot = div().flex_none().size(px(6.)).rounded_full().bg(color);
+    if *status == Status::Connecting {
+        dot.with_animation(
+            id,
+            Animation::new(PULSE)
+                .repeat_synced()
+                .with_easing(pulsating_between(0.08, 1.0)),
+            |dot, alpha| dot.opacity(alpha),
+        )
+        .into_any_element()
+    } else {
+        dot.into_any_element()
+    }
 }
 
 /// The slot after `active` when moving by `delta`, wrapping at both ends.

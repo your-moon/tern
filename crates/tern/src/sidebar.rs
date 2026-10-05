@@ -95,7 +95,7 @@ fn row(
             shell.connect_host(target.clone(), window, cx);
         }))
         .child(match status {
-            Some(s) => tabs::status_dot(s, t).into_any_element(),
+            Some(s) => tabs::status_dot(("host-dot", ix), s, t).into_any_element(),
             None => div().flex_none().size(px(6.)).into_any_element(),
         })
         .child(
