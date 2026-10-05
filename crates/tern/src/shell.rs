@@ -56,12 +56,16 @@ struct Tab {
 }
 
 impl Shell {
-    /// Switches to the host's live tab if it has one, otherwise opens a new one.
+    /// Switches to the host's tab if it has one, reconnecting it when closed; otherwise opens
+    /// a new tab.
     pub fn connect_host(&mut self, host: HostEntry, window: &mut Window, cx: &mut Context<Self>) {
-        let live = self.tabs.iter().position(|tab| {
-            tab.alias == host.alias && tab.session.read(cx).status != Status::Closed
-        });
-        if let Some(ix) = live {
+        if let Some(ix) = self.tabs.iter().position(|tab| tab.alias == host.alias) {
+            let session = self.tabs[ix].session.clone();
+            session.update(cx, |s, cx| {
+                if s.status == Status::Closed {
+                    s.reconnect(cx);
+                }
+            });
             return self.activate_tab(ix, window, cx);
         }
         match ConnectSpec::from_host_entry(&host) {
