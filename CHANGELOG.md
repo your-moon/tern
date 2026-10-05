@@ -22,6 +22,7 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 - `tern`: ⌘= / ⌘− / ⌘0 change the terminal font size for every tab (8–32 pt, default 13, as zeron); the grid and the remote PTY follow, and the size persists.
 - `tern`: a connecting host's status dot breathes (zeron's 2.4 s pulse), synced between its tab and sidebar row; `"reduceMotion": true` in settings holds it still.
 - Docs: idle memory baseline in `docs/perf.md`: 49 MB footprint (87 MB RSS) with one connected tab, about 5 MB over an empty window.
+- `tern-vault`: one passphrase-encrypted file for SSH passwords (per `user@host:port`) and key passphrases (per key path), in the age format with an scrypt recipient. A wrong passphrase and a tampered file are both refused, saves are atomic, and plaintext is zeroed after use. Not wired into the app yet.
 - `tern`: a macOS menu bar (Hide, Hide Others, Show All, Quit, Minimize, Zoom) with ⌘Q, ⌘H, ⌥⌘H and ⌘M.
 - `tern-term`: `local_demo <command>` for visual checks; scripted runs never take keyboard focus.
 - Project: craft gates (`clippy -D warnings`, file-size and attribution checks, `cargo deny`), CI, architecture diagram, UI spec and measured performance notes.
