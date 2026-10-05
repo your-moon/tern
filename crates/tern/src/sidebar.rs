@@ -10,18 +10,27 @@ use tern_ssh::HostEntry;
 
 use crate::session::Status;
 use crate::shell::Shell;
+use crate::tabs::{self, TabInfo};
 use crate::theme::{CONTROL_RADIUS, SIDEBAR_WIDTH, SPACE_SM, Theme};
 
+/// `open` are the tabs; a host shows the status of its newest tab and is highlighted when
+/// that tab is the active one.
 pub fn render(
     hosts: &[HostEntry],
-    active: Option<(&str, &Status)>,
+    open: &[TabInfo],
+    active_alias: Option<&str>,
     t: &Theme,
     cx: &mut Context<Shell>,
-) -> impl IntoElement {
+) -> impl IntoElement + use<> {
     let mut rows = Vec::with_capacity(hosts.len());
     for (ix, host) in hosts.iter().enumerate() {
-        let status = active.and_then(|(alias, s)| (alias == host.alias).then_some(s));
-        rows.push(row(ix, host, status, t, cx));
+        let status = open
+            .iter()
+            .rev()
+            .find(|tab| tab.alias == host.alias)
+            .map(|tab| &tab.status);
+        let active = active_alias == Some(host.alias.as_str());
+        rows.push(row(ix, host, status, active, t, cx));
     }
     div()
         .w(px(SIDEBAR_WIDTH))
@@ -65,16 +74,11 @@ fn row(
     ix: usize,
     host: &HostEntry,
     status: Option<&Status>,
+    active: bool,
     t: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let target = host.clone();
-    let dot = match status {
-        Some(Status::Connected) => t.success,
-        Some(Status::Connecting) => t.accent,
-        Some(Status::Closed) => t.danger,
-        None => t.faint.opacity(0.0),
-    };
     div()
         .id(("host", ix))
         .px(px(SPACE_SM))
@@ -84,12 +88,15 @@ fn row(
         .items_center()
         .gap(px(SPACE_SM))
         .cursor_pointer()
-        .when(status.is_some(), |el| el.bg(t.row_active))
+        .when(active, |el| el.bg(t.row_active))
         .hover(|s| s.bg(t.row_hover))
         .on_click(cx.listener(move |shell, _, window, cx| {
             shell.connect_host(target.clone(), window, cx);
         }))
-        .child(div().size(px(6.)).rounded_full().bg(dot))
+        .child(match status {
+            Some(s) => tabs::status_dot(s, t).into_any_element(),
+            None => div().flex_none().size(px(6.)).into_any_element(),
+        })
         .child(
             div()
                 .flex()

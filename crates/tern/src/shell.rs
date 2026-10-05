@@ -1,21 +1,18 @@
-// Adapted from zeron crates/ui/src/lib.rs (window options) and crates/ui/src/shell.rs
-// (titlebar layout) (MIT).
-//! The main window: frosted shell, custom titlebar, host sidebar and the main panel.
+// Adapted from zeron crates/ui/src/lib.rs (window options) (MIT).
+//! The main window: frosted shell, titlebar with tabs, host sidebar and the main panel.
 
 use gpui::{
-    AnyElement, App, AppContext, Bounds, Context, Entity, FontWeight, InteractiveElement,
-    IntoElement, MouseButton, ParentElement, Render, SharedString, Styled, Subscription,
-    TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds, WindowControlArea,
-    WindowHandle, WindowOptions, div, point, px, size,
+    AnyElement, App, AppContext, Bounds, Context, Entity, Focusable, InteractiveElement,
+    IntoElement, ParentElement, Render, SharedString, Styled, Subscription, TitlebarOptions,
+    Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowOptions, div, point, px,
+    size,
 };
 use tern_ssh::{ConnectSpec, HostEntry};
 
-use crate::session::Session;
-use crate::sidebar;
-use crate::theme::{
-    PANEL_RADIUS, SPACE_SM, TITLEBAR_HEIGHT, TITLEBAR_TOP_PAD, Theme, UI_FONT,
-    titlebar_content_start,
-};
+use crate::session::{Session, Status};
+use crate::tabs::{self, ActivateTab, CloseTab, NextTab, PrevTab, TabInfo};
+use crate::theme::{PANEL_RADIUS, SPACE_SM, Theme, UI_FONT};
+use crate::{sidebar, titlebar};
 
 pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
     let bounds = Bounds::centered(None, size(px(1320.), px(880.)), cx);
@@ -36,7 +33,8 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
         cx.new(|_| Shell {
             theme: Theme::zeron_dark(),
             hosts: tern_ssh::load_ssh_config_hosts(),
-            active: None,
+            tabs: Vec::new(),
+            active: 0,
             error: None,
         })
     })?;
@@ -46,20 +44,28 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
 pub struct Shell {
     theme: Theme,
     hosts: Vec<HostEntry>,
-    active: Option<Active>,
+    tabs: Vec<Tab>,
+    active: usize,
     error: Option<String>,
 }
 
-struct Active {
+struct Tab {
     alias: String,
     session: Entity<Session>,
     _repaint: Subscription,
 }
 
 impl Shell {
+    /// Switches to the host's live tab if it has one, otherwise opens a new one.
     pub fn connect_host(&mut self, host: HostEntry, window: &mut Window, cx: &mut Context<Self>) {
+        let live = self.tabs.iter().position(|tab| {
+            tab.alias == host.alias && tab.session.read(cx).status != Status::Closed
+        });
+        if let Some(ix) = live {
+            return self.activate_tab(ix, window, cx);
+        }
         match ConnectSpec::from_host_entry(&host) {
-            Ok(spec) => self.open(spec, host.alias, window, cx),
+            Ok(spec) => self.open_tab(spec, host.alias, window, cx),
             Err(e) => self.fail(e.to_string(), cx),
         }
     }
@@ -67,13 +73,12 @@ impl Shell {
     /// `tern <target>`: a `~/.ssh/config` alias or `user@host:port`.
     pub fn connect_target(&mut self, target: &str, window: &mut Window, cx: &mut Context<Self>) {
         match ConnectSpec::parse(target) {
-            Ok(spec) => self.open(spec, target.to_string(), window, cx),
+            Ok(spec) => self.open_tab(spec, target.to_string(), window, cx),
             Err(e) => self.fail(e.to_string(), cx),
         }
     }
 
-    /// Replaces the current session; dropping the old one closes its connection.
-    fn open(
+    fn open_tab(
         &mut self,
         spec: ConnectSpec,
         alias: String,
@@ -82,13 +87,42 @@ impl Shell {
     ) {
         let session = Session::open(spec, &self.theme, window, cx);
         let repaint = cx.observe(&session, |_, _, cx| cx.notify());
-        self.active = Some(Active {
+        self.tabs.push(Tab {
             alias,
             session,
             _repaint: repaint,
         });
         self.error = None;
+        self.activate_tab(self.tabs.len() - 1, window, cx);
+    }
+
+    pub fn activate_tab(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(tab) = self.tabs.get(ix) else {
+            return;
+        };
+        self.active = ix;
+        let focus = tab.session.read(cx).view.focus_handle(cx);
+        window.focus(&focus, cx);
         cx.notify();
+    }
+
+    /// Closing a tab drops its session, which ends the connection.
+    pub fn close_tab_at(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if ix >= self.tabs.len() {
+            return;
+        }
+        self.tabs.remove(ix);
+        if self.tabs.is_empty() {
+            self.active = 0;
+            cx.notify();
+            return;
+        }
+        let next = if self.active > ix || self.active == self.tabs.len() {
+            self.active - 1
+        } else {
+            self.active
+        };
+        self.activate_tab(next, window, cx);
     }
 
     fn fail(&mut self, error: String, cx: &mut Context<Self>) {
@@ -97,9 +131,19 @@ impl Shell {
         cx.notify();
     }
 
+    fn tab_infos(&self, cx: &App) -> Vec<TabInfo> {
+        self.tabs
+            .iter()
+            .map(|tab| TabInfo {
+                alias: tab.alias.clone(),
+                status: tab.session.read(cx).status.clone(),
+            })
+            .collect()
+    }
+
     fn panel_content(&self, cx: &App) -> AnyElement {
-        if let Some(active) = &self.active {
-            return active.session.read(cx).view.clone().into_any_element();
+        if let Some(tab) = self.tabs.get(self.active) {
+            return tab.session.read(cx).view.clone().into_any_element();
         }
         let message = self
             .error
@@ -120,19 +164,10 @@ impl Shell {
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let t = self.theme;
-        let active = self
-            .active
-            .as_ref()
-            .map(|a| (a.alias.clone(), a.session.read(cx).status.clone()));
-        let label = active.as_ref().map(|(alias, _)| alias.clone());
-        let sidebar = sidebar::render(
-            &self.hosts,
-            active
-                .as_ref()
-                .map(|(alias, status)| (alias.as_str(), status)),
-            &t,
-            cx,
-        );
+        let infos = self.tab_infos(cx);
+        let active_alias = infos.get(self.active).map(|i| i.alias.clone());
+        let strip = tabs::strip(&infos, self.active, &t, cx);
+        let sidebar = sidebar::render(&self.hosts, &infos, active_alias.as_deref(), &t, cx);
         div()
             .size_full()
             .flex()
@@ -140,7 +175,15 @@ impl Render for Shell {
             .bg(t.glass())
             .font_family(UI_FONT)
             .text_color(t.text)
-            .child(titlebar(&t, window.is_fullscreen(), label))
+            .on_action(cx.listener(|s, _: &CloseTab, w, cx| s.close_tab_at(s.active, w, cx)))
+            .on_action(cx.listener(|s, _: &NextTab, w, cx| {
+                s.activate_tab(tabs::step(s.active, s.tabs.len(), 1), w, cx)
+            }))
+            .on_action(cx.listener(|s, _: &PrevTab, w, cx| {
+                s.activate_tab(tabs::step(s.active, s.tabs.len(), -1), w, cx)
+            }))
+            .on_action(cx.listener(|s, a: &ActivateTab, w, cx| s.activate_tab(a.0, w, cx)))
+            .child(titlebar::render(&t, window.is_fullscreen(), strip))
             .child(
                 div().flex_1().min_h_0().flex().child(sidebar).child(
                     div()
@@ -157,29 +200,4 @@ impl Render for Shell {
                 ),
             )
     }
-}
-
-fn titlebar(t: &Theme, fullscreen: bool, session: Option<String>) -> impl IntoElement {
-    div()
-        .h(px(TITLEBAR_HEIGHT))
-        .pt(px(TITLEBAR_TOP_PAD))
-        .pl(px(titlebar_content_start(fullscreen)))
-        .flex()
-        .items_center()
-        .window_control_area(WindowControlArea::Drag)
-        .on_mouse_down(MouseButton::Left, |_, window, _| window.start_window_move())
-        .gap(px(SPACE_SM))
-        .child(
-            div()
-                .text_sm()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(t.muted)
-                .child("tern"),
-        )
-        .children(session.map(|s| {
-            div()
-                .text_sm()
-                .text_color(t.faint)
-                .child(SharedString::from(s))
-        }))
 }

@@ -2,11 +2,14 @@
 
 mod fonts;
 mod login;
+mod menus;
 mod runtime;
 mod session;
 mod shell;
 mod sidebar;
+mod tabs;
 mod theme;
+mod titlebar;
 
 use gpui::App;
 use tracing_subscriber::EnvFilter;
@@ -17,6 +20,8 @@ fn main() {
     let target = std::env::args().nth(1);
     gpui_platform::application().run(move |cx: &mut App| {
         fonts::register(cx);
+        menus::init(cx);
+        cx.bind_keys(tabs::bindings());
         if let Err(e) = runtime::SshRuntime::install(cx) {
             tracing::error!(error = %e, "ssh_runtime_start_failed");
             cx.quit();
