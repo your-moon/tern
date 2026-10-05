@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      cargo-minor:
+        update-types: [minor, patch]
+    ignore:
+      # GPUI snapshot crates move together with gpui-component; bump them by hand.
+      - dependency-name: "gpui-pre*"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }

@@ -1,0 +1,59 @@
+# Field labels and order of kubernetes/kubernetes
+# .github/ISSUE_TEMPLATE/bug-report.yaml (re-read 2026-09-21), as a GitHub issue
+# form. Kubernetes' five environment fields are collapsed into one "Version"
+# field; replace `<version command>` with this project's.
+#
+# GitLab has no issue-forms equivalent — use issue-bug.md there, which renders
+# these same labels as `###` headings.
+name: Bug Report
+description: Report a bug encountered while operating this project
+labels: ["kind::bug", "triage::needed"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: The symptom first, in one or two sentences, then the mechanism.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: How can we reproduce it (as minimally and precisely as possible)?
+      description: |
+        A RUNNABLE thing, not a description of one: the exact command (for example
+        `cargo run -p tern-ssh --example connect -- user@host`), the ~/.ssh/config block
+        involved with secrets removed, or a failing test. An issue with no runnable
+        reproduction is not actionable and may be closed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Anything else we need to know?
+      description: Fix direction, related code, workarounds, failure output.
+
+  - type: textarea
+    id: version
+    attributes:
+      label: Version
+      value: |
+        <details>
+
+        ```console
+        $ git rev-parse --short HEAD; rustc --version; sw_vers -productVersion
+        # paste output here
+        ```
+
+        </details>
+    validations:
+      required: true

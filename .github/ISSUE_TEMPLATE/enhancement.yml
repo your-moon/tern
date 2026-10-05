@@ -1,0 +1,20 @@
+# Verbatim structure and field labels of kubernetes/kubernetes
+# .github/ISSUE_TEMPLATE/enhancement.yaml (read 2026-09-17). The upstream
+# The upstream KEP pointer is dropped: tern's design lives in docs/ and the plan issue.
+name: Enhancement Tracking Issue
+description: Provide supporting details for a feature in development
+labels: ["kind::feature", "triage::needed"]
+body:
+  - type: textarea
+    id: feature
+    attributes:
+      label: What would you like to be added?
+    validations:
+      required: true
+
+  - type: textarea
+    id: rationale
+    attributes:
+      label: Why is this needed?
+    validations:
+      required: true
