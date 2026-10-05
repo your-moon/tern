@@ -9,6 +9,10 @@ license = "GPL-3.0-or-later"
 rust-version = "1.99"
 repository = "https://github.com/your-moon/tern"
 
+[workspace.dependencies]
+tern-ssh = { path = "crates/tern-ssh", version = "0.1.0" }
+tern-term = { path = "crates/tern-term", version = "0.1.0" }
+
 # Craft gates. Every crate opts in with `[lints] workspace = true`.
 [workspace.lints.rust]
 unsafe_code = "forbid"

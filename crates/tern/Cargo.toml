@@ -10,8 +10,8 @@ rust-version.workspace = true
 anyhow = "1"
 gpui = { package = "gpui-pre", version = "=0.3.8" }
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8", features = ["font-kit", "runtime_shaders"] }
-tern-ssh = { path = "../tern-ssh" }
-tern-term = { path = "../tern-term" }
+tern-ssh.workspace = true
+tern-term.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "env-filter"] }
