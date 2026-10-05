@@ -1,0 +1,17 @@
+# Craft rules
+
+tern is held to a higher bar than the projects it copies from. These rules are enforced by
+`cargo clippy -D warnings`, `scripts/check-craft.sh` and CI, not by good intentions.
+
+- **No panics in shipped code.** `unwrap`, `expect`, `panic!`, `todo!` are denied outside tests.
+  Errors are typed (`thiserror`) in libraries and reported to the user, never swallowed.
+- **No `unsafe`.** Forbidden workspace-wide.
+- **No god-files.** Every source file stays under 800 lines. Split by responsibility, not by size.
+- **Copy, don't invent — and say so.** Copied code keeps a `// Adapted from <repo> <path> (<license>).` header and is listed in `NOTICE.md`.
+- **Small seams.** `tern-ssh` knows nothing about GPUI; `tern-term` knows nothing about SSH. The app wires them.
+- **Idle means idle.** No per-frame loops; repaint only on new bytes, input or resize. Memory is a feature:
+  idle RSS with one tab is measured on every release and must not regress.
+- **Security is not optional.** Host-key changes are a hard stop. Secrets never reach logs.
+- **Tests that can fail.** Risky logic (key encoding, host-key checks, parsing) gets tests that were
+  mutation-checked: break the code, watch the test go red.
+- **Verified by eye.** UI changes are checked by running the app and looking at a screenshot.
