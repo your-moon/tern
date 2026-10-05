@@ -1,0 +1,20 @@
+[package]
+name = "tern-term"
+description = "GPUI terminal view driven by an arbitrary byte stream"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+alacritty_terminal = "0.26"
+gpui = { package = "gpui-pre", version = "=0.3.8" }
+unicode-width = "0.2"
+
+[dev-dependencies]
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8", features = ["font-kit", "runtime_shaders"] }
+portable-pty = "0.9"
+async-channel = "2"
+
+[lints]
+workspace = true
