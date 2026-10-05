@@ -6,7 +6,6 @@
 //!
 //! A host with a `ProxyCommand` in `~/.ssh/config` is reached through that command, as
 //! OpenSSH does; it is resolved once, with the rest of the alias, into [`ConnectSpec`].
-//! Set `TERN_KNOWN_HOSTS` to use a different known_hosts file (tests).
 
 mod authn;
 mod config;
@@ -42,6 +41,8 @@ pub struct ConnectSpec {
     pub identity_files: Vec<PathBuf>,
     /// Run as the transport instead of dialling `host:port`; `%h %p %r` are expanded.
     pub proxy_command: Option<String>,
+    /// known_hosts file to check and learn host keys in; `None` means `~/.ssh/known_hosts`.
+    pub known_hosts: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

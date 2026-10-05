@@ -9,15 +9,6 @@ use russh::keys::{Algorithm, HashAlg, PublicKey, PublicKeyOrCertificate, known_h
 use crate::error::Failure;
 use crate::{Prompt, SessionEvent};
 
-/// Env var overriding the known_hosts location (used by tests).
-pub(crate) const KNOWN_HOSTS_ENV: &str = "TERN_KNOWN_HOSTS";
-
-pub(crate) fn known_hosts_override() -> Option<PathBuf> {
-    std::env::var_os(KNOWN_HOSTS_ENV)
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Verdict {
     Known,

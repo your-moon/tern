@@ -17,6 +17,8 @@ tokio = { version = "1", features = ["rt", "sync", "time", "net", "process", "io
 tracing = "0.1"
 
 [dev-dependencies]
+rand = { version = "0.10", features = ["thread_rng"] }
+tempfile = "3"
 crossterm = "0.29"
 rpassword = "7"
 tokio = { version = "1", features = ["rt-multi-thread", "signal", "io-std"] }
