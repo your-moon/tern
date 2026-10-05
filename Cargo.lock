@@ -6566,6 +6566,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tern"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "gpui-pre",
+ "gpui-pre-platform",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "tern-ssh"
 version = "0.1.0"
 dependencies = [

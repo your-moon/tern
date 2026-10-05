@@ -11,3 +11,4 @@ tern is GPL-3.0-or-later. It copies and adapts code from the projects below; eac
 | longbridge/gpui-component (stories/examples) | Apache-2.0 | tabs, sidebar, dialogs |
 | alacritty/alacritty (`alacritty_terminal` crate) | Apache-2.0 | VT emulation (dependency) |
 | veeso/ssh2-config | MIT | `~/.ssh/config` parsing (dependency) |
+| vercel/geist-font (via zeron) | SIL OFL 1.1 | Geist and Geist Mono fonts, `crates/tern/assets/fonts` |

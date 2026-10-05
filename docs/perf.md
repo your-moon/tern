@@ -41,4 +41,5 @@ The first measurement sets the baseline; every release records a new row and may
 | 2026-10-05 | tern-ssh (uncommitted → first commit) | `examples/connect` release, `seq 1 2000000` (16.9 MB) from strong-b, fast reader | 6 MB peak |
 | 2026-10-05 | same | same, reader stalled 6 s (backpressure) | 6 MB peak |
 | 2026-10-05 | tern-term | `local_demo` release, one idle local shell, 900×560 window (GPUI + fonts + Metal, no SSH) | 82 MB |
+| 2026-10-05 | tern (window shell, #10) | `tern` release, empty main window 1320×880, no session | 66 MB |
 | — | — | app with one idle tab | not yet measured |
