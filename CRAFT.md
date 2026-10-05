@@ -37,6 +37,9 @@ We follow written conventions of well-maintained projects, not taste. Each rule 
   has an `# Errors` doc section, enforced by `clippy::missing_errors_doc`), `C-DEBUG` (all public types implement `Debug`),
   `C-GOOD-ERR` (error types are `std::error::Error`, messages lowercase without trailing punctuation).
 - **No blocking in async or UI code:** Zed's `clippy.toml` pattern, a `disallowed-methods` list that names the replacement.
+- **Comments are rare and say why.** No comment restates the code, narrates a step, or names
+  the author's intent the code already shows. Public items get one-line docs plus `# Errors` where
+  required; a module gets at most a few `//!` lines naming the decision it hides.
 - **Module docs say why:** each module opens with `//!` stating the decision it hides and its limits (tokio and ripgrep style),
   not a restatement of the code.
 - **Logging:** `tracing` with constant `snake_case` messages and structured fields, never interpolated strings,

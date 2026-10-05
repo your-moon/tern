@@ -1,12 +1,5 @@
-//! Remote output on its way to the UI: coalesced, bounded, and backpressured.
-//!
-//! The session loop pushes channel data into an [`Outbox`] and stops reading the SSH
-//! channel while [`Outbox::wants_input`] is false. russh then stops reading the socket once
-//! its own per-channel buffer fills (`Config::channel_buffer_size`), so a fast producer on
-//! the remote side slows down instead of growing memory here.
-//!
-//! Worst-case bytes held per session by this module: one chunk being built
-//! (< [`MAX_CHUNK`] + one SSH packet) plus [`EVENT_QUEUE`] chunks queued for the UI.
+//! Remote output on its way to the UI, coalesced and bounded. While the outbox is full the
+//! session stops reading the channel, so russh stops reading the socket (backpressure).
 
 use std::fmt;
 use std::future::Future;
@@ -60,10 +53,8 @@ impl Outbox {
         self.in_flight.is_some() || !self.buf.is_empty()
     }
 
-    /// Delivers one chunk to the UI. Returns `false` once the receiver is gone.
-    ///
-    /// Cancel-safe: the in-flight send lives in `self`, so a `select!` that drops this
-    /// future loses nothing; the next call resumes the same send.
+    /// Delivers one chunk; `false` once the receiver is gone. Cancel-safe: the in-flight send
+    /// lives in `self`, so the next call resumes it.
     pub(crate) async fn progress(&mut self) -> bool {
         if self.in_flight.is_none() {
             if self.buf.is_empty() {
@@ -83,7 +74,6 @@ impl Outbox {
         delivered
     }
 
-    /// Sends whatever is buffered, waiting for the UI. Used before the final `Closed` event.
     pub(crate) async fn flush(&mut self) -> bool {
         while self.has_work() {
             if !self.progress().await {
@@ -107,8 +97,6 @@ mod tests {
 
     use super::*;
 
-    /// A remote that produces far faster than the UI consumes must not grow the buffer past
-    /// one chunk plus one read, and every byte must arrive once, in order.
     #[tokio::test]
     async fn slow_consumer_keeps_buffer_bounded_and_preserves_order() {
         const READ: usize = 4 * 1024;
@@ -132,7 +120,6 @@ mod tests {
         let mut reads = 0;
         while reads < TOTAL_READS || outbox.has_work() {
             tokio::select! {
-                // The "SSH channel": always ready, gated only by the outbox.
                 () = std::future::ready(()), if reads < TOTAL_READS && outbox.wants_input() => {
                     let read: Vec<u8> = (0..READ).map(|i| ((reads * READ + i) % 251) as u8).collect();
                     outbox.push(&read);
