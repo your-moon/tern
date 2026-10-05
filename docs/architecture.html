@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tern - software design</title>
+<style>
+:root{
+  --bg:#0a0a0a; --surface:#111; --raised:#181818;
+  --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.16);
+  --text:#e6e6e6; --muted:#8a8a8a; --accent:#8b7cf6;
+  --sans:Geist,ui-sans-serif,system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,Menlo,monospace;
+  --r:10px;
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.55}
+main{max-width:1180px;margin:0 auto;padding:0 20px 80px}
+header{padding:72px 0 40px;background:radial-gradient(ellipse 60% 70% at 20% 0%,rgba(139,124,246,.10),transparent 70%)}
+h1{margin:0 0 10px;font-size:34px;font-weight:600;letter-spacing:-.02em}
+h1 span{color:var(--accent)}
+header p{margin:0;color:var(--muted);font-size:16px}
+section{margin-top:56px}
+h2{margin:0 0 20px;font-size:13px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h2::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--accent);margin-right:10px}
+code,.mono{font-family:var(--mono);font-size:.92em}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+.scroll{overflow-x:auto}
+.diagram{padding:12px}
+.diagram svg{display:block;width:100%;min-width:760px;height:auto}
+/* svg */
+svg text{font-family:var(--sans);fill:var(--text);font-size:13px}
+svg .m{fill:var(--muted)}
+svg .mono{font-family:var(--mono);font-size:12px}
+svg .t{font-size:18px;font-weight:600}
+svg .h{font-size:13px;font-weight:600}
+svg .acc{fill:var(--accent)}
+svg .box{fill:var(--surface);stroke:var(--line-strong);stroke-width:1}
+svg .sub{fill:var(--raised);stroke:var(--line);stroke-width:1}
+svg .app{stroke:var(--accent);stroke-opacity:.55}
+svg .arr{stroke:var(--accent);stroke-width:1.5;fill:none}
+svg .dash{fill:none;stroke:var(--muted);stroke-dasharray:5 4;stroke-width:1}
+svg .tcp{stroke:var(--muted);stroke-width:1.5;fill:none}
+/* flow */
+.flow{display:grid;grid-template-columns:90px 1fr;gap:14px 18px;padding:22px}
+.flow .k{color:var(--accent);font-weight:600;padding-top:6px}
+.chain{display:flex;flex-wrap:wrap;align-items:center;gap:8px 0}
+.pill{background:var(--raised);border:1px solid var(--line);border-radius:999px;padding:5px 13px;font-size:13.5px;white-space:nowrap}
+.pill.mono{font-family:var(--mono);font-size:12.5px}
+.chain .pill+.pill::before{content:"\2192";position:absolute;margin-left:-22px;color:var(--accent)}
+.chain .pill+.pill{margin-left:28px;position:relative}
+/* threads */
+.threads{display:grid;grid-template-columns:1fr 1.1fr 1fr;gap:0;align-items:stretch}
+.lane{padding:22px}
+.lane h3{margin:0 0 6px;font-size:16px}
+.lane .tag{color:var(--muted);font-size:13px;margin-bottom:12px;display:block}
+.lane p{margin:0;color:var(--text)}
+.bridge{display:flex;align-items:center;justify-content:center;padding:18px 22px;text-align:center;font-size:14px;color:var(--text);border-left:1px dashed var(--line-strong);border-right:1px dashed var(--line-strong);background:var(--bg)}
+.bridge b{color:var(--accent);font-weight:600}
+/* tables */
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:13px 18px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+tr:last-child td{border-bottom:0}
+td.mono{white-space:nowrap}
+td.ref{color:var(--muted)}
+.foot{margin:14px 2px 0;color:var(--muted);font-size:14px}
+ul.gates{list-style:none;margin:0;padding:8px 22px;columns:2;column-gap:40px}
+ul.gates li{padding:9px 0 9px 20px;position:relative;break-inside:avoid;border-bottom:1px solid var(--line)}
+ul.gates li::before{content:"";position:absolute;left:0;top:18px;width:7px;height:7px;border-radius:2px;background:var(--accent)}
+@media(max-width:760px){
+  header{padding:48px 0 28px}
+  h1{font-size:27px}
+  .flow{grid-template-columns:1fr}
+  .flow .k{padding-top:0}
+  .threads{grid-template-columns:1fr}
+  .bridge{border:0;border-top:1px dashed var(--line-strong);border-bottom:1px dashed var(--line-strong)}
+  ul.gates{columns:1}
+  table,tbody,tr,td{display:block}
+  thead{display:none}
+  tr{padding:10px 0;border-bottom:1px solid var(--line)}
+  tr:last-child{border-bottom:0}
+  td{border:0;padding:3px 18px}
+  td:empty{display:none}
+  td.mono{white-space:normal;word-break:break-word}
+}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1><span>tern</span> &mdash; software design</h1>
+  <p>SSH terminal in Rust + GPUI. GPL-3.0-or-later.</p>
+</header>
+
+<section>
+<h2>Crates</h2>
+<div class="card diagram scroll">
+<svg viewBox="0 0 1200 850" role="img" aria-label="Crate diagram: tern app, tern-term, tern-ssh, remote sshd">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--accent)"/></marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--muted)"/></marker>
+  </defs>
+
+  <!-- tern -->
+  <rect class="box app" x="20" y="20" width="1160" height="210" rx="10"/>
+  <text class="t" x="40" y="52">tern</text>
+  <text class="m" x="100" y="52">app</text>
+  <g>
+    <rect class="sub" x="40" y="80" width="265" height="120" rx="10"/>
+    <text class="h" x="58" y="108">GPUI window</text>
+    <text class="m" x="58" y="132">zeron-style chrome</text>
+
+    <rect class="sub" x="325" y="80" width="265" height="120" rx="10"/>
+    <text class="h" x="343" y="108">Sidebar</text>
+    <text class="m" x="343" y="132">hosts from ~/.ssh/config</text>
+    <text class="m" x="343" y="152">+ saved list</text>
+
+    <rect class="sub" x="610" y="80" width="265" height="120" rx="10"/>
+    <text class="h" x="628" y="108">Tabs (gpui-component)</text>
+    <text class="m" x="628" y="132">one TerminalView per tab</text>
+
+    <rect class="sub" x="895" y="80" width="265" height="120" rx="10"/>
+    <text class="h" x="913" y="108">Prompt dialogs</text>
+    <text class="m" x="913" y="132">password, key passphrase,</text>
+    <text class="m" x="913" y="152">unknown host key</text>
+  </g>
+
+  <!-- arrows -->
+  <line class="arr" x1="70" y1="230" x2="70" y2="358" marker-end="url(#ah)"/>
+  <text class="mono" x="84" y="300">feed(bytes)</text>
+  <line class="arr" x1="470" y1="358" x2="470" y2="232" marker-end="url(#ah)"/>
+  <text class="mono" x="456" y="300" text-anchor="end">write(bytes) · resize(cols, rows)</text>
+  <line class="arr" x1="720" y1="230" x2="720" y2="358" marker-end="url(#ah)"/>
+  <text class="mono" x="734" y="285">SessionHandle (bounded mpsc)</text>
+  <line class="arr" x1="1130" y1="358" x2="1130" y2="232" marker-end="url(#ah)"/>
+  <text class="mono" x="1116" y="325" text-anchor="end">SessionEvent (bounded async-channel, 8 × 64 KiB)</text>
+
+  <!-- tern-term -->
+  <rect class="box" x="20" y="360" width="480" height="340" rx="10"/>
+  <text class="t" x="40" y="392">tern-term</text>
+  <text class="m" x="150" y="392">GPUI; knows no SSH</text>
+  <rect class="sub" x="40" y="408" width="440" height="82" rx="10"/>
+  <text class="h" x="58" y="434">Terminal model</text>
+  <text class="mono" x="58" y="456">alacritty_terminal::Term + vte Processor</text>
+  <text class="m" x="58" y="476">bounded scrollback (default 5,000 lines)</text>
+  <rect class="sub" x="40" y="500" width="440" height="82" rx="10"/>
+  <text class="h" x="58" y="526">TerminalElement</text>
+  <text class="m" x="58" y="548">adapted from Zed: text runs, background quads,</text>
+  <text class="m" x="58" y="568">cursor, selection, scroll</text>
+  <rect class="sub" x="40" y="592" width="440" height="82" rx="10"/>
+  <text class="h" x="58" y="618">Key / mouse mappings</text>
+  <text class="m" x="58" y="640">adapted from Zed keys.rs / mouse.rs</text>
+
+  <!-- tern-ssh -->
+  <rect class="box" x="700" y="360" width="480" height="340" rx="10"/>
+  <text class="t" x="720" y="392">tern-ssh</text>
+  <text class="m" x="825" y="392">tokio; knows no GPUI</text>
+  <rect class="sub" x="720" y="408" width="440" height="52" rx="10"/>
+  <text class="h" x="738" y="439">russh client · ssh2-config</text>
+  <rect class="sub" x="720" y="470" width="440" height="70" rx="10"/>
+  <text class="h" x="738" y="494">Auth chain</text>
+  <text class="m" x="738" y="514">ssh-agent → key files (passphrase) →</text>
+  <text class="m" x="738" y="531">password / keyboard-interactive</text>
+  <rect class="sub" x="720" y="550" width="440" height="70" rx="10"/>
+  <text class="h" x="738" y="574">known_hosts</text>
+  <text class="m" x="738" y="594">match = continue · unknown = ask</text>
+  <text class="acc h" x="738" y="611">changed = HARD STOP</text>
+  <rect class="sub" x="720" y="630" width="440" height="52" rx="10"/>
+  <text class="h" x="738" y="651">PTY</text>
+  <text class="m" x="738" y="670">xterm-256color, shell, window_change</text>
+
+  <!-- note -->
+  <rect class="dash" x="518" y="470" width="164" height="100" rx="10"/>
+  <text class="m" x="600" y="505" text-anchor="middle">no dependency</text>
+  <text class="m" x="600" y="525" text-anchor="middle">between these two</text>
+  <text class="m" x="600" y="545" text-anchor="middle">— the app wires them</text>
+
+  <!-- sshd -->
+  <line class="tcp" x1="940" y1="700" x2="940" y2="768" marker-end="url(#ag)" marker-start="url(#ag)"/>
+  <text class="mono m" x="956" y="740">TCP :22</text>
+  <rect class="box" x="800" y="770" width="280" height="56" rx="10"/>
+  <text class="h" x="940" y="803" text-anchor="middle">remote sshd</text>
+</svg>
+</div>
+</section>
+
+<section>
+<h2>Data flow</h2>
+<div class="card flow">
+  <div class="k">Output</div>
+  <div class="chain"><span class="pill">sshd</span><span class="pill">tern-ssh (coalesce burst)</span><span class="pill mono">SessionEvent::Data</span><span class="pill mono">Terminal::feed</span><span class="pill">alacritty grid</span><span class="pill">repaint (only on change)</span></div>
+  <div class="k">Input</div>
+  <div class="chain"><span class="pill">keystroke</span><span class="pill">Zed key mapping</span><span class="pill">escape bytes</span><span class="pill mono">SessionHandle::write</span><span class="pill">SSH channel</span></div>
+  <div class="k">Resize</div>
+  <div class="chain"><span class="pill">view measures cells</span><span class="pill">80 ms debounce</span><span class="pill mono">resize</span><span class="pill">SSH window_change</span></div>
+  <div class="k">Replies</div>
+  <div class="chain"><span class="pill">remote asks (e.g. DSR cursor position)</span><span class="pill mono">Event::PtyWrite</span><span class="pill">write back to remote</span></div>
+</div>
+</section>
+
+<section>
+<h2>Threads</h2>
+<div class="card threads">
+  <div class="lane"><h3>Main thread</h3><span class="tag">GPUI</span><p>All UI state as entities, paint.</p></div>
+  <div class="bridge"><div>Bounded channels only &mdash; a slow network cannot freeze the UI; a fast <code>cat</code> applies <b>backpressure</b> to the socket.</div></div>
+  <div class="lane"><h3>SSH thread</h3><span class="tag">tokio</span><p>One tokio runtime for all connections, no thread per connection.</p></div>
+</div>
+</section>
+
+<section>
+<h2>Memory</h2>
+<div class="card scroll">
+<table>
+<tbody>
+<tr><td>One cell = 24 B</td><td class="mono ref">alacritty_terminal 0.26 term/cell.rs:303</td></tr>
+<tr><td>Rows allocated full-width, grown lazily in &ge;1,000-row chunks</td><td class="mono ref">grid/storage.rs:133</td></tr>
+<tr><td>Full scrollback at 200 cols: 10,000 lines = 48 MB/tab; 5,000 lines = 24 MB/tab, hence default 5,000</td><td></td></tr>
+<tr><td>Idle = idle: no per-frame loop, no per-frame allocation in paint</td><td></td></tr>
+</tbody>
+</table>
+</div>
+<p class="foot">Idle RSS baseline: not yet measured.</p>
+</section>
+
+<section>
+<h2>Copied from</h2>
+<div class="card scroll">
+<table>
+<thead><tr><th>Source</th><th>License</th><th>What</th></tr></thead>
+<tbody>
+<tr><td class="mono">zed-industries/zed crates/terminal, terminal_view</td><td>GPL-3.0</td><td>terminal model, grid element, key/mouse mappings</td></tr>
+<tr><td class="mono">zeronsh/zeron</td><td>MIT</td><td>UI style, emulator wrapper for alacritty_terminal 0.26</td></tr>
+<tr><td class="mono">Eugeny/russh examples</td><td>Apache-2.0</td><td>SSH session, auth, known_hosts</td></tr>
+<tr><td class="mono">chi11321/CrabPort</td><td>Apache-2.0</td><td>SSH terminal backend shape</td></tr>
+<tr><td class="mono">longbridge/gpui-component</td><td>Apache-2.0</td><td>tabs, sidebar, dialogs</td></tr>
+<tr><td class="mono">alacritty_terminal</td><td>Apache-2.0</td><td>VT emulation</td></tr>
+<tr><td class="mono">ssh2-config</td><td>MIT</td><td>~/.ssh/config parsing</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section>
+<h2>Craft gates</h2>
+<div class="card">
+<ul class="gates">
+<li>unwrap/expect/panic denied outside tests</li>
+<li>unsafe forbidden</li>
+<li>no file over 800 lines</li>
+<li>copied files carry an attribution header</li>
+<li>cargo-deny for licenses, advisories and sources</li>
+<li>mutation-checked tests on risky logic</li>
+<li>UI accepted only by screenshot</li>
+</ul>
+</div>
+</section>
+</main>
+</body>
+</html>

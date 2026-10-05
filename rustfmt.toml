@@ -1,0 +1,3 @@
+# Same as Zed and gpui-component, our two largest donors, so copied code needs no reformatting.
+edition = "2024"
+style_edition = "2024"

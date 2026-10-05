@@ -27,3 +27,18 @@ tern is held to a higher bar than the projects it copies from. These rules are e
   GPUI entities for UI state, never `Arc<Mutex<_>>`. `cargo deny` gates licenses (GPL-compatible),
   advisories and sources.
 - **Verified by eye.** UI changes are checked by running the app and looking at a screenshot.
+
+## Style
+
+We follow written conventions of well-maintained projects, not taste. Each rule names its source.
+
+- **Formatting:** `rustfmt` with `style_edition = "2024"`, as in Zed and gpui-component, so copied code needs no reformatting.
+- **API shape:** the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/): `C-FAILURE` (every public fallible fn
+  has an `# Errors` doc section, enforced by `clippy::missing_errors_doc`), `C-DEBUG` (all public types implement `Debug`),
+  `C-GOOD-ERR` (error types are `std::error::Error`, messages lowercase without trailing punctuation).
+- **No blocking in async or UI code:** Zed's `clippy.toml` pattern, a `disallowed-methods` list that names the replacement.
+- **Module docs say why:** each module opens with `//!` stating the decision it hides and its limits (tokio and ripgrep style),
+  not a restatement of the code.
+- **Logging:** `tracing` with constant `snake_case` messages and structured fields, never interpolated strings,
+  never secrets or session bytes (org logging standard).
+- **Tests:** unit tests beside the code in `mod tests`; names state the behaviour (`slow_consumer_keeps_buffer_bounded…`).

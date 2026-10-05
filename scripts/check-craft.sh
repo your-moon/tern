@@ -12,7 +12,8 @@ done < <(find crates -name '*.rs' -not -path '*/tests/*' -not -name '*_tests.rs'
 
 # 2. Every file with copied code names its origin.
 for f in $(grep -rl 'Adapted from' crates --include='*.rs' || true); do
-  grep -q 'Adapted from .*(\(GPL\|MIT\|Apache\)' "$f" || { echo "bad attribution header: $f"; fail=1; }
+  # The header may wrap: the license must appear within the first 5 lines.
+  head -5 "$f" | tr '\n' ' ' | grep -q 'Adapted from .*(\(GPL\|MIT\|Apache\)' || { echo "bad attribution header: $f"; fail=1; }
 done
 
 # 3. Every crate opts into the workspace lints.
