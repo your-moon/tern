@@ -88,6 +88,7 @@ pub(crate) fn hosts_from(config: &SshConfig) -> Vec<HostEntry> {
                 port: r.port,
                 user: r.user,
                 identity_files: r.identity_files,
+                proxy_command: r.proxy_command,
             });
         }
     }
@@ -176,6 +177,7 @@ pub(crate) fn parse_target(target: &str, config: Option<&SshConfig>) -> Result<C
         port: port.unwrap_or(r.port),
         user,
         identity_files: r.identity_files,
+        proxy_command: r.proxy_command,
     })
 }
 
@@ -221,6 +223,7 @@ impl ConnectSpec {
                 .or_else(local_user)
                 .ok_or(Error::NoLocalUser)?,
             identity_files: e.identity_files.clone(),
+            proxy_command: e.proxy_command.clone(),
         })
     }
 
@@ -252,6 +255,23 @@ mod tests {
 
     const CONF: &str = "Host web\n  HostName 10.1.2.3\n  Port 2222\n  User deploy\n  IdentityFile /keys/web\n\n\
                         Host plain\n  User bob\n\nHost *\n  ProxyCommand nc %h %p\n";
+
+    const JUMP: &str =
+        "Host inner\n  HostName 10.9.9.9\n  User me\n  ProxyCommand ssh -W %h:%p bastion\n";
+
+    #[test]
+    fn alias_proxy_command_survives_host_name_resolution() {
+        let s = parse_target("inner", Some(&cfg(JUMP))).unwrap();
+        assert_eq!(s.host, "10.9.9.9");
+        assert_eq!(s.proxy_command.as_deref(), Some("ssh -W %h:%p bastion"));
+    }
+
+    #[test]
+    fn host_entry_carries_its_proxy_command_into_the_spec() {
+        let entry = hosts_from(&cfg(JUMP)).remove(0);
+        let s = ConnectSpec::from_host_entry(&entry).unwrap();
+        assert_eq!(s.proxy_command.as_deref(), Some("ssh -W %h:%p bastion"));
+    }
 
     #[test]
     fn full_target_without_config() {

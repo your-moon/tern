@@ -4,8 +4,8 @@
 //! `futures::channel::oneshot` senders, so the consumer (GPUI) does not need a tokio
 //! context; the session itself runs on the tokio runtime handle passed to [`connect`].
 //!
-//! A host whose name resolves to a `ProxyCommand` in `~/.ssh/config` (matched by
-//! [`ConnectSpec::host`]) is reached through that command, as OpenSSH does.
+//! A host with a `ProxyCommand` in `~/.ssh/config` is reached through that command, as
+//! OpenSSH does; it is resolved once, with the rest of the alias, into [`ConnectSpec`].
 //! Set `TERN_KNOWN_HOSTS` to use a different known_hosts file (tests).
 
 mod authn;
@@ -31,6 +31,7 @@ pub struct HostEntry {
     pub port: u16,
     pub user: Option<String>,
     pub identity_files: Vec<PathBuf>,
+    pub proxy_command: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +40,8 @@ pub struct ConnectSpec {
     pub port: u16,
     pub user: String,
     pub identity_files: Vec<PathBuf>,
+    /// Run as the transport instead of dialling `host:port`; `%h %p %r` are expanded.
+    pub proxy_command: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
