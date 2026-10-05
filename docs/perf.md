@@ -23,6 +23,14 @@ reading the socket, so the server slows down instead of tern's memory growing.
 
 So the default scrollback is **5,000 lines**, configurable. A fresh tab pays only for what it has printed.
 
+## Paint
+
+| Item | Cost | Source |
+| --- | --- | --- |
+| Viewport snapshot (`Terminal::lines`), 200×50 | 22 µs/frame, 240 KB transient (freed each frame) | release-build timing, 2026-10-05, #3 |
+
+That is 0.13% of a 60 fps frame, with no steady-state memory, so it stays (#3 closed wontfix).
+
 ## Budget
 
 Idle RSS with one connected tab, release build, measured with `scripts/measure-rss.sh`.
