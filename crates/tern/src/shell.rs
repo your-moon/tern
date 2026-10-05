@@ -4,17 +4,22 @@
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, App, AppContext, Bounds, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Render, SharedString, Styled, Subscription,
-    TitlebarOptions, Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowOptions,
-    div, point, px, size,
+    InteractiveElement, IntoElement, MouseButton, MouseUpEvent, ParentElement, Render,
+    SharedString, StatefulInteractiveElement, Styled, Subscription, TitlebarOptions, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowOptions, actions, div, point, px,
+    size,
 };
 use tern_ssh::{ConnectSpec, HostEntry};
 
+use crate::pane::{self, DragGhost, SidebarResize, WidthTween};
 use crate::picker::{self, Picker, ToggleHostPicker};
 use crate::session::{Session, Status};
+use crate::settings::{self, SIDEBAR_DEFAULT, Settings};
 use crate::tabs::{self, ActivateTab, CloseTab, NextTab, PrevTab, TabInfo};
 use crate::theme::{PANEL_RADIUS, SPACE_SM, Theme, UI_FONT};
 use crate::{sidebar, titlebar};
+
+actions!(tern, [ToggleSidebar]);
 
 pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
     let bounds = Bounds::centered(None, size(px(1320.), px(880.)), cx);
@@ -34,12 +39,16 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
     let window = cx.open_window(options, |_, cx| {
         cx.new(|cx| Shell {
             focus: cx.focus_handle(),
+            settings: settings::dir()
+                .map(|d| Settings::load(&d))
+                .unwrap_or_default(),
             theme: Theme::zeron_dark(),
             hosts: tern_ssh::load_ssh_config_hosts(),
             tabs: Vec::new(),
             active: 0,
             error: None,
             picker: None,
+            sidebar_tween: None,
         })
     })?;
     // With no tab open nothing else holds focus, and gpui only dispatches key bindings along
@@ -50,12 +59,14 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
 
 pub struct Shell {
     focus: FocusHandle,
+    settings: Settings,
     theme: Theme,
     hosts: Vec<HostEntry>,
     tabs: Vec<Tab>,
     active: usize,
     error: Option<String>,
     picker: Option<Picker>,
+    sidebar_tween: Option<WidthTween>,
 }
 
 struct Tab {
@@ -163,6 +174,81 @@ impl Shell {
         cx.notify();
     }
 
+    /// Applies a settings change and writes it out; a failed write is logged, not fatal.
+    pub fn update_settings(&mut self, change: impl FnOnce(&mut Settings), cx: &mut Context<Self>) {
+        change(&mut self.settings);
+        self.settings = self.settings.clone().clamped();
+        if let Some(dir) = settings::dir()
+            && let Err(e) = self.settings.save(&dir)
+        {
+            tracing::warn!(error = %e, "settings_save_failed");
+        }
+        cx.notify();
+    }
+
+    fn sidebar_target(&self) -> f32 {
+        if self.settings.sidebar_collapsed {
+            0.0
+        } else {
+            self.settings.sidebar_width
+        }
+    }
+
+    /// The sidebar's width this frame: mid-tween while collapsing or expanding.
+    fn sidebar_now(&self) -> f32 {
+        self.sidebar_tween
+            .and_then(|tween| tween.sample(std::time::Instant::now()))
+            .unwrap_or_else(|| self.sidebar_target())
+    }
+
+    pub fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
+        let from = self.sidebar_now();
+        self.update_settings(|s| s.sidebar_collapsed = !s.sidebar_collapsed, cx);
+        self.sidebar_tween = Some(WidthTween::new(from, self.sidebar_target()));
+    }
+
+    /// Live drag: follows the pointer without writing the file on every move.
+    fn on_sidebar_drag(&mut self, x: f32, cx: &mut Context<Self>) {
+        self.settings.sidebar_width = pane::dragged_width(x);
+        self.settings.sidebar_collapsed = false;
+        self.sidebar_tween = None;
+        cx.notify();
+    }
+
+    fn resize_handle(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        div()
+            .id("sidebar-resize")
+            .absolute()
+            .top_0()
+            .bottom_0()
+            .left(px(self.sidebar_now() - pane::HANDLE_HALF_WIDTH))
+            .w(px(pane::HANDLE_HALF_WIDTH * 2.0))
+            .occlude()
+            .cursor_col_resize()
+            .on_drag(SidebarResize, |_, _, _, cx| {
+                cx.stop_propagation();
+                cx.new(|_| DragGhost)
+            })
+            .on_mouse_up(
+                MouseButton::Left,
+                cx.listener(|shell, event: &MouseUpEvent, _, cx| {
+                    let reset = event.click_count == 2;
+                    shell.update_settings(
+                        |s| {
+                            if reset {
+                                s.sidebar_width = SIDEBAR_DEFAULT;
+                            }
+                        },
+                        cx,
+                    );
+                }),
+            )
+            .on_mouse_up_out(
+                MouseButton::Left,
+                cx.listener(|shell, _, _, cx| shell.update_settings(|_| {}, cx)),
+            )
+    }
+
     pub fn hosts(&self) -> &[HostEntry] {
         &self.hosts
     }
@@ -220,7 +306,24 @@ impl Render for Shell {
         let infos = self.tab_infos(cx);
         let active_alias = infos.get(self.active).map(|i| i.alias.clone());
         let strip = tabs::strip(&infos, self.active, &t, cx);
-        let sidebar = sidebar::render(&self.hosts, &infos, active_alias.as_deref(), &t, cx);
+        let sidebar = sidebar::render(
+            &self.hosts,
+            &infos,
+            active_alias.as_deref(),
+            self.settings.sidebar_width,
+            &t,
+            cx,
+        );
+        let sidebar_now = self.sidebar_now();
+        if self.sidebar_tween.is_some() {
+            if sidebar_now == self.sidebar_target() {
+                self.sidebar_tween = None;
+            } else {
+                window.request_animation_frame();
+            }
+        }
+        let collapsed = self.settings.sidebar_collapsed;
+        let handle = (!collapsed && self.sidebar_tween.is_none()).then(|| self.resize_handle(cx));
         div()
             .track_focus(&self.focus)
             .size_full()
@@ -238,21 +341,44 @@ impl Render for Shell {
             }))
             .on_action(cx.listener(|s, a: &ActivateTab, w, cx| s.activate_tab(a.0, w, cx)))
             .on_action(cx.listener(|s, _: &ToggleHostPicker, w, cx| s.toggle_picker(w, cx)))
+            .on_action(cx.listener(|s, _: &ToggleSidebar, _, cx| s.toggle_sidebar(cx)))
+            .on_drag_move(
+                cx.listener(|s, e: &gpui::DragMoveEvent<SidebarResize>, _, cx| {
+                    s.on_sidebar_drag(f32::from(e.event.position.x), cx)
+                }),
+            )
             .child(titlebar::render(&t, window.is_fullscreen(), strip))
             .child(
-                div().flex_1().min_h_0().flex().child(sidebar).child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .mr(px(SPACE_SM))
-                        .mb(px(SPACE_SM))
-                        .rounded(px(PANEL_RADIUS))
-                        .border_1()
-                        .border_color(t.border)
-                        .bg(t.terminal_background)
-                        .overflow_hidden()
-                        .child(self.panel_content(cx)),
-                ),
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .relative()
+                    // Clip a fixed-width sidebar instead of reflowing it, so rows do not
+                    // re-wrap at every frame of the collapse.
+                    .child(
+                        div()
+                            .flex_none()
+                            .h_full()
+                            .w(px(sidebar_now))
+                            .overflow_hidden()
+                            .child(sidebar),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .when(sidebar_now < SPACE_SM, |el| el.ml(px(SPACE_SM)))
+                            .mr(px(SPACE_SM))
+                            .mb(px(SPACE_SM))
+                            .rounded(px(PANEL_RADIUS))
+                            .border_1()
+                            .border_color(t.border)
+                            .bg(t.terminal_background)
+                            .overflow_hidden()
+                            .child(self.panel_content(cx)),
+                    )
+                    .children(handle),
             )
             .when_some(self.picker.as_ref(), |el, p| {
                 el.child(picker::render(

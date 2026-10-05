@@ -5,9 +5,11 @@ mod devkeys;
 mod fonts;
 mod login;
 mod menus;
+mod pane;
 mod picker;
 mod runtime;
 mod session;
+mod settings;
 mod shell;
 mod sidebar;
 mod tabs;
@@ -25,11 +27,10 @@ fn main() {
         fonts::register(cx);
         menus::init(cx);
         cx.bind_keys(tabs::bindings());
-        cx.bind_keys([gpui::KeyBinding::new(
-            "cmd-k",
-            picker::ToggleHostPicker,
-            None,
-        )]);
+        cx.bind_keys([
+            gpui::KeyBinding::new("cmd-k", picker::ToggleHostPicker, None),
+            gpui::KeyBinding::new("cmd-b", shell::ToggleSidebar, None),
+        ]);
         if let Err(e) = runtime::SshRuntime::install(cx) {
             tracing::error!(error = %e, "ssh_runtime_start_failed");
             cx.quit();

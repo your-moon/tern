@@ -11,7 +11,7 @@ use tern_ssh::HostEntry;
 use crate::session::Status;
 use crate::shell::Shell;
 use crate::tabs::{self, TabInfo};
-use crate::theme::{CONTROL_RADIUS, SIDEBAR_WIDTH, SPACE_SM, Theme};
+use crate::theme::{CONTROL_RADIUS, SPACE_SM, Theme};
 
 /// `open` are the tabs; a host shows the status of its newest tab and is highlighted when
 /// that tab is the active one.
@@ -19,6 +19,7 @@ pub fn render(
     hosts: &[HostEntry],
     open: &[TabInfo],
     active_alias: Option<&str>,
+    width: f32,
     t: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
@@ -33,7 +34,7 @@ pub fn render(
         rows.push(row(ix, host, status, active, t, cx));
     }
     div()
-        .w(px(SIDEBAR_WIDTH))
+        .w(px(width))
         .flex_none()
         .h_full()
         .min_h_0()

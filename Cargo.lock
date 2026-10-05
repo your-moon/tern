@@ -6583,6 +6583,8 @@ dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
  "nucleo-matcher",
+ "serde",
+ "serde_json",
  "tern-ssh",
  "tern-term",
  "tokio",

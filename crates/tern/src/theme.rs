@@ -12,7 +12,6 @@ pub const PANEL_RADIUS: f32 = 10.0;
 pub const SPACE_SM: f32 = 8.0;
 pub const UI_FONT: &str = "Geist";
 pub const MONO_FONT: &str = "Geist Mono";
-pub const SIDEBAR_WIDTH: f32 = 256.0;
 pub const CONTROL_RADIUS: f32 = 6.0;
 
 const ANSI_DARK: [u32; 16] = [

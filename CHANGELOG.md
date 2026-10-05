@@ -17,6 +17,8 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 - `tern`: a closed tab says "Press Enter to reconnect"; Enter dials the same host again in the same terminal, keeping its scrollback. Clicking a host whose tab is closed reconnects that tab instead of opening another.
 - `tern`: ⌘K host picker: fuzzy search (nucleo, as zeron and helix) over host names and addresses; ↑/↓ or ⌃N/⌃P move, Enter connects, Esc or a click outside closes. Card, header, footer and list height are zeron's command palette values.
 - `tern`: shortcuts work before the first tab is open and after the last one closes; the window itself now holds focus when no terminal does.
+- `tern`: settings in `~/Library/Application Support/tern/settings.json` (or `$TERN_CONFIG_DIR`), written atomically; a corrupt file falls back to defaults.
+- `tern`: ⌘B collapses and expands the sidebar over 200 ms; drag its edge to resize between 224 and 400 pt, double-click the edge to reset to 256. Width and collapsed state persist.
 - `tern`: a macOS menu bar (Hide, Hide Others, Show All, Quit, Minimize, Zoom) with ⌘Q, ⌘H, ⌥⌘H and ⌘M.
 - `tern-term`: `local_demo <command>` for visual checks; scripted runs never take keyboard focus.
 - Project: craft gates (`clippy -D warnings`, file-size and attribution checks, `cargo deny`), CI, architecture diagram, UI spec and measured performance notes.
