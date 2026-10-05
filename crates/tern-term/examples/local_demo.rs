@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use gpui::{App, AppContext, Bounds, WindowBounds, WindowOptions, px, size};
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
-use tern_term::{Terminal, TerminalTheme, TerminalView};
+use tern_term::{Terminal, TerminalEvent, TerminalTheme, TerminalView};
 
 const COLS: u16 = 100;
 const ROWS: u16 = 30;
@@ -84,25 +84,29 @@ fn main() {
         let terminal_slot = Rc::new(RefCell::new(None));
         let slot = terminal_slot.clone();
         cx.open_window(options, move |window, cx| {
-            let terminal = cx.new(|_| {
-                Terminal::new(
-                    COLS,
-                    ROWS,
-                    Box::new(move |bytes| {
-                        let mut w = writer.borrow_mut();
-                        let _ = w.write_all(&bytes);
-                        let _ = w.flush();
-                    }),
-                    Box::new(move |cols, rows, pixel_width, pixel_height| {
-                        let _ = master.borrow().resize(PtySize {
-                            rows,
-                            cols,
-                            pixel_width,
-                            pixel_height,
-                        });
-                    }),
-                )
-            });
+            let terminal = cx.new(|_| Terminal::new(COLS, ROWS));
+            cx.subscribe(&terminal, move |_, event, _| match event {
+                TerminalEvent::Output(bytes) => {
+                    let mut w = writer.borrow_mut();
+                    let _ = w.write_all(bytes);
+                    let _ = w.flush();
+                }
+                TerminalEvent::Resized {
+                    cols,
+                    rows,
+                    pixel_width,
+                    pixel_height,
+                } => {
+                    let _ = master.borrow().resize(PtySize {
+                        rows: *rows,
+                        cols: *cols,
+                        pixel_width: *pixel_width,
+                        pixel_height: *pixel_height,
+                    });
+                }
+                TerminalEvent::TitleChanged(_) | TerminalEvent::Bell => {}
+            })
+            .detach();
             *slot.borrow_mut() = Some(terminal.clone());
             cx.new(|cx| TerminalView::new(terminal, TerminalTheme::default(), window, cx))
         })

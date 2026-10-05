@@ -138,7 +138,7 @@ impl TerminalView {
             // Read the current size: later prepaints may have resized again
             // inside the debounce window.
             let _ = this.update(cx, |view, cx| {
-                view.terminal.read(cx).notify_remote_resize();
+                view.terminal.update(cx, |t, cx| t.notify_remote_resize(cx));
             });
         }));
         // No cx.notify(): this runs during prepaint, which already paints the
@@ -182,7 +182,7 @@ impl TerminalView {
                 t.clear_selection();
                 cx.notify();
             }
-            t.write(bytes);
+            t.write(bytes, cx);
         });
     }
 
@@ -248,7 +248,7 @@ impl TerminalView {
                 mode,
             ) {
                 self.reporting_button = true;
-                self.terminal.read(cx).write(bytes);
+                self.terminal.update(cx, |t, cx| t.write(bytes, cx));
             }
             return;
         }
@@ -309,7 +309,7 @@ impl TerminalView {
                     event.modifiers,
                     mode,
                 ) {
-                    self.terminal.read(cx).write(bytes);
+                    self.terminal.update(cx, |t, cx| t.write(bytes, cx));
                 }
             }
             return;
@@ -365,7 +365,7 @@ impl TerminalView {
                     false,
                     mode,
                 ) {
-                    self.terminal.read(cx).write(bytes);
+                    self.terminal.update(cx, |t, cx| t.write(bytes, cx));
                 }
             }
         }
@@ -394,14 +394,15 @@ impl TerminalView {
                 && let Some(reports) = scroll_report(Self::report_point(hit), step, event, mode)
             {
                 for report in reports {
-                    self.terminal.read(cx).write(report);
+                    self.terminal.update(cx, |t, cx| t.write(report, cx));
                 }
             }
         } else if mode.contains(TermMode::ALT_SCREEN | TermMode::ALTERNATE_SCROLL)
             && !event.modifiers.shift
         {
             // Full-screen apps without mouse mode (less, man): wheel = arrows.
-            self.terminal.read(cx).write(alt_scroll(step));
+            self.terminal
+                .update(cx, |t, cx| t.write(alt_scroll(step), cx));
         } else {
             self.terminal.update(cx, |t, cx| {
                 t.scroll(step);

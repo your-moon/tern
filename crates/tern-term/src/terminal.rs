@@ -7,7 +7,7 @@
 //! Bytes in via [`Terminal::feed`]; grid snapshots out via [`Terminal::lines`] /
 //! [`Terminal::cursor`]. Replies the emulator wants sent to the remote side
 //! (DSR, DA, color/size queries) leave through the `write` callback given to
-//! [`Terminal::new`].
+//! [`Terminal::new`]; everything leaving the terminal is a [`TerminalEvent`].
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -34,6 +34,15 @@ pub const SCROLLBACK_LINES: usize = 10_000;
 /// Emitted by [`Terminal`] (it is an `EventEmitter`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TerminalEvent {
+    /// Bytes for the remote side: keystrokes, paste, mouse reports and query replies.
+    Output(Vec<u8>),
+    /// The grid changed size; tell the remote (debounced by the view).
+    Resized {
+        cols: u16,
+        rows: u16,
+        pixel_width: u16,
+        pixel_height: u16,
+    },
     /// OSC 0/2 title change. An empty string means "reset to default".
     TitleChanged(String),
     Bell,
@@ -171,8 +180,6 @@ pub struct Terminal {
     term: Term<EventCapture>,
     parser: Processor,
     capture: EventCapture,
-    write: Box<dyn Fn(Vec<u8>) + 'static>,
-    resize: Box<dyn Fn(u16, u16, u16, u16) + 'static>,
     theme: TerminalTheme,
     /// Cell size in pixels, for text-area size queries and the resize callback.
     cell_px: (f32, f32),
@@ -191,12 +198,7 @@ impl std::fmt::Debug for Terminal {
 impl EventEmitter<TerminalEvent> for Terminal {}
 
 impl Terminal {
-    pub fn new(
-        cols: u16,
-        rows: u16,
-        write: Box<dyn Fn(Vec<u8>) + 'static>,
-        resize: Box<dyn Fn(u16, u16, u16, u16) + 'static>,
-    ) -> Self {
+    pub fn new(cols: u16, rows: u16) -> Self {
         let capture = EventCapture::default();
         let config = Config {
             scrolling_history: SCROLLBACK_LINES,
@@ -207,8 +209,6 @@ impl Terminal {
             term,
             parser: Processor::new(),
             capture,
-            write,
-            resize,
             theme: TerminalTheme::default(),
             cell_px: (0.0, 0.0),
         }
@@ -268,7 +268,7 @@ impl Terminal {
             }
         }
         if !reply.is_empty() {
-            (self.write)(reply);
+            notices.insert(0, Notice::Event(TerminalEvent::Output(reply)));
         }
         notices
     }
@@ -284,8 +284,8 @@ impl Terminal {
     }
 
     /// Send bytes to the remote side (keyboard, paste, mouse reports).
-    pub fn write(&self, bytes: Vec<u8>) {
-        (self.write)(bytes);
+    pub fn write(&mut self, bytes: Vec<u8>, cx: &mut Context<Self>) {
+        cx.emit(TerminalEvent::Output(bytes));
     }
 
     /// Resize the local grid. Returns whether the size changed. The remote
@@ -301,13 +301,19 @@ impl Terminal {
         true
     }
 
-    /// Invoke the `resize` callback with the current size (cols, rows,
-    /// pixel width, pixel height).
-    pub fn notify_remote_resize(&self) {
+    /// Emit [`TerminalEvent::Resized`] with the current grid and its pixel size.
+    pub fn notify_remote_resize(&mut self, cx: &mut Context<Self>) {
+        cx.emit(self.resized_event());
+    }
+
+    fn resized_event(&self) -> TerminalEvent {
         let (cols, rows) = (self.cols() as u16, self.rows() as u16);
-        let px_w = (self.cell_px.0 * cols as f32) as u16;
-        let px_h = (self.cell_px.1 * rows as f32) as u16;
-        (self.resize)(cols, rows, px_w, px_h);
+        TerminalEvent::Resized {
+            cols,
+            rows,
+            pixel_width: (self.cell_px.0 * f32::from(cols)) as u16,
+            pixel_height: (self.cell_px.1 * f32::from(rows)) as u16,
+        }
     }
 
     pub fn cols(&self) -> usize {
@@ -473,25 +479,24 @@ mod tests {
 
     use super::*;
 
-    type Sink = Rc<RefCell<Vec<Vec<u8>>>>;
-    type Resizes = Rc<RefCell<Vec<(u16, u16, u16, u16)>>>;
+    fn term(cols: u16, rows: u16) -> Terminal {
+        Terminal::new(cols, rows)
+    }
 
-    fn term(cols: u16, rows: u16) -> (Terminal, Sink, Resizes) {
-        let written: Sink = Rc::default();
-        let resized: Resizes = Rc::default();
-        let (w, r) = (written.clone(), Rc::clone(&resized));
-        let t = Terminal::new(
-            cols,
-            rows,
-            Box::new(move |b| w.borrow_mut().push(b)),
-            Box::new(move |c, ro, pw, ph| r.borrow_mut().push((c, ro, pw, ph))),
-        );
-        (t, written, resized)
+    /// The bytes a `process` call sends back to the remote.
+    fn output(notices: &[Notice]) -> Vec<Vec<u8>> {
+        notices
+            .iter()
+            .filter_map(|n| match n {
+                Notice::Event(TerminalEvent::Output(b)) => Some(b.clone()),
+                _ => None,
+            })
+            .collect()
     }
 
     #[test]
     fn plain_text_lands_on_grid_and_moves_cursor() {
-        let (mut t, _, _) = term(20, 5);
+        let mut t = term(20, 5);
         t.process(b"one\r\ntwo");
         assert_eq!(t.row_text(0), "one");
         assert_eq!(t.row_text(1), "two");
@@ -501,18 +506,14 @@ mod tests {
 
     #[test]
     fn dsr_cursor_report_is_written_back() {
-        let (mut t, written, _) = term(20, 5);
-        t.process(b"\x1b[2;3H");
-        assert!(written.borrow().is_empty());
-        t.process(b"\x1b[6n");
-        let w = written.borrow();
-        assert_eq!(w.len(), 1);
-        assert_eq!(w[0], b"\x1b[2;3R");
+        let mut t = term(20, 5);
+        assert!(output(&t.process(b"\x1b[2;3H")).is_empty());
+        assert_eq!(output(&t.process(b"\x1b[6n")), [b"\x1b[2;3R".to_vec()]);
     }
 
     #[test]
     fn sgr_colors_and_attributes() {
-        let (mut t, _, _) = term(40, 4);
+        let mut t = term(40, 4);
         t.process(b"\x1b[1;31mred\x1b[0m \x1b[4mu\x1b[0m\x1b[38;2;10;20;30mT");
         let line = t.line(0);
         assert_eq!(line[0].fg, CellColor::Indexed(1));
@@ -524,7 +525,7 @@ mod tests {
 
     #[test]
     fn title_and_bell_become_events() {
-        let (mut t, _, _) = term(20, 2);
+        let mut t = term(20, 2);
         let n = t.process(b"\x1b]0;my title\x07\x07");
         assert_eq!(
             n,
@@ -537,9 +538,8 @@ mod tests {
 
     #[test]
     fn osc11_background_query_answers_with_theme_color() {
-        let (mut t, written, _) = term(20, 2);
-        t.process(b"\x1b]11;?\x07");
-        let w = written.borrow();
+        let mut t = term(20, 2);
+        let w = output(&t.process(b"\x1b]11;?\x07"));
         assert_eq!(w.len(), 1);
         let s = String::from_utf8_lossy(&w[0]).to_string();
         assert!(s.starts_with("\x1b]11;rgb:1616/1818/1a1a"), "{s:?}");
@@ -547,7 +547,7 @@ mod tests {
 
     #[test]
     fn app_cursor_mode_toggles() {
-        let (mut t, _, _) = term(10, 2);
+        let mut t = term(10, 2);
         assert!(!t.mode().contains(TermMode::APP_CURSOR));
         t.process(b"\x1b[?1h");
         assert!(t.mode().contains(TermMode::APP_CURSOR));
@@ -555,17 +555,24 @@ mod tests {
 
     #[test]
     fn resize_changes_grid_and_remote_callback_reports_pixels() {
-        let (mut t, _, resized) = term(20, 5);
+        let mut t = term(20, 5);
         assert!(!t.resize(20, 5, 8.0, 16.0));
         assert!(t.resize(30, 10, 8.0, 16.0));
         assert_eq!((t.cols(), t.rows()), (30, 10));
-        t.notify_remote_resize();
-        assert_eq!(resized.borrow()[0], (30, 10, 240, 160));
+        assert_eq!(
+            t.resized_event(),
+            TerminalEvent::Resized {
+                cols: 30,
+                rows: 10,
+                pixel_width: 240,
+                pixel_height: 160
+            }
+        );
     }
 
     #[test]
     fn selection_yields_text() {
-        let (mut t, _, _) = term(20, 3);
+        let mut t = term(20, 3);
         t.process(b"hello world");
         let start = t.grid_point(0, 0);
         t.start_selection(SelectionType::Simple, start, Side::Left);
@@ -578,7 +585,7 @@ mod tests {
 
     #[test]
     fn scrollback_scrolls_and_clamps() {
-        let (mut t, _, _) = term(10, 3);
+        let mut t = term(10, 3);
         for i in 1..=8 {
             t.process(format!("line{i}\r\n").as_bytes());
         }
@@ -592,7 +599,7 @@ mod tests {
 
     #[test]
     fn utf8_split_across_feeds_reassembles() {
-        let (mut t, _, _) = term(10, 2);
+        let mut t = term(10, 2);
         let b = "é".as_bytes();
         t.process(&b[..1]);
         t.process(&b[1..]);
