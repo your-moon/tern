@@ -2,6 +2,7 @@
 //! The Zeron Dark palette and layout tokens, values copied from zeron's source.
 
 use gpui::{Hsla, hsla, rgb};
+use tern_term::TerminalTheme;
 
 /// Window frost over the blurred desktop (zeron `Theme::GLASS_ALPHA`, macOS).
 pub const GLASS_ALPHA: f32 = 0.80;
@@ -10,6 +11,14 @@ pub const TITLEBAR_TOP_PAD: f32 = 4.0;
 pub const PANEL_RADIUS: f32 = 10.0;
 pub const SPACE_SM: f32 = 8.0;
 pub const UI_FONT: &str = "Geist";
+pub const MONO_FONT: &str = "Geist Mono";
+pub const SIDEBAR_WIDTH: f32 = 256.0;
+pub const CONTROL_RADIUS: f32 = 6.0;
+
+const ANSI_DARK: [u32; 16] = [
+    0x242424, 0xf87171, 0x4ade80, 0xfacc15, 0x60a5fa, 0xc084fc, 0x22d3ee, 0xd4d4d8, 0x52525b,
+    0xfca5a5, 0x86efac, 0xfde047, 0x93c5fd, 0xd8b4fe, 0x67e8f9, 0xfafafa,
+];
 
 /// Where titlebar content starts: clear of the traffic lights, or the edge in fullscreen
 /// (zeron `titlebar_cluster_start`).
@@ -22,7 +31,14 @@ pub struct Theme {
     pub shell: Hsla,
     pub text: Hsla,
     pub muted: Hsla,
+    pub faint: Hsla,
+    pub accent: Hsla,
+    pub success: Hsla,
+    pub danger: Hsla,
     pub border: Hsla,
+    /// Row washes (zeron `wash(0.10)` active, `wash(0.05)` hover).
+    pub row_active: Hsla,
+    pub row_hover: Hsla,
     pub terminal_background: Hsla,
 }
 
@@ -32,9 +48,30 @@ impl Theme {
             shell: hex(0x0d0d0d),
             text: hex(0xe8e8ea),
             muted: hex(0xa9a9ae),
+            faint: hex(0x85858a),
+            accent: hex(0x8b7cf6),
+            success: hex(0x34d399),
+            danger: hex(0xf87171),
             border: hsla(0.0, 0.0, 1.0, 0.08),
+            row_active: hsla(0.0, 0.0, 0.92, 0.10),
+            row_hover: hsla(0.0, 0.0, 0.92, 0.05),
             terminal_background: hex(0x090909),
         }
+    }
+
+    pub fn terminal(&self) -> TerminalTheme {
+        let mut t = TerminalTheme {
+            background: self.terminal_background,
+            foreground: self.text,
+            cursor: self.text,
+            selection: self.accent.opacity(0.35),
+            font_family: MONO_FONT.into(),
+            ..TerminalTheme::default()
+        };
+        for (slot, color) in t.ansi.iter_mut().zip(ANSI_DARK) {
+            *slot = hex(color);
+        }
+        t
     }
 
     /// The shell surface as frost: the blurred desktop shows through at 1 - `GLASS_ALPHA`.

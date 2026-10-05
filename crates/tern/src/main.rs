@@ -1,7 +1,11 @@
 //! tern: a fast, low-memory SSH terminal.
 
 mod fonts;
+mod login;
+mod runtime;
+mod session;
 mod shell;
+mod sidebar;
 mod theme;
 
 use gpui::App;
@@ -10,12 +14,26 @@ use tracing_subscriber::EnvFilter;
 fn main() {
     init_logging();
     let _app = tracing::info_span!("app", service = "tern", env = env()).entered();
-    gpui_platform::application().run(|cx: &mut App| {
+    let target = std::env::args().nth(1);
+    gpui_platform::application().run(move |cx: &mut App| {
         fonts::register(cx);
-        if let Err(e) = shell::open_main_window(cx) {
-            tracing::error!(error = %e, "window_open_failed");
+        if let Err(e) = runtime::SshRuntime::install(cx) {
+            tracing::error!(error = %e, "ssh_runtime_start_failed");
             cx.quit();
             return;
+        }
+        let window = match shell::open_main_window(cx) {
+            Ok(w) => w,
+            Err(e) => {
+                tracing::error!(error = %e, "window_open_failed");
+                cx.quit();
+                return;
+            }
+        };
+        if let Some(target) = target {
+            let _ = window.update(cx, |shell, window, cx| {
+                shell.connect_target(&target, window, cx)
+            });
         }
         cx.on_window_closed(|cx, _| {
             if cx.windows().is_empty() {

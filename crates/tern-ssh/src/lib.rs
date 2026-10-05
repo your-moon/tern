@@ -16,11 +16,11 @@ mod session;
 
 use std::path::PathBuf;
 
-use futures::channel::oneshot;
 use tokio::sync::mpsc;
 
 pub use config::load_ssh_config_hosts;
 pub use error::{Error, InputError, Result};
+pub use futures::channel::oneshot;
 pub use secrecy::{self, ExposeSecret, SecretString};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
