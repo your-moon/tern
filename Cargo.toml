@@ -24,6 +24,9 @@ print_stdout = "deny"
 print_stderr = "deny"
 large_futures = "warn"
 needless_pass_by_value = "warn"
+# Rust API Guidelines C-FAILURE: every public fallible fn documents its errors.
+missing_errors_doc = "warn"
+disallowed_methods = "deny"
 
 # Small, fast release binary. Measured, not assumed: see docs/perf.md.
 [profile.release]

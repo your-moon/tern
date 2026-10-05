@@ -1,0 +1,8 @@
+# Pattern from Zed's clippy.toml: ban calls that block an async executor or the UI thread,
+# and name the replacement.
+disallowed-methods = [
+    { path = "std::process::Command::spawn", reason = "blocks the calling thread", replacement = "tokio::process::Command::spawn" },
+    { path = "std::process::Command::output", reason = "blocks the calling thread", replacement = "tokio::process::Command::output" },
+    { path = "std::process::Command::status", reason = "blocks the calling thread", replacement = "tokio::process::Command::status" },
+    { path = "std::thread::sleep", reason = "blocks the executor or the UI thread", replacement = "tokio::time::sleep or gpui's executor timer" },
+]

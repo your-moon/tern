@@ -1,0 +1,26 @@
+[package]
+name = "tern-ssh"
+description = "SSH client session layer for tern (russh, executor-agnostic events)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-channel = "2"
+futures = { version = "0.3", default-features = false, features = ["std"] }
+russh = "0.64"
+secrecy = "0.10"
+ssh2-config = "0.8"
+thiserror = "2"
+tokio = { version = "1", features = ["rt", "sync", "time", "net", "process", "io-util", "macros"] }
+tracing = "0.1"
+
+[dev-dependencies]
+crossterm = "0.29"
+rpassword = "7"
+tokio = { version = "1", features = ["rt-multi-thread", "signal", "io-std"] }
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+
+[lints]
+workspace = true

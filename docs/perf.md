@@ -9,6 +9,18 @@
 | Scrollback growth | lazy, in chunks of ≥1,000 rows; freed when shrunk >1,000 below capacity | `grid/storage.rs:111,133` |
 | Full scrollback, 200 cols | 10,000 lines = 48 MB/tab · 5,000 lines = 24 MB/tab | arithmetic |
 
+## SSH session buffers (tern-ssh)
+
+| Buffer | Bound | Source |
+| --- | --- | --- |
+| russh per-channel queue | 16 messages (russh default 100) | `session.rs` `CHANNEL_BUFFER` |
+| Chunk being coalesced | < 64 KiB + one packet | `outbox.rs` `MAX_CHUNK` |
+| Event queue to the UI | 8 chunks | `outbox.rs` `EVENT_QUEUE` |
+| Input queue from the UI | 64 commands, full → `InputError::Busy` | `lib.rs` `COMMAND_QUEUE` |
+
+When the UI falls behind, tern stops reading the channel, russh's queue fills, and russh stops
+reading the socket, so the server slows down instead of tern's memory growing.
+
 So the default scrollback is **5,000 lines**, configurable. A fresh tab pays only for what it has printed.
 
 ## Budget
@@ -18,4 +30,6 @@ The first measurement sets the baseline; every release records a new row and may
 
 | Date | Commit | Scenario | RSS |
 | --- | --- | --- | --- |
-| — | — | baseline not yet measured | — |
+| 2026-10-05 | tern-ssh (uncommitted → first commit) | `examples/connect` release, `seq 1 2000000` (16.9 MB) from strong-b, fast reader | 6 MB peak |
+| 2026-10-05 | same | same, reader stalled 6 s (backpressure) | 6 MB peak |
+| — | — | app with one idle tab | not yet measured |
