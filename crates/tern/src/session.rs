@@ -2,7 +2,7 @@
 //! the remote, and login questions are answered in the terminal itself (see `login.rs`).
 
 use gpui::{App, AppContext, Context, Entity, Subscription, Task, Window};
-use tern_ssh::{ConnectSpec, InputError, SessionEvent, SessionHandle, TermSize};
+use tern_ssh::{ConnectSpec, InputError, SecretString, SessionEvent, SessionHandle, TermSize};
 use tern_term::{Terminal, TerminalEvent, TerminalView};
 
 use crate::login::Login;
@@ -18,6 +18,13 @@ pub enum Status {
 
 pub struct Session {
     pub status: Status,
+    flow: Option<vault::Flow>,
+    /// The vault entry the open server question would answer.
+    asking: Option<tern_vault::Key>,
+    /// What the user typed for that question, offered for saving once connected.
+    typed: Option<(tern_vault::Key, SecretString)>,
+    /// Entries already answered from the vault on this connection.
+    tried: Vec<tern_vault::Key>,
     pub view: Entity<TerminalView>,
     terminal: Entity<Terminal>,
     spec: ConnectSpec,
@@ -50,6 +57,10 @@ impl Session {
             let (handle, task) = Self::dial(&spec, size, cx);
             Self {
                 status: Status::Connecting,
+                flow: None,
+                asking: None,
+                typed: None,
+                tried: Vec::new(),
                 view,
                 terminal,
                 spec,
@@ -96,18 +107,19 @@ impl Session {
     fn on_session_event(&mut self, event: SessionEvent, cx: &mut Context<Self>) {
         match event {
             SessionEvent::Data(bytes) => self.show(&bytes, cx),
-            SessionEvent::Prompt(prompt) => {
-                let (login, question) = Login::start(prompt);
-                self.login = Some(login);
-                self.show(&question, cx);
-            }
+            SessionEvent::Prompt(prompt) => self.on_prompt(prompt, cx),
             SessionEvent::Connected => {
                 self.status = Status::Connected;
+                self.offer_save(cx);
                 cx.notify();
             }
             SessionEvent::Closed { exit_status, error } => {
                 self.status = Status::Closed;
                 self.login = None;
+                self.flow = None;
+                self.asking = None;
+                self.typed = None;
+                self.tried.clear();
                 let reason = match (error, exit_status) {
                     (Some(e), _) => e,
                     (None, Some(code)) => format!("exit status {code}"),
@@ -136,10 +148,14 @@ impl Session {
             TerminalEvent::Output(bytes) => match self.login.as_mut() {
                 Some(login) => {
                     let step = login.input(bytes);
+                    let answer = step.done.then(|| login.take_answer()).flatten();
                     if step.done {
                         self.login = None;
                     }
                     self.show(&step.display, cx);
+                    if step.done {
+                        self.answered(answer, cx);
+                    }
                 }
                 None => self.send(bytes.clone()),
             },
@@ -175,6 +191,9 @@ impl Session {
         self.terminal.update(cx, |t, cx| t.feed(bytes, cx));
     }
 }
+
+#[path = "session_vault.rs"]
+mod vault;
 
 /// A closed tab reconnects on Enter only, so a stray keystroke into a dead tab does not dial
 /// the server again. Enter arrives as CR from both the main and the keypad key.

@@ -15,6 +15,7 @@ serde_json = "1"
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8", features = ["font-kit", "runtime_shaders"] }
 tern-ssh.workspace = true
 tern-term.workspace = true
+tern-vault.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "env-filter"] }

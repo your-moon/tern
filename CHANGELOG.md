@@ -23,6 +23,8 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 - `tern`: a connecting host's status dot breathes (zeron's 2.4 s pulse), synced between its tab and sidebar row; `"reduceMotion": true` in settings holds it still.
 - Docs: idle memory baseline in `docs/perf.md`: 49 MB footprint (87 MB RSS) with one connected tab, about 5 MB over an empty window.
 - `tern-vault`: one passphrase-encrypted file for SSH passwords (per `user@host:port`) and key passphrases (per key path), in the age format with an scrypt recipient. A wrong passphrase and a tampered file are both refused, saves are atomic, and plaintext is zeroed after use. Not wired into the app yet.
+- `tern`: saved logins. After a password or key passphrase is typed and the login works, tern offers to keep it in the vault, creating one with a repeated passphrase if there is none. Later logins answer from the vault (unlocked once per run, Enter skips), try each saved secret once, and fall back to asking. Unlock and save run off the UI thread.
+- `tern-ssh`: `password_server` example, a 127.0.0.1-only server that accepts one password, for checking login flows.
 - `tern`: a macOS menu bar (Hide, Hide Others, Show All, Quit, Minimize, Zoom) with ⌘Q, ⌘H, ⌥⌘H and ⌘M.
 - `tern-term`: `local_demo <command>` for visual checks; scripted runs never take keyboard focus.
 - Project: craft gates (`clippy -D warnings`, file-size and attribution checks, `cargo deny`), CI, architecture diagram, UI spec and measured performance notes.

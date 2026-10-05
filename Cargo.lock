@@ -6993,6 +6993,7 @@ dependencies = [
  "serde_json",
  "tern-ssh",
  "tern-term",
+ "tern-vault",
  "tokio",
  "tracing",
  "tracing-subscriber",

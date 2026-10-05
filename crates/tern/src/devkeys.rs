@@ -1,4 +1,5 @@
 //! Debug builds only: `TERN_DEV_KEYS="cmd-k s t b"` replays keystrokes into the window after
+//! start-up (`sleep-500` waits half a second, for a prompt to arrive),
 //! start-up, so a scripted visual check can drive the app without taking keyboard focus from
 //! whatever window the person at the machine is using.
 
@@ -17,6 +18,12 @@ pub fn replay(window: WindowHandle<Shell>, cx: &mut App) {
             .timer(Duration::from_millis(1500))
             .await;
         for source in script.split_whitespace() {
+            if let Some(ms) = source.strip_prefix("sleep-").and_then(|n| n.parse().ok()) {
+                cx.background_executor()
+                    .timer(Duration::from_millis(ms))
+                    .await;
+                continue;
+            }
             let Ok(keystroke) = Keystroke::parse(source) else {
                 tracing::warn!(key = source, "dev_key_unparsed");
                 continue;

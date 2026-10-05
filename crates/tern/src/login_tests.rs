@@ -117,3 +117,25 @@ fn challenge_asks_each_prompt_in_turn() {
     let answers: Vec<&str> = answers.iter().map(|a| a.expose_secret()).collect();
     assert_eq!(answers, ["me", "123"]);
 }
+
+#[test]
+fn a_typed_password_is_kept_for_the_offer_to_save() {
+    let (mut login, rx, _) = password();
+    assert!(login.input(b"hunter2\r").done);
+    assert_eq!(login.take_answer().unwrap().expose_secret(), "hunter2");
+    assert_eq!(answer(rx).unwrap().expose_secret(), "hunter2");
+}
+
+#[test]
+fn a_local_question_returns_its_line_and_ctrl_c_returns_nothing() {
+    let (mut login, shown) = Login::ask("Vault passphrase: ", false);
+    assert_eq!(shown, b"Vault passphrase: ");
+    let step = login.input(b"s3cret\r");
+    assert!(step.done);
+    assert_eq!(step.display, b"\r\n");
+    assert_eq!(login.take_answer().unwrap().expose_secret(), "s3cret");
+
+    let (mut login, _) = Login::ask("Vault passphrase: ", false);
+    assert!(login.input(b"abc\x03").done);
+    assert!(login.take_answer().is_none());
+}

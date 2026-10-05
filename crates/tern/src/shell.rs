@@ -120,6 +120,14 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Debug builds: keep scripted logins out of the real ~/.ssh/known_hosts.
+        #[cfg(debug_assertions)]
+        let spec = ConnectSpec {
+            known_hosts: std::env::var_os("TERN_KNOWN_HOSTS")
+                .map(Into::into)
+                .or(spec.known_hosts),
+            ..spec
+        };
         let theme = self.terminal_theme();
         let session = Session::open(spec, theme, window, cx);
         let repaint = cx.observe(&session, |_, _, cx| cx.notify());

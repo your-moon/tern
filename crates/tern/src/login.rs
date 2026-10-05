@@ -20,12 +20,16 @@ pub struct Login {
     kind: Kind,
     line: String,
     echo: bool,
+    /// The submitted secret or local answer, kept for the caller (offer to save, vault unlock).
+    answer: Option<SecretString>,
 }
 
 #[derive(Debug)]
 enum Kind {
     Secret(Option<Sender<Option<SecretString>>>),
     YesNo(Option<Sender<bool>>),
+    /// A question tern asks for itself; the answer stays here for [`Login::take_answer`].
+    Local,
     Challenge {
         pending: VecDeque<ChallengePrompt>,
         answers: Vec<SecretString>,
@@ -86,11 +90,23 @@ impl Login {
         }
     }
 
+    /// A question tern asks for itself, such as the vault passphrase.
+    pub fn ask(text: &str, echo: bool) -> (Self, Vec<u8>) {
+        (Self::new(Kind::Local, echo), text.as_bytes().to_vec())
+    }
+
+    /// The answer once the question is done: the line typed for a password, passphrase or
+    /// local question; `None` after Ctrl-C or for other kinds.
+    pub fn take_answer(&mut self) -> Option<SecretString> {
+        self.answer.take()
+    }
+
     fn new(kind: Kind, echo: bool) -> Self {
         Self {
             kind,
             line: String::new(),
             echo,
+            answer: None,
         }
     }
 
@@ -147,9 +163,14 @@ impl Login {
         let line = std::mem::take(&mut self.line);
         match &mut self.kind {
             Kind::Secret(reply) => {
+                self.answer = Some(SecretString::from(line.clone()));
                 if let Some(r) = reply.take() {
                     let _ = r.send(Some(SecretString::from(line)));
                 }
+                None
+            }
+            Kind::Local => {
+                self.answer = Some(SecretString::from(line));
                 None
             }
             Kind::YesNo(reply) => match line.trim().to_ascii_lowercase().as_str() {
@@ -192,6 +213,7 @@ impl Login {
                     let _ = r.send(false);
                 }
             }
+            Kind::Local => {}
             Kind::Challenge { reply, .. } => {
                 if let Some(r) = reply.take() {
                     let _ = r.send(None);

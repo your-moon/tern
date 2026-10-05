@@ -3,6 +3,7 @@
 #[cfg(debug_assertions)]
 mod devkeys;
 mod fonts;
+mod keeper;
 mod login;
 mod menus;
 mod pane;
@@ -26,6 +27,7 @@ fn main() {
     gpui_platform::application().run(move |cx: &mut App| {
         fonts::register(cx);
         menus::init(cx);
+        keeper::Keeper::install(cx);
         cx.bind_keys(tabs::bindings());
         cx.bind_keys([
             gpui::KeyBinding::new("cmd-k", picker::ToggleHostPicker, None),
