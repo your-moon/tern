@@ -92,7 +92,7 @@ impl gpui::Element for TerminalElement {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        let theme = self.view.read(cx).theme.clone();
+        let theme = self.view.read(cx).terminal.read(cx).theme().clone();
         let mono = mono_font(&theme);
         let font_size = px(theme.font_size);
         // Font probe: measure the resolved font's real advance so cols/rows

@@ -19,9 +19,6 @@ pub struct TerminalTheme {
     pub font_size: f32,
     /// Line height as a multiple of the font size.
     pub line_height_ratio: f32,
-    /// Treat Option as Meta (ESC prefix) on macOS instead of composing
-    /// special characters.
-    pub option_as_meta: bool,
 }
 
 impl Default for TerminalTheme {
@@ -53,7 +50,6 @@ impl Default for TerminalTheme {
             font_family: default_font_family().into(),
             font_size: 13.0,
             line_height_ratio: 1.35,
-            option_as_meta: true,
         }
     }
 }
