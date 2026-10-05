@@ -5,6 +5,13 @@ all-features = false
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+  # Marvin timing side channel in the `rsa` crate, reached through russh. No fixed release exists
+  # (rsa 0.9.10 and 0.10.0-rc.18 are both affected). The attack needs many timed private-key
+  # operations; tern does at most one RSA signature per login, and host-key checks are public-key
+  # only. Dropping russh's `rsa` feature would remove RSA host and user keys. Tracked in #16.
+  { id = "RUSTSEC-2023-0071", reason = "no fix upstream; one signature per login; see #16" },
+]
 
 [licenses]
 version = 2
