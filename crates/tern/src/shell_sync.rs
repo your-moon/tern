@@ -34,6 +34,7 @@ struct SyncState {
 }
 
 pub(super) struct SyncUi {
+    repo_input: Entity<TextInput>,
     token_input: Entity<TextInput>,
     pass_input: Entity<TextInput>,
     token_source: Option<TokenSource>,
@@ -68,11 +69,19 @@ impl Shell {
         let token_input =
             cx.new(|cx| TextInput::new("ghp_… with the gist scope", true, colors, cx));
         let pass_input = cx.new(|cx| TextInput::new("Vault passphrase", true, colors, cx));
+        let current = self.settings.sync_remote.clone().unwrap_or_default();
+        let repo_input = cx.new(|cx| {
+            let mut i = TextInput::new("git@github.com:you/tern-sync.git", false, colors, cx);
+            i.set_text(current, cx);
+            i
+        });
         let repaint = vec![
+            cx.observe(&repo_input, |_, _, cx| cx.notify()),
             cx.observe(&token_input, |_, _, cx| cx.notify()),
             cx.observe(&pass_input, |_, _, cx| cx.notify()),
         ];
         self.sync_ui = Some(SyncUi {
+            repo_input,
             token_input,
             pass_input,
             token_source: None,
@@ -112,6 +121,47 @@ impl Shell {
         self.refresh_token_source(cx);
     }
 
+    fn save_repo(&mut self, cx: &mut Context<Self>) {
+        let Some(ui) = &self.sync_ui else {
+            return;
+        };
+        let url = ui.repo_input.read(cx).text().trim().to_owned();
+        let value = (!url.is_empty()).then_some(url);
+        self.update_settings(|s| s.sync_remote = value.clone(), cx);
+        self.notify_toast(
+            ToastKind::Positive,
+            match value {
+                Some(_) => "Syncing through your git repository",
+                None => "Syncing through a GitHub gist",
+            },
+            cx,
+        );
+    }
+
+    /// `gh repo create tern-sync --private`, then uses its SSH URL.
+    fn create_repo(&mut self, cx: &mut Context<Self>) {
+        let work = cx.background_spawn(async { tern_sync::create_github_repo() });
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |s, cx| match result {
+                Ok(url) => {
+                    if let Some(ui) = &s.sync_ui {
+                        ui.repo_input
+                            .update(cx, |i, cx| i.set_text(url.clone(), cx));
+                    }
+                    s.update_settings(|st| st.sync_remote = Some(url.clone()), cx);
+                    s.notify_toast(
+                        ToastKind::Positive,
+                        format!("Private repo ready: {url}"),
+                        cx,
+                    );
+                }
+                Err(e) => s.notify_toast(ToastKind::Critical, e.to_string(), cx),
+            });
+        })
+        .detach();
+    }
+
     fn forget_token(&mut self, cx: &mut Context<Self>) {
         match tern_sync::forget_token() {
             Ok(()) => self.notify_toast(ToastKind::Default, "GitHub token removed", cx),
@@ -132,6 +182,7 @@ impl Shell {
             return;
         }
         let passphrase = Some(ui.pass_input.read(cx).text().to_owned()).filter(|p| !p.is_empty());
+        let remote_url = self.settings.sync_remote.clone();
         let open = Keeper::take(cx);
         if open.is_none() && passphrase.is_none() {
             self.notify_toast(
@@ -145,8 +196,15 @@ impl Shell {
         ui.message = None;
         ui.conflict = false;
         cx.notify();
-        let work =
-            cx.background_spawn(async move { run(&dir, open, passphrase.as_deref(), force) });
+        let work = cx.background_spawn(async move {
+            run(
+                &dir,
+                remote_url.as_deref(),
+                open,
+                passphrase.as_deref(),
+                force,
+            )
+        });
         cx.spawn(async move |this, cx| {
             let (vault, result) = work.await;
             let _ = this.update_in(cx, |s, window, cx| {
@@ -277,7 +335,7 @@ impl Shell {
             !needs_pass,
             "Sync now",
             Some(
-                "Connections, settings, shortcuts and the vault, encrypted, in a private gist"
+                "Connections, settings, shortcuts and the vault, encrypted before they leave"
                     .into(),
             ),
             w::button(&t, "sync-now", label)
@@ -308,7 +366,11 @@ impl Shell {
             .child(w::page_header(&t, "Sync"))
             .child(w::page_subtitle(
                 &t,
-                "One private gist on your GitHub account. GitHub stores only encrypted data.",
+                if self.settings.sync_remote.is_some() {
+                    "Your own private git repository. It stores only encrypted data."
+                } else {
+                    "One private gist on your GitHub account. GitHub stores only encrypted data."
+                },
             ))
             .when_some(ui.message.clone(), |el, (ok, text)| {
                 el.child(
@@ -319,7 +381,40 @@ impl Shell {
                     }),
                 )
             })
-            .child(w::section(&t, "Account", github))
+            .child(w::section(
+                &t,
+                "Repository",
+                w::card(&t)
+                    .child(w::row(
+                        &t,
+                        true,
+                        "Git remote",
+                        Some(match &self.settings.sync_remote {
+                            Some(_) => "Synced with your own git and its SSH keys".into(),
+                            None => "Empty: a private GitHub gist is used instead".into(),
+                        }),
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.))
+                            .child(field(&ui.repo_input, &t))
+                            .child(
+                                w::button(&t, "sync-save-repo", "Save")
+                                    .on_click(cx.listener(|s, _, _, cx| s.save_repo(cx))),
+                            ),
+                    ))
+                    .child(w::row(
+                        &t,
+                        false,
+                        "Create a private repo on GitHub",
+                        Some("Runs gh repo create tern-sync --private".into()),
+                        w::button(&t, "sync-create-repo", "Create")
+                            .on_click(cx.listener(|s, _, _, cx| s.create_repo(cx))),
+                    )),
+            ))
+            .when(self.settings.sync_remote.is_none(), |el| {
+                el.child(w::section(&t, "Account", github))
+            })
             .child(w::section(&t, "Sync", sync))
     }
 }
@@ -335,6 +430,7 @@ fn field(input: &Entity<TextInput>, t: &crate::theme::Theme) -> impl IntoElement
         .border_1()
         .border_color(t.border)
         .bg(t.row_hover)
+        .overflow_hidden()
         .text_sm()
         .child(input.clone())
 }
@@ -343,6 +439,7 @@ fn field(input: &Entity<TextInput>, t: &crate::theme::Theme) -> impl IntoElement
 /// downloaded one after a pull) and what happened.
 fn run(
     dir: &Path,
+    remote_url: Option<&str>,
     open: Option<Vault>,
     passphrase: Option<&str>,
     force: Option<Plan>,
@@ -362,7 +459,7 @@ fn run(
         (None, Some(p)) => Vault::new(SecretString::from(p.to_owned())),
         (None, None) => return (None, Err("The vault is locked.".into())),
     };
-    let result = sync(dir, &vault, passphrase, force);
+    let result = sync(dir, remote_url, &vault, passphrase, force);
     match result {
         Ok((outcome, Some(pulled))) => (Some(pulled), Ok(outcome)),
         Ok((outcome, None)) => (Some(vault), Ok(outcome)),
@@ -370,9 +467,47 @@ fn run(
     }
 }
 
+/// Where the bundle lives: the user's own git repository when one is set, else a gist.
+enum Backend {
+    Git(tern_sync::GitRepo),
+    Gist(Gist),
+}
+
+impl Backend {
+    fn open(dir: &Path, remote_url: Option<&str>) -> Result<Self, String> {
+        Ok(match remote_url {
+            Some(url) => Backend::Git(tern_sync::GitRepo::new(
+                url.to_owned(),
+                dir.join("sync-repo"),
+            )),
+            None => {
+                let (token, _) = tern_sync::token().map_err(|e| e.to_string())?;
+                Backend::Gist(Gist::new(token))
+            }
+        })
+    }
+
+    fn fetch(&self) -> Result<Option<tern_sync::RemoteBundle>, String> {
+        match self {
+            Backend::Git(g) => g.fetch(),
+            Backend::Gist(g) => g.fetch(),
+        }
+        .map_err(|e| e.to_string())
+    }
+
+    fn push(&self, hash: &str, device: &str, vault: &[u8], sealed: &[u8]) -> Result<(), String> {
+        match self {
+            Backend::Git(g) => g.push(hash, device, vault, sealed),
+            Backend::Gist(g) => g.push(hash, device, vault, sealed),
+        }
+        .map_err(|e| e.to_string())
+    }
+}
+
 /// Returns the outcome, and the downloaded vault after a pull.
 fn sync(
     dir: &Path,
+    remote_url: Option<&str>,
     vault: &Vault,
     passphrase: Option<&str>,
     force: Option<Plan>,
@@ -387,9 +522,8 @@ fn sync(
         .ok()
         .and_then(|t| serde_json::from_str(&t).ok())
         .unwrap_or_default();
-    let (token, _) = tern_sync::token().map_err(|e| e.to_string())?;
-    let gist = Gist::new(token);
-    let remote = gist.fetch().map_err(|e| e.to_string())?;
+    let backend = Backend::open(dir, remote_url)?;
+    let remote = backend.fetch()?;
     // A Mac that never synced and holds nothing of its own (no connections, an empty vault)
     // just takes GitHub's copy instead of asking which side wins.
     let fresh = state.last_hash.is_none() && !local.contains_key("hosts.json") && vault.is_empty();
@@ -412,8 +546,7 @@ fn sync(
             let vault_bytes = rest.remove(VAULT_FILE).unwrap_or_default();
             let sealed = vault.seal(&encode(&rest)?).map_err(|e| e.to_string())?;
             let device = std::env::var("USER").unwrap_or_else(|_| "mac".into());
-            gist.push(&local_hash, &device, &vault_bytes, &sealed)
-                .map_err(|e| e.to_string())?;
+            backend.push(&local_hash, &device, &vault_bytes, &sealed)?;
             write_state(dir, &local_hash)?;
             Ok((Outcome::Pushed, None))
         }

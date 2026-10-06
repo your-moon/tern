@@ -33,6 +33,9 @@ pub struct Settings {
     pub host_themes: BTreeMap<String, String>,
     /// `~/.ssh/config` hosts the user removed from tern's list; the file itself is untouched.
     pub hidden_hosts: Vec<String>,
+    /// A git remote to sync through (any host git can reach); `None` uses a GitHub gist.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync_remote: Option<String>,
 }
 
 impl Default for Settings {
@@ -46,6 +49,7 @@ impl Default for Settings {
             terminal_theme: None,
             host_themes: BTreeMap::new(),
             hidden_hosts: Vec::new(),
+            sync_remote: None,
         }
     }
 }
@@ -140,6 +144,7 @@ mod tests {
             terminal_theme: Some("Dracula".into()),
             host_themes: BTreeMap::from([("grape".into(), "Nord".into())]),
             hidden_hosts: vec!["old-box".into()],
+            sync_remote: Some("git@github.com:me/tern-sync.git".into()),
         };
         saved.save(&dir).unwrap();
         assert_eq!(Settings::load(&dir), saved);

@@ -1,0 +1,292 @@
+//! The git side: a private repository the user owns, driven through their own `git`, so their
+//! SSH keys and credential helpers do the authentication. The clone lives in tern's settings
+//! directory; each sync is one commit. Blocking; callers run it off the UI thread.
+
+use std::path::{Path, PathBuf};
+use std::process::Output;
+
+use serde::{Deserialize, Serialize};
+
+use crate::github::{GithubError, RemoteBundle};
+
+const META: &str = "tern-meta.json";
+const VAULT: &str = "vault.age";
+const DATA: &str = "data.age";
+const BRANCH: &str = "main";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Meta {
+    version: u32,
+    hash: String,
+    updated_at: u64,
+    device: String,
+}
+
+#[derive(Debug)]
+pub struct GitRepo {
+    remote: String,
+    dir: PathBuf,
+}
+
+// Runs on a background thread, never on an executor, so blocking on git is fine here.
+#[allow(clippy::disallowed_methods)]
+fn run(dir: Option<&Path>, args: &[&str]) -> Result<Output, GithubError> {
+    let mut cmd = std::process::Command::new("git");
+    if let Some(dir) = dir {
+        cmd.arg("-C").arg(dir);
+    }
+    // Never stop for a password prompt: tern has no terminal for git to ask in.
+    cmd.env("GIT_TERMINAL_PROMPT", "0");
+    cmd.args(args)
+        .output()
+        .map_err(|e| GithubError::Http(format!("git: {e}")))
+}
+
+fn ok(out: Output, what: &str) -> Result<Output, GithubError> {
+    if out.status.success() {
+        return Ok(out);
+    }
+    let err = String::from_utf8_lossy(&out.stderr);
+    let line = err
+        .lines()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("failed");
+    Err(GithubError::Http(format!("git {what}: {}", line.trim())))
+}
+
+impl GitRepo {
+    /// `dir` is where the clone is kept (inside tern's settings directory).
+    pub fn new(remote: String, dir: PathBuf) -> Self {
+        Self { remote, dir }
+    }
+
+    /// Clones on first use, then brings the clone to the remote's state. An empty remote
+    /// (a fresh repository) is fine: there is just nothing to read yet.
+    fn refresh(&self) -> Result<(), GithubError> {
+        if !self.dir.join(".git").exists() {
+            if let Some(parent) = self.dir.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| GithubError::Http(e.to_string()))?;
+            }
+            let dir = self.dir.to_string_lossy();
+            ok(
+                run(None, &["clone", "--quiet", &self.remote, &dir])?,
+                "clone",
+            )?;
+            return Ok(());
+        }
+        ok(
+            run(
+                Some(&self.dir),
+                &["remote", "set-url", "origin", &self.remote],
+            )?,
+            "remote",
+        )?;
+        ok(
+            run(Some(&self.dir), &["fetch", "--quiet", "origin"])?,
+            "fetch",
+        )?;
+        let has_remote_branch = run(
+            Some(&self.dir),
+            &[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                &format!("origin/{BRANCH}"),
+            ],
+        )?
+        .status
+        .success();
+        if has_remote_branch {
+            ok(
+                run(
+                    Some(&self.dir),
+                    &[
+                        "checkout",
+                        "--quiet",
+                        "-B",
+                        BRANCH,
+                        &format!("origin/{BRANCH}"),
+                    ],
+                )?,
+                "checkout",
+            )?;
+        }
+        Ok(())
+    }
+
+    /// The repository's bundle, or `None` when nothing was pushed yet.
+    ///
+    /// # Errors
+    /// git failures (auth, network, a remote that is not a repository) or a bundle in the
+    /// wrong format.
+    pub fn fetch(&self) -> Result<Option<RemoteBundle>, GithubError> {
+        self.refresh()?;
+        let Ok(meta) = std::fs::read_to_string(self.dir.join(META)) else {
+            return Ok(None);
+        };
+        let meta: Meta =
+            serde_json::from_str(&meta).map_err(|e| GithubError::Format(e.to_string()))?;
+        let read = |name: &str| {
+            std::fs::read(self.dir.join(name))
+                .map_err(|e| GithubError::Format(format!("{name}: {e}")))
+        };
+        Ok(Some(RemoteBundle {
+            hash: meta.hash,
+            updated_at: meta.updated_at,
+            device: meta.device,
+            vault: read(VAULT)?,
+            sealed: read(DATA)?,
+        }))
+    }
+
+    /// Writes the bundle, commits and pushes.
+    ///
+    /// # Errors
+    /// git failures, including a rejected push when the remote moved meanwhile.
+    pub fn push(
+        &self,
+        hash: &str,
+        device: &str,
+        vault: &[u8],
+        sealed: &[u8],
+    ) -> Result<(), GithubError> {
+        self.refresh()?;
+        let meta = Meta {
+            version: 1,
+            hash: hash.to_owned(),
+            updated_at: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+            device: device.to_owned(),
+        };
+        let write = |name: &str, bytes: &[u8]| {
+            std::fs::write(self.dir.join(name), bytes).map_err(|e| GithubError::Http(e.to_string()))
+        };
+        write(
+            META,
+            serde_json::to_string_pretty(&meta)
+                .map_err(|e| GithubError::Format(e.to_string()))?
+                .as_bytes(),
+        )?;
+        write(VAULT, vault)?;
+        write(DATA, sealed)?;
+        let dir = Some(self.dir.as_path());
+        ok(
+            run(dir, &["checkout", "--quiet", "-B", BRANCH])?,
+            "checkout",
+        )?;
+        ok(run(dir, &["add", META, VAULT, DATA])?, "add")?;
+        let message = format!("tern sync from {device}");
+        // Identity is only needed if the user has none configured; it names the app, not them.
+        ok(
+            run(
+                dir,
+                &[
+                    "-c",
+                    "user.name=tern",
+                    "-c",
+                    "user.email=tern@localhost",
+                    "commit",
+                    "--quiet",
+                    "--allow-empty",
+                    "-m",
+                    &message,
+                ],
+            )?,
+            "commit",
+        )?;
+        ok(
+            run(dir, &["push", "--quiet", "-u", "origin", BRANCH])?,
+            "push",
+        )?;
+        Ok(())
+    }
+}
+
+/// Creates a private `tern-sync` repository with the GitHub CLI and returns its SSH URL.
+///
+/// # Errors
+/// When `gh` is missing, signed out, or the name is taken by something unusable.
+#[allow(clippy::disallowed_methods)]
+pub fn create_github_repo() -> Result<String, GithubError> {
+    let gh = |args: &[&str]| {
+        std::process::Command::new("gh")
+            .args(args)
+            .output()
+            .map_err(|e| GithubError::Http(format!("gh: {e}")))
+    };
+    let view = gh(&[
+        "repo",
+        "view",
+        "tern-sync",
+        "--json",
+        "sshUrl",
+        "-q",
+        ".sshUrl",
+    ])?;
+    if view.status.success() {
+        return Ok(String::from_utf8_lossy(&view.stdout).trim().to_owned());
+    }
+    let created = gh(&[
+        "repo",
+        "create",
+        "tern-sync",
+        "--private",
+        "--description",
+        "tern sync data (encrypted)",
+    ])?;
+    if !created.status.success() {
+        let err = String::from_utf8_lossy(&created.stderr);
+        return Err(GithubError::Http(format!("gh repo create: {}", err.trim())));
+    }
+    let view = gh(&[
+        "repo",
+        "view",
+        "tern-sync",
+        "--json",
+        "sshUrl",
+        "-q",
+        ".sshUrl",
+    ])?;
+    Ok(String::from_utf8_lossy(&view.stdout).trim().to_owned())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::disallowed_methods)]
+mod tests {
+    use super::*;
+
+    /// A bare repository on disk stands in for GitHub: push from one clone, fetch from another.
+    #[test]
+    fn push_from_one_clone_is_read_by_another() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bare = tmp.path().join("remote.git");
+        let status = std::process::Command::new("git")
+            .args(["init", "--quiet", "--bare", "-b", "main"])
+            .arg(&bare)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let url = bare.to_string_lossy().into_owned();
+
+        let a = GitRepo::new(url.clone(), tmp.path().join("a"));
+        assert!(
+            a.fetch().unwrap().is_none(),
+            "an empty remote has nothing yet"
+        );
+        a.push("h1", "mac-a", b"vault-bytes", b"sealed-bytes")
+            .unwrap();
+
+        let b = GitRepo::new(url.clone(), tmp.path().join("b"));
+        let got = b.fetch().unwrap().unwrap();
+        assert_eq!(got.hash, "h1");
+        assert_eq!(got.device, "mac-a");
+        assert_eq!(got.vault, b"vault-bytes");
+        assert_eq!(got.sealed, b"sealed-bytes");
+
+        // A second push from b is seen by a on its next fetch.
+        b.push("h2", "mac-b", b"v2", b"s2").unwrap();
+        assert_eq!(a.fetch().unwrap().unwrap().hash, "h2");
+    }
+}

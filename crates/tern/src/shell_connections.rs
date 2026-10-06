@@ -537,6 +537,7 @@ fn row(label: &'static str, input: &Entity<TextInput>, t: &Theme) -> impl IntoEl
                 .border_1()
                 .border_color(t.border)
                 .bg(t.row_hover)
+                .overflow_hidden()
                 .text_sm()
                 .child(input.clone()),
         )

@@ -8,12 +8,14 @@
 //! hash both sides had at the last sync ([`decide`]).
 
 mod github;
+mod gitrepo;
 
 use std::collections::BTreeMap;
 
 use sha2::{Digest, Sha256};
 
 pub use github::{Gist, GithubError, RemoteBundle, TokenSource, forget_token, save_token, token};
+pub use gitrepo::{GitRepo, create_github_repo};
 
 /// The files that travel, by name, as raw bytes.
 pub type Files = BTreeMap<String, Vec<u8>>;
