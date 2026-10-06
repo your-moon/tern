@@ -78,7 +78,7 @@ notarise=false
 if [ -n "${TERN_SIGN_ID:-}" ]; then
   codesign -s "$TERN_SIGN_ID" --timestamp "$dmg"
   echo "signed dmg with: $TERN_SIGN_ID"
-  [ -z "${TERN_NOTARY_PROFILE:-}" ] || notarise=true
+  [ -z "${TERN_NOTARY_PROFILE:-}${TERN_NOTARY_KEY:-}" ] || notarise=true
 else
   echo "dmg not signed (needs TERN_SIGN_ID; skipping that)"
 fi
@@ -90,7 +90,7 @@ if $notarise; then
   spctl -a -vv "$app"
   echo "dmg notarised and stapled"
 else
-  echo "dmg not notarised (needs TERN_SIGN_ID and TERN_NOTARY_PROFILE; skipping that)"
+  echo "dmg not notarised (needs TERN_SIGN_ID and TERN_NOTARY_PROFILE or TERN_NOTARY_KEY; skipping that)"
 fi
 
 cask="$out/tern.rb"

@@ -71,14 +71,14 @@ else
   fi
 fi
 
-if [ -n "${TERN_SIGN_ID:-}" ] && [ -n "${TERN_NOTARY_PROFILE:-}" ]; then
+if [ -n "${TERN_SIGN_ID:-}" ] && [ -n "${TERN_NOTARY_PROFILE:-}${TERN_NOTARY_KEY:-}" ]; then
   zip=$(mktemp -d)/tern-notarize.zip
   ditto -c -k --keepParent "$app" "$zip"
   scripts/notarize.sh "$zip"
   xcrun stapler staple "$app"
   echo "notarised and stapled"
 else
-  echo "not notarised (needs TERN_SIGN_ID and TERN_NOTARY_PROFILE; skipping that)"
+  echo "not notarised (needs TERN_SIGN_ID and TERN_NOTARY_PROFILE or TERN_NOTARY_KEY; skipping that)"
 fi
 
 codesign --verify --deep --strict "$app"

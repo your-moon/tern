@@ -9,7 +9,9 @@ use gpui::{
     WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowOptions, actions, div, point, px,
     size,
 };
-use tern_ssh::{ConnectSpec, HostEntry};
+#[cfg(debug_assertions)]
+use tern_ssh::ConnectSpec;
+use tern_ssh::HostEntry;
 
 use crate::connections::{self, Connection};
 use crate::pane::{self, DragGhost, SidebarResize, WidthTween};
