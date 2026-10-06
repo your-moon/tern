@@ -49,6 +49,8 @@ pub(crate) use forwards_ui::FillPassword;
 pub(crate) use sftp_ui::ToggleSftp;
 #[path = "shell_frame.rs"]
 mod frame_ui;
+#[path = "shell_wallpaper_gallery.rs"]
+mod gallery_ui;
 #[path = "shell_look.rs"]
 mod look;
 #[path = "shell_menu.rs"]

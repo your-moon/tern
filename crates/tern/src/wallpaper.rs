@@ -33,7 +33,7 @@ const CACHE_VERSION: u32 = 1;
 const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
 const EXTENSIONS: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
 
-fn store(config: &Path) -> PathBuf {
+pub(crate) fn store(config: &Path) -> PathBuf {
     config.join("wallpapers")
 }
 

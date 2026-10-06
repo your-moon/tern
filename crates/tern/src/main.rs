@@ -44,6 +44,7 @@ mod wallpaper_colors;
 mod wallpaper_fx;
 #[cfg(test)]
 mod wallpaper_fx_tests;
+mod wallpaper_gallery;
 mod wallpaper_panel;
 
 use gpui::App;

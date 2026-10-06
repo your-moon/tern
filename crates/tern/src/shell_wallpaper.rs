@@ -55,6 +55,7 @@ pub(super) struct State {
     failed: Option<Want>,
     fade: Option<Fade>,
     pub(super) error: Option<String>,
+    pub(super) gallery: super::gallery_ui::Gallery,
 }
 
 impl Shell {
@@ -77,6 +78,7 @@ impl Shell {
     /// Starts rendering whatever the settings now ask for. Called every frame; cheap when
     /// nothing changed.
     pub(super) fn sync_wallpaper(&mut self, cx: &mut Context<Self>) {
+        self.sync_thumbs(cx);
         let Some(want) = self.wanted() else {
             self.wp.failed = None;
             self.wp.error = None;
@@ -273,7 +275,7 @@ impl Shell {
     }
 
     /// Copies the picked file into tern's folder off the UI thread, then shows it.
-    fn pick_wallpaper(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn pick_wallpaper(&mut self, cx: &mut Context<Self>) {
         let paths = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: false,
@@ -303,22 +305,23 @@ impl Shell {
 
     /// Shows `path` (a copy in tern's folder), remembers it, and drops copies that fell out of
     /// the history.
-    fn set_wallpaper(&mut self, path: String, cx: &mut Context<Self>) {
+    pub(super) fn set_wallpaper(&mut self, path: String, cx: &mut Context<Self>) {
         self.wp.error = None;
         self.wp.failed = None;
-        self.update_settings(
-            |st| {
-                wallpaper::remember(&mut st.wallpaper_history, &path);
-                st.wallpaper = Some(path);
-            },
-            cx,
-        );
+        self.update_settings(|st| crate::wallpaper_gallery::use_picked(st, path), cx);
         if let Some(config) = crate::settings::dir() {
             wallpaper::prune(&config, &self.settings.wallpaper_history);
         }
     }
 
-    fn clear_wallpaper(&mut self, cx: &mut Context<Self>) {
+    /// Shows a built-in's file; it stays out of the history.
+    pub(super) fn show_builtin(&mut self, path: String, cx: &mut Context<Self>) {
+        self.wp.error = None;
+        self.wp.failed = None;
+        self.update_settings(|st| crate::wallpaper_gallery::use_builtin(st, path), cx);
+    }
+
+    pub(super) fn clear_wallpaper(&mut self, cx: &mut Context<Self>) {
         self.update_settings(|st| st.wallpaper = None, cx);
     }
 
@@ -334,50 +337,11 @@ impl Shell {
             Some(_) => "File not found".to_owned(),
             None => "None".to_owned(),
         };
-        let choose = w::button(&t, "wallpaper-choose", "Choose…")
-            .on_click(cx.listener(|s, _, _, cx| s.pick_wallpaper(cx)));
-        let remove = w::button(&t, "wallpaper-remove", "Remove")
-            .on_click(cx.listener(|s, _, _, cx| s.clear_wallpaper(cx)));
-        let mut card = w::card(&t).child(w::row(
-            &t,
-            true,
-            "Image",
-            Some(match &self.wp.error {
-                Some(e) => e.clone().into(),
-                None => {
-                    format!("{current} · fills the window; the empty view shows it sharp").into()
-                }
-            }),
-            div().flex().gap(px(6.)).child(choose).child(remove),
-        ));
-        let recent: Vec<&String> = self
-            .settings
-            .wallpaper_history
-            .iter()
-            .filter(|p| Path::new(p).is_file())
-            .collect();
-        if !recent.is_empty() {
-            let mut list = div()
-                .flex()
-                .flex_wrap()
-                .justify_end()
-                .gap(px(6.))
-                .max_w(px(420.));
-            for (i, path) in recent.into_iter().enumerate() {
-                let selected = self.settings.wallpaper.as_deref() == Some(path.as_str());
-                let target = path.clone();
-                list = list.child(
-                    w::button(&t, ("wallpaper-recent", i), name_of(path))
-                        .when(selected, |el| {
-                            el.bg(t.ink(0.18)).font_weight(FontWeight::MEDIUM)
-                        })
-                        .on_click(
-                            cx.listener(move |s, _, _, cx| s.set_wallpaper(target.clone(), cx)),
-                        ),
-                );
-            }
-            card = card.child(w::row(&t, false, "Recent", None, list));
-        }
+        let status = match &self.wp.error {
+            Some(e) => e.clone(),
+            None => format!("{current} · fills the window; the empty view shows it sharp"),
+        };
+        let card = w::card(&t).child(self.wallpaper_gallery(status, cx));
         let mut effects = div().flex().gap(px(6.));
         for (id, label, effect) in EFFECTS {
             let selected = self.settings.wallpaper_effect == effect;
