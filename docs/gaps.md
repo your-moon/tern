@@ -69,8 +69,8 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 | # | Gap | Impact |
 | --- | --- | --- |
 | ✓ Y1 | Private git repo backend using the user's git (requested) | Gist only |
-| Y2 | Automatic sync (on change, on launch) | Manual Sync now |
-| Y3 | Per-file merge on conflict | Whole-bundle keep-this / use-GitHub |
+| ✓ Y2 | Automatic sync (on change, on launch) | Manual Sync now |
+| ✓ Y3 | Per-file merge on conflict | Whole-bundle keep-this / use-GitHub |
 
 ## 6. Lifecycle states not yet walked
 
@@ -89,7 +89,7 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 
 | # | Gap | Impact |
 | --- | --- | --- |
-| P1 | Signed, notarised .app with an icon | Runs from Terminal only; not in Dock or Spotlight |
-| P2 | Auto-update | Manual cargo install |
-| P3 | Homebrew cask | No one-line install |
+| ✓ P1 | Signed, notarised .app with an icon (ad-hoc signed; notarising needs TERN_SIGN_ID + TERN_NOTARY_PROFILE) | Runs from Terminal only; not in Dock or Spotlight |
+| ✓ P2 | Auto-update | Manual cargo install |
+| ✓ P3 | Homebrew cask | No one-line install |
 | P4 | Accessibility (VoiceOver labels) | Unlabelled controls |
