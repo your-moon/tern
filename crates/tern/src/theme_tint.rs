@@ -20,6 +20,9 @@ const LIGHT_PREMIX: f32 = 0.94;
 const SURFACE_MIX: f32 = 0.4;
 /// WCAG AA for body text: what text, muted and faint text keep on every surface.
 pub const TEXT_CONTRAST: f32 = 4.5;
+/// What faint text (placeholders, meta) keeps: WCAG's incidental/non-text 3:1. Zeron has no
+/// faint colour, so this is tern's own call.
+pub const FAINT_CONTRAST: f32 = 3.0;
 
 fn pack(c: [u8; 3]) -> u32 {
     u32::from(c[0]) << 16 | u32::from(c[1]) << 8 | u32::from(c[2])
@@ -115,7 +118,7 @@ impl Theme {
         ];
         let text = harden(rgb_of(self.text), &surfaces, TEXT_CONTRAST, None);
         let muted = harden(rgb_of(self.muted), &surfaces, TEXT_CONTRAST, Some(text));
-        let faint = harden(rgb_of(self.faint), &surfaces, TEXT_CONTRAST, Some(text));
+        let faint = harden(rgb_of(self.faint), &surfaces, FAINT_CONTRAST, Some(text));
         (self.text, self.muted, self.faint) = (from_rgb(text), from_rgb(muted), from_rgb(faint));
 
         let accent = accent_for(color, surfaces[2]);
@@ -152,14 +155,14 @@ mod tests {
             for color in WALLPAPERS {
                 let theme = base.tinted(color);
                 for surface in [theme.shell, theme.popup, theme.terminal_background] {
-                    for (name, text) in [
-                        ("text", theme.text),
-                        ("muted", theme.muted),
-                        ("faint", theme.faint),
+                    for (name, text, minimum) in [
+                        ("text", theme.text, 4.49),
+                        ("muted", theme.muted, 4.49),
+                        ("faint", theme.faint, 2.99),
                     ] {
                         let ratio = contrast_ratio(pack(rgb_of(text)), pack(rgb_of(surface)));
                         assert!(
-                            ratio >= 4.49,
+                            ratio >= minimum,
                             "{name} light={} on {color:?}: {ratio}",
                             base.light
                         );
@@ -167,6 +170,22 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Faint text keeps 3:1, not 4.5: zeron's light faint (3.9 on its shell) is left as it is.
+    #[test]
+    fn faint_text_that_clears_three_to_one_is_not_pushed_further() {
+        let base = Theme::zeron_light();
+        let theme = base.tinted([255, 255, 255]);
+        let surfaces = [theme.shell, theme.popup, theme.terminal_background];
+        let worst = surfaces
+            .iter()
+            .map(|s| contrast_ratio(pack(rgb_of(base.faint)), pack(rgb_of(*s))))
+            .fold(f32::INFINITY, f32::min);
+        assert!((3.0..4.5).contains(&worst), "{worst}");
+        assert_eq!(rgb_of(theme.faint), rgb_of(base.faint));
+        // While muted text, which has to reach 4.5, is already past it.
+        assert!(contrast_ratio(pack(rgb_of(theme.muted)), pack(rgb_of(theme.shell))) >= 4.49);
     }
 
     /// The stock palettes already clear 4.5 under every wallpaper, so the test above cannot see a
@@ -178,14 +197,14 @@ mod tests {
         (base.text, base.muted, base.faint) = (hex(0x9a9a9a), hex(0x9a9a9a), hex(0x9a9a9a));
         for color in WALLPAPERS {
             let theme = base.tinted(color);
-            for (name, text) in [
-                ("text", theme.text),
-                ("muted", theme.muted),
-                ("faint", theme.faint),
+            for (name, text, minimum) in [
+                ("text", theme.text, 4.49),
+                ("muted", theme.muted, 4.49),
+                ("faint", theme.faint, 2.99),
             ] {
                 for surface in [theme.shell, theme.popup, theme.terminal_background] {
                     let ratio = contrast_ratio(pack(rgb_of(text)), pack(rgb_of(surface)));
-                    assert!(ratio >= 4.49, "{name} on {color:?}: {ratio}");
+                    assert!(ratio >= minimum, "{name} on {color:?}: {ratio}");
                 }
             }
         }

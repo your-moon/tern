@@ -10,14 +10,14 @@ use std::time::{Duration, Instant};
 use gpui::AppContext as _;
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    AnyElement, Context, FontWeight, InteractiveElement, IntoElement, ParentElement,
+    AnyElement, Context, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement,
     StatefulInteractiveElement, Styled, Window, div, px,
 };
 
 use super::Shell;
 use super::toast::CubicBezier;
 use crate::settings_widgets as w;
-use crate::theme::Theme;
+use crate::theme::{SPACE_SM, TITLEBAR_HEIGHT, Theme};
 use crate::theme_tint::{self, rgb_of};
 use crate::wallpaper::{self, Prepared};
 use crate::wallpaper_fx::Effect;
@@ -30,6 +30,16 @@ const CROSSFADE_CURVE: CubicBezier = CubicBezier::new(1.0 / 3.0, 1.0, 2.0 / 3.0,
 /// the hero is this share of the window's height, up to this many pixels.
 const HERO_VIEWPORT_RATIO: f32 = 0.72;
 const HERO_MAX_HEIGHT: f32 = 760.0;
+
+/// Where a panel sits in the window, so its frosted copy lines up with the sharp picture.
+#[derive(Clone, Copy)]
+pub(super) enum Region {
+    Titlebar,
+    Sidebar,
+    Settings,
+    /// The main panel; the empty view's hero band at its top stays unfrosted.
+    Main,
+}
 
 /// The empty view's panel while the picture fills the window: clear over the top `height` (the
 /// picture at full strength, fading into the panel) and the panel at `alpha` below it.
@@ -89,6 +99,10 @@ struct Fade {
 
 #[derive(Default)]
 pub(super) struct State {
+    /// The window's size at its last render, for placing the frosted copies.
+    pub(super) viewport: (f32, f32),
+    /// Height of the empty view's unfrosted hero band this frame; 0 with a tab open.
+    hero_clear: f32,
     shown: Option<Shown>,
     loading: Option<Want>,
     /// A want that failed to load, so a bad file is not retried on every frame.
@@ -214,11 +228,13 @@ impl Shell {
         panel: gpui::Hsla,
         window: &mut Window,
     ) -> Option<(AnyElement, f32)> {
+        self.wp.hero_clear = 0.0;
         if self.tabs.get(self.active).is_some() || self.settings_page.is_some() {
             return None;
         }
         let height = hero_height(f32::from(window.viewport_size().height));
         if let Some(alpha) = self.window_fill() {
+            self.wp.hero_clear = height;
             return Some((fill_backdrop(height, panel, alpha), height));
         }
         self.wallpaper_hero(height, panel, window)
@@ -235,21 +251,28 @@ impl Shell {
         let shown = self.wp.shown.as_ref()?;
         let t = &self.theme;
         let term = t.terminal(self.settings.terminal_font_size, self.scheme_for(""));
-        let words = [t.text, t.muted, t.faint].map(rgb_of);
-        let terminal_words = [words[0], words[1], words[2], rgb_of(term.foreground)];
+        let words = |extra: Option<Hsla>| {
+            let mut v = vec![
+                (rgb_of(t.text), theme_tint::TEXT_CONTRAST),
+                (rgb_of(t.muted), theme_tint::TEXT_CONTRAST),
+                (rgb_of(t.faint), theme_tint::FAINT_CONTRAST),
+            ];
+            v.extend(extra.map(|c| (rgb_of(c), theme_tint::TEXT_CONTRAST)));
+            v
+        };
+        let (shell_words, terminal_words) = (words(None), words(Some(term.foreground)));
         Some(wallpaper_panel::panel_alpha(
             &shown.prepared.backdrop,
             &[
                 Panel {
                     surface: rgb_of(t.shell),
-                    texts: &words,
+                    texts: &shell_words,
                 },
                 Panel {
                     surface: rgb_of(term.background),
                     texts: &terminal_words,
                 },
             ],
-            theme_tint::TEXT_CONTRAST,
         ))
     }
 
@@ -258,7 +281,70 @@ impl Shell {
         if self.window_fill().is_none() {
             return Vec::new();
         }
+        let size = window.viewport_size();
+        self.wp.viewport = (f32::from(size.width), f32::from(size.height));
         self.wallpaper_layers(window)
+    }
+
+    /// `colour` at the panel opacity while the picture fills the window, else as it is.
+    pub(super) fn veil(&self, colour: Hsla) -> Hsla {
+        colour.opacity(self.window_fill().unwrap_or(1.0))
+    }
+
+    /// The main panel's backdrop: the frosted picture over the window fill, else the plain
+    /// panel colour.
+    pub(super) fn main_backdrop(&self, panel: Hsla) -> AnyElement {
+        self.frost(Region::Main)
+            .unwrap_or_else(|| div().absolute().inset_0().bg(panel).into_any_element())
+    }
+
+    /// The frosted copy of the picture for one panel, as that panel's first child: the same
+    /// cover-fit window-sized image offset to the panel's place, clipped to it, then the panel
+    /// colour at the fill alpha over it. `None` in hero-only mode. The panel cannot paint its own
+    /// fill, as that would land over this.
+    pub(super) fn frost(&self, region: Region) -> Option<AnyElement> {
+        use gpui::StyledImage as _;
+        let alpha = self.window_fill()?;
+        let shown = self.wp.shown.as_ref()?;
+        let (vw, vh) = self.wp.viewport;
+        let sidebar = self.sidebar_now();
+        let (x, y, tint, clear) = match region {
+            Region::Titlebar => (0.0, 0.0, Some(self.theme.shell), 0.0),
+            Region::Sidebar => (0.0, TITLEBAR_HEIGHT, Some(self.theme.shell), 0.0),
+            Region::Settings => (0.0, TITLEBAR_HEIGHT, Some(self.theme.shell), 0.0),
+            // The main panel's own fill is the terminal's, or the empty view's backdrop.
+            Region::Main => {
+                let x = if sidebar < SPACE_SM {
+                    sidebar + SPACE_SM
+                } else {
+                    sidebar
+                };
+                (x + 1.0, TITLEBAR_HEIGHT + 1.0, None, self.wp.hero_clear)
+            }
+        };
+        Some(
+            div()
+                .absolute()
+                .left_0()
+                .right_0()
+                .bottom_0()
+                .top(px(clear))
+                .overflow_hidden()
+                .child(
+                    gpui::img(shown.prepared.blurred.clone())
+                        .absolute()
+                        .left(px(-x))
+                        .top(px(-y - clear))
+                        .w(px(vw))
+                        .h(px(vh))
+                        .object_fit(gpui::ObjectFit::Cover)
+                        .opacity(self.settings.wallpaper_hero_opacity),
+                )
+                .when_some(tint, |el, c| {
+                    el.child(div().absolute().inset_0().bg(c.opacity(alpha)))
+                })
+                .into_any_element(),
+        )
     }
 
     /// The hero: the picture across the top of the empty view, at full strength and fading into

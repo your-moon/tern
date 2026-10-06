@@ -135,9 +135,7 @@ impl Shell {
             .flex_1()
             .min_h_0()
             .flex()
-            .when_some(self.window_fill(), |el, a| {
-                el.bg(self.theme.shell.opacity(a))
-            })
+            .children(self.frost(super::wallpaper_ui::Region::Settings))
             .child(nav)
             .child(
                 div()

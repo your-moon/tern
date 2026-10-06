@@ -3,7 +3,6 @@
 
 use crate::a11y::Accessible as _;
 use crate::hover::HoverFade as _;
-use gpui::prelude::FluentBuilder as _;
 use gpui::{
     InteractiveElement, IntoElement, MouseButton, ParentElement, StatefulInteractiveElement,
     Styled, WindowControlArea, div, px,
@@ -18,13 +17,13 @@ pub fn render(
     fullscreen: bool,
     sidebar_open: bool,
     tabs: impl IntoElement,
-    panel: Option<gpui::Hsla>,
+    panel: Option<gpui::AnyElement>,
     cx: &mut gpui::Context<crate::shell::Shell>,
 ) -> impl IntoElement {
     div()
         .h(px(TITLEBAR_HEIGHT))
         .flex_none()
-        .when_some(panel, |el, c| el.bg(c))
+        .children(panel)
         .pt(px(TITLEBAR_TOP_PAD))
         .pl(px(titlebar_content_start(fullscreen)))
         .pr(px(SPACE_SM))

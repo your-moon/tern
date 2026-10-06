@@ -14,10 +14,10 @@ pub const MAX_ALPHA: f32 = 0.92;
 const SAMPLES: usize = 21;
 const STEP: f32 = 0.01;
 
-/// A panel surface and the text colours that are drawn on it.
+/// A panel surface and the text colours drawn on it, each with the contrast it must keep.
 pub struct Panel<'a> {
     pub surface: [u8; 3],
-    pub texts: &'a [[u8; 3]],
+    pub texts: &'a [([u8; 3], f32)],
 }
 
 fn pack(c: [u8; 3]) -> u32 {
@@ -55,29 +55,29 @@ fn over(surface: [u8; 3], under: [u8; 3], alpha: f32) -> [u8; 3] {
     [ch(0), ch(1), ch(2)]
 }
 
-/// Whether every text keeps `minimum` contrast on its panel over every sampled picture colour.
-fn holds(backdrop: &[[u8; 3]], panels: &[Panel], alpha: f32, minimum: f32) -> bool {
+/// Whether every text keeps its contrast on its panel over every sampled picture colour.
+fn holds(backdrop: &[[u8; 3]], panels: &[Panel], alpha: f32) -> bool {
     panels.iter().all(|panel| {
         backdrop.iter().all(|under| {
             let seen = pack(over(panel.surface, *under, alpha));
             panel
                 .texts
                 .iter()
-                .all(|text| contrast_ratio(pack(*text), seen) >= minimum)
+                .all(|(text, minimum)| contrast_ratio(pack(*text), seen) >= *minimum)
         })
     })
 }
 
-/// The smallest alpha in [[`MIN_ALPHA`], [`MAX_ALPHA`]] at which text holds `minimum` contrast
-/// on every panel over the picture; the cap when none does (or the picture has no pixels).
-pub fn panel_alpha(backdrop: &[[u8; 3]], panels: &[Panel], minimum: f32) -> f32 {
+/// The smallest alpha in [[`MIN_ALPHA`], [`MAX_ALPHA`]] at which every text holds its contrast
+/// on every panel over the (frosted) picture; the cap when none does (or the picture has no pixels).
+pub fn panel_alpha(backdrop: &[[u8; 3]], panels: &[Panel]) -> f32 {
     if backdrop.is_empty() {
         return MAX_ALPHA;
     }
     let steps = ((MAX_ALPHA - MIN_ALPHA) / STEP).round() as u32;
     (0..=steps)
         .map(|i| MIN_ALPHA + STEP * i as f32)
-        .find(|a| holds(backdrop, panels, *a, minimum))
+        .find(|a| holds(backdrop, panels, *a))
         .unwrap_or(MAX_ALPHA)
 }
 
@@ -92,43 +92,75 @@ mod tests {
     /// zeron dark: surface and the text, muted and faint colours drawn on it.
     const DARK: Panel = Panel {
         surface: [0x0d, 0x0d, 0x0d],
-        texts: &[[0xe8, 0xe8, 0xea], [0xa9, 0xa9, 0xae], [0x85, 0x85, 0x8a]],
+        texts: &[
+            ([0xe8, 0xe8, 0xea], 4.5),
+            ([0xa9, 0xa9, 0xae], 4.5),
+            ([0x85, 0x85, 0x8a], 3.0),
+        ],
     };
     const DARK_TEXT_AND_MUTED: Panel = Panel {
         surface: [0x0d, 0x0d, 0x0d],
-        texts: &[[0xe8, 0xe8, 0xea], [0xa9, 0xa9, 0xae]],
+        texts: &[([0xe8, 0xe8, 0xea], 4.5), ([0xa9, 0xa9, 0xae], 4.5)],
+    };
+    const FAINT_3: Panel = Panel {
+        surface: [0x0d, 0x0d, 0x0d],
+        texts: &[([0x85, 0x85, 0x8a], 3.0)],
+    };
+    const FAINT_45: Panel = Panel {
+        surface: [0x0d, 0x0d, 0x0d],
+        texts: &[([0x85, 0x85, 0x8a], 4.5)],
     };
     const LIGHT: Panel = Panel {
         surface: [0xf3, 0xf3, 0xf5],
-        texts: &[[0x30, 0x30, 0x35], [0x62, 0x62, 0x6a]],
+        texts: &[([0x30, 0x30, 0x35], 4.5), ([0x62, 0x62, 0x6a], 4.5)],
     };
 
     #[test]
     fn a_white_picture_needs_the_most_opaque_panels() {
-        assert_eq!(panel_alpha(&solid([255; 3]), &[DARK], 4.5), MAX_ALPHA);
+        let white = panel_alpha(&solid([255; 3]), &[DARK]);
+        assert!(white >= 0.8, "{white}");
+        assert!(white > panel_alpha(&solid([200; 3]), &[DARK]));
+        // Held to 4.5 the faint text could not be reached at all: the cap.
+        let strict = Panel {
+            surface: DARK.surface,
+            texts: &[([0x85, 0x85, 0x8a], 4.5)],
+        };
+        assert_eq!(panel_alpha(&solid([255; 3]), &[strict]), MAX_ALPHA);
     }
 
     #[test]
     fn a_black_picture_on_a_dark_theme_needs_only_the_floor() {
-        assert_eq!(panel_alpha(&solid([0; 3]), &[DARK], 4.5), MIN_ALPHA);
+        assert_eq!(panel_alpha(&solid([0; 3]), &[DARK]), MIN_ALPHA);
     }
 
     #[test]
     fn light_grey_lands_between_and_is_the_smallest_alpha_that_holds() {
         let grey = solid([200; 3]);
         let panels = [DARK_TEXT_AND_MUTED];
-        let a = panel_alpha(&grey, &panels, 4.5);
+        let a = panel_alpha(&grey, &panels);
         assert!(a > MIN_ALPHA + 0.1 && a < MAX_ALPHA, "{a}");
-        assert!(holds(&grey, &panels, a, 4.5));
-        assert!(!holds(&grey, &panels, a - STEP, 4.5), "{a} is not minimal");
+        assert!(holds(&grey, &panels, a));
+        assert!(!holds(&grey, &panels, a - STEP), "{a} is not minimal");
+    }
+
+    #[test]
+    fn faint_text_is_held_to_three_to_one_not_four_and_a_half() {
+        let grey = solid([150; 3]);
+        let (relaxed, strict) = (FAINT_3, FAINT_45);
+        let (a3, a45) = (
+            panel_alpha(&grey, &[relaxed]),
+            panel_alpha(&grey, &[strict]),
+        );
+        assert!(a3 < a45, "{a3} {a45}");
+        assert!(holds(&grey, &[FAINT_3], a3) && !holds(&grey, &[FAINT_45], a3));
     }
 
     #[test]
     fn yellow_needs_dark_panels_more_than_light_ones() {
         let yellow = solid([255, 220, 20]);
-        let dark = panel_alpha(&yellow, &[DARK], 4.5);
-        let light = panel_alpha(&yellow, &[LIGHT], 4.5);
-        assert!(dark >= 0.8, "{dark}");
+        let dark = panel_alpha(&yellow, &[DARK]);
+        let light = panel_alpha(&yellow, &[LIGHT]);
+        assert!(dark >= 0.75, "{dark}");
         assert_eq!(light, MIN_ALPHA);
         assert!(dark > light);
     }
@@ -140,14 +172,11 @@ mod tests {
         for c in split.iter_mut().skip(SAMPLES / 2) {
             *c = [255; 3];
         }
-        let all_white = panel_alpha(&solid([255; 3]), &[DARK_TEXT_AND_MUTED], 4.5);
-        assert_eq!(panel_alpha(&split, &[DARK_TEXT_AND_MUTED], 4.5), all_white);
+        let all_white = panel_alpha(&solid([255; 3]), &[DARK_TEXT_AND_MUTED]);
+        assert_eq!(panel_alpha(&split, &[DARK_TEXT_AND_MUTED]), all_white);
         // And on a light theme the dark half is the threat.
-        let light_text = panel_alpha(&solid([0; 3]), &[LIGHT], 4.5);
-        assert_eq!(
-            panel_alpha(&split, &[LIGHT], 4.5),
-            light_text.max(MIN_ALPHA)
-        );
+        let light_text = panel_alpha(&solid([0; 3]), &[LIGHT]);
+        assert_eq!(panel_alpha(&split, &[LIGHT]), light_text.max(MIN_ALPHA));
     }
 
     #[test]
@@ -155,15 +184,15 @@ mod tests {
         // Black picture: the dark panel needs only the floor, the light one more.
         let black = solid([0; 3]);
         let panels = [DARK_TEXT_AND_MUTED, LIGHT];
-        let both = panel_alpha(&black, &panels, 4.5);
-        assert_eq!(panel_alpha(&black, &[DARK_TEXT_AND_MUTED], 4.5), MIN_ALPHA);
+        let both = panel_alpha(&black, &panels);
+        assert_eq!(panel_alpha(&black, &[DARK_TEXT_AND_MUTED]), MIN_ALPHA);
         assert!(both > MIN_ALPHA, "{both}");
-        assert!(holds(&black, &panels, both, 4.5));
+        assert!(holds(&black, &panels, both));
     }
 
     #[test]
     fn no_pixels_means_the_cap() {
-        assert_eq!(panel_alpha(&[], &[DARK], 4.5), MAX_ALPHA);
+        assert_eq!(panel_alpha(&[], &[DARK]), MAX_ALPHA);
     }
 
     #[test]

@@ -185,12 +185,14 @@ fn the_cache_keeps_only_the_newest_files() {
             // Date each file by when it was made, oldest first, a day apart.
             let when = std::time::UNIX_EPOCH
                 + std::time::Duration::from_secs(86_400 * (made.len() as u64 + 1));
-            std::fs::File::options()
-                .write(true)
-                .open(&p.image)
-                .unwrap()
-                .set_modified(when)
-                .unwrap();
+            for file in [&p.image, &p.blurred] {
+                std::fs::File::options()
+                    .write(true)
+                    .open(file)
+                    .unwrap()
+                    .set_modified(when)
+                    .unwrap();
+            }
             made.push(p.image);
         }
     }
@@ -231,4 +233,72 @@ fn different_images_with_the_same_file_name_do_not_overwrite_each_other() {
     assert_ne!(a, b);
     assert_eq!(image::open(&a).unwrap().width(), 8);
     assert_eq!(image::open(&b).unwrap().width(), 9);
+}
+
+fn checkerboard(w: u32, h: u32, square: u32) -> RgbaImage {
+    RgbaImage::from_fn(w, h, |x, y| {
+        let v = if (x / square + y / square).is_multiple_of(2) {
+            255
+        } else {
+            0
+        };
+        image::Rgba([v, v, v, 255])
+    })
+}
+
+fn dark_panel() -> crate::wallpaper_panel::Panel<'static> {
+    crate::wallpaper_panel::Panel {
+        surface: [0x0d, 0x0d, 0x0d],
+        texts: &[([0xe8, 0xe8, 0xea], 4.5), ([0xa9, 0xa9, 0xae], 4.5)],
+    }
+}
+
+#[test]
+fn frosted_sampling_needs_less_panel_than_the_sharp_picture() {
+    use crate::wallpaper_panel::{MAX_ALPHA, backdrop, panel_alpha};
+    let sharp = checkerboard(320, 180, 10);
+    let sharp_alpha = panel_alpha(&backdrop(sharp.as_raw()), &[dark_panel()]);
+    let frost = frosted(&sharp);
+    let frost_alpha = panel_alpha(&backdrop(frost.as_raw()), &[dark_panel()]);
+    // The sharp board has pure white squares; blurred it is a mid grey everywhere.
+    assert!(
+        sharp_alpha > 0.75 && sharp_alpha <= MAX_ALPHA,
+        "{sharp_alpha}"
+    );
+    assert!(
+        frost_alpha < sharp_alpha - 0.05,
+        "{frost_alpha} vs {sharp_alpha}"
+    );
+    let grey = frost.get_pixel(160, 90).0[0];
+    assert!((100..160).contains(&grey), "{grey}");
+}
+
+#[test]
+fn frosting_lifts_saturation_and_leaves_grey_and_alpha_alone() {
+    let blue = RgbaImage::from_pixel(32, 32, image::Rgba([60, 90, 200, 255]));
+    let out = frosted(&blue).get_pixel(16, 16).0;
+    assert!(out[2] > 200 && out[0] < 60, "{out:?}");
+    assert_eq!(out[3], 255);
+    let grey = RgbaImage::from_pixel(32, 32, image::Rgba([120, 120, 120, 255]));
+    let out = frosted(&grey).get_pixel(16, 16).0;
+    assert_eq!(out, [120, 120, 120, 255]);
+    let faint = RgbaImage::from_pixel(32, 32, image::Rgba([60, 90, 200, 140]));
+    assert_eq!(frosted(&faint).get_pixel(16, 16).0[3], 140);
+}
+
+#[test]
+fn prepare_caches_a_frosted_copy_next_to_the_picture() {
+    let dir = temp("frost");
+    let src = dir.join("board.png");
+    checkerboard(200, 120, 10).save(&src).unwrap();
+    let p = prepare(&src, Effect::None, false, &dir).unwrap();
+    assert_ne!(p.blurred, p.image);
+    assert_eq!(p.blurred.parent(), p.image.parent());
+    let blurred = image::open(&p.blurred).unwrap().to_rgba8();
+    let mid = blurred
+        .get_pixel(blurred.width() / 2, blurred.height() / 2)
+        .0[0];
+    assert!((90..170).contains(&mid), "{mid}");
+    // The panels are sized from the frosted copy: no white squares left in the sample.
+    assert!(p.backdrop.iter().all(|c| c[0] < 230), "{:?}", p.backdrop);
 }

@@ -613,8 +613,8 @@ impl Render for Shell {
         self.sync_wallpaper(cx);
         let panel_bg = self.panel_background();
         let hero = self.empty_view_hero(panel_bg, window);
-        let (fill, layers) = (self.window_fill(), self.fill_layers(window));
-        let status_line = self.render_status_line(panel_bg.opacity(fill.unwrap_or(1.0)), cx);
+        let layers = self.fill_layers(window);
+        let status_line = self.render_status_line(self.veil(panel_bg), cx);
         let theme_picker = self.render_theme_picker(window, cx);
         let toast = self.render_toast(window, cx);
         let context_menu = self.render_menu(cx);
@@ -723,7 +723,7 @@ impl Render for Shell {
                 window.is_fullscreen(),
                 !self.settings.sidebar_collapsed,
                 strip,
-                fill.map(|a| t.shell.opacity(a)),
+                self.frost(wallpaper_ui::Region::Titlebar),
                 cx,
             ))
             .child(match self.settings_page {
@@ -741,7 +741,7 @@ impl Render for Shell {
                             .h_full()
                             .w(px(sidebar_now))
                             .overflow_hidden()
-                            .when_some(fill, |el, a| el.bg(t.shell.opacity(a)))
+                            .children(self.frost(wallpaper_ui::Region::Sidebar))
                             .child(sidebar),
                     )
                     .child(
@@ -754,11 +754,11 @@ impl Render for Shell {
                             .rounded(px(PANEL_RADIUS))
                             .border_1()
                             .border_color(t.border)
-                            .when(fill.is_none(), |el| el.bg(panel_bg))
                             .relative()
                             .overflow_hidden()
                             .flex()
                             .flex_col()
+                            .child(self.main_backdrop(panel_bg))
                             .child(
                                 div()
                                     .flex_1()

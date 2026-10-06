@@ -13,6 +13,12 @@ use crate::wallpaper_colors;
 use crate::wallpaper_fx::{self, Effect};
 use crate::wallpaper_panel;
 
+/// Longest edge of the frosted copy (the GPU scales it up smoothly), and its blur radius as a
+/// share of that edge.
+const FROST_EDGE: u32 = 320;
+const FROST_SIGMA: f32 = 0.025;
+/// macOS vibrancy lifts saturation under the blur.
+const FROST_SATURATION: f32 = 1.15;
 /// Longest edge of the thumbnail the panel opacity is sized from.
 const BACKDROP_EDGE: u32 = 48;
 
@@ -21,7 +27,7 @@ pub const HISTORY_LIMIT: usize = 8;
 /// Longest edge of the rendered artwork; larger sources are scaled down to it.
 const MAX_EDGE: u32 = 1600;
 /// Rendered files kept in the cache; the rest are removed, oldest first.
-const CACHE_KEEP: usize = 6;
+const CACHE_KEEP: usize = 12;
 /// Bumped when an effect's output changes, so stale cache files are not reused.
 const CACHE_VERSION: u32 = 1;
 const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
@@ -107,10 +113,29 @@ pub fn prune(config: &Path, keep: &[String]) {
 pub struct Prepared {
     /// The rendered PNG in the cache.
     pub image: PathBuf,
+    /// The same picture frosted (blurred, a touch more saturated), which shows under the panels.
+    pub blurred: PathBuf,
     /// The wallpaper's dominant colour.
     pub accent: Option<[u8; 3]>,
-    /// Colours across the rendered picture's brightness range, for sizing the panels over it.
+    /// Colours across the frosted picture's brightness range, for sizing the panels over it.
     pub backdrop: Vec<[u8; 3]>,
+}
+
+/// The picture as frosted glass: scaled down, gaussian-blurred and lifted in saturation.
+pub fn frosted(source: &RgbaImage) -> RgbaImage {
+    let small = image::DynamicImage::ImageRgba8(source.clone())
+        .thumbnail(FROST_EDGE, FROST_EDGE)
+        .to_rgba8();
+    let sigma = FROST_SIGMA * small.width().max(small.height()) as f32;
+    let mut out = image::imageops::blur(&small, sigma);
+    for px in out.pixels_mut() {
+        let [r, g, b, a] = px.0;
+        let luma = 0.2126 * f32::from(r) + 0.7152 * f32::from(g) + 0.0722 * f32::from(b);
+        let lift =
+            |c: u8| (luma + (f32::from(c) - luma) * FROST_SATURATION).clamp(0.0, 255.0) as u8;
+        px.0 = [lift(r), lift(g), lift(b), a];
+    }
+    out
 }
 
 fn cache_name(source: &Path, len: u64, effect: Effect, light: bool) -> String {
@@ -154,26 +179,38 @@ pub fn prepare(
         std::fs::create_dir_all(&dir).map_err(|e| format!("Cannot create {dir:?}: {e}"))?;
         out.save_with_format(&path, ImageFormat::Png)
             .map_err(|e| format!("Cannot cache the wallpaper: {e}"))?;
-        trim_cache(&dir, &path);
     }
-    let backdrop = image::open(&path)
-        .map(|img| {
-            wallpaper_panel::backdrop(
-                img.thumbnail(BACKDROP_EDGE, BACKDROP_EDGE)
-                    .to_rgba8()
-                    .as_raw(),
-            )
-        })
-        .unwrap_or_default();
+    let blurred = path.with_extension("blur.png");
+    let frost = match image::open(&blurred) {
+        Ok(cached) => cached.to_rgba8(),
+        Err(_) => {
+            let rendered =
+                image::open(&path).map_err(|e| format!("Cannot read the cached wallpaper: {e}"))?;
+            let frost = frosted(&rendered.to_rgba8());
+            frost
+                .save_with_format(&blurred, ImageFormat::Png)
+                .map_err(|e| format!("Cannot cache the frosted wallpaper: {e}"))?;
+            frost
+        }
+    };
+    // The panels sit over the frosted copy, so it is what their opacity is sized from.
+    let backdrop = wallpaper_panel::backdrop(
+        image::DynamicImage::ImageRgba8(frost)
+            .thumbnail(BACKDROP_EDGE, BACKDROP_EDGE)
+            .to_rgba8()
+            .as_raw(),
+    );
+    trim_cache(&dir, &[&path, &blurred]);
     Ok(Prepared {
         image: path,
+        blurred,
         accent,
         backdrop,
     })
 }
 
-/// Keeps the newest [`CACHE_KEEP`] files, and never removes `current`.
-fn trim_cache(dir: &Path, current: &Path) {
+/// Keeps the newest [`CACHE_KEEP`] files, and never removes the `current` pair.
+fn trim_cache(dir: &Path, current: &[&Path]) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
@@ -183,7 +220,7 @@ fn trim_cache(dir: &Path, current: &Path) {
         .collect();
     files.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
     for (_, path) in files.into_iter().skip(CACHE_KEEP) {
-        if path != current {
+        if !current.contains(&path.as_path()) {
             let _ = std::fs::remove_file(path);
         }
     }
