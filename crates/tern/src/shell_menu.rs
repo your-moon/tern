@@ -108,6 +108,7 @@ impl Shell {
         let closed = tab.session.read(cx).status.is_dormant();
         let local = tab.session.read(cx).is_local();
         let logging = tab.session.read(cx).is_logging();
+        let broadcasting = self.is_broadcasting(tab.session.entity_id());
         let mut items = Vec::new();
         if closed {
             items.push(action(icons::RESTART, "Reconnect", move |s, w, cx| {
@@ -136,6 +137,16 @@ impl Shell {
         items.push(action(icons::PEN, "Rename…", move |s, w, cx| {
             s.start_rename(ix, w, cx)
         }));
+        if broadcasting {
+            items.push(action(icons::CLOSE, "Stop broadcasting", |s, _, cx| {
+                s.stop_broadcast(cx)
+            }));
+        }
+        items.push(action(
+            icons::KEYBOARD,
+            "Broadcast input to…",
+            move |s, _, cx| s.open_broadcast_picker(ix, position, cx),
+        ));
         if logging {
             items.push(action(icons::INFO, "Stop logging", move |s, _, cx| {
                 s.stop_logging(ix, cx)
@@ -178,6 +189,7 @@ impl Shell {
         }
         let kept = self.tabs.remove(keep);
         self.tabs = vec![kept];
+        self.sync_broadcast(cx);
         self.activate_tab(0, window, cx);
     }
 

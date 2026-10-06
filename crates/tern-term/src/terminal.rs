@@ -40,6 +40,10 @@ pub const SCROLLBACK_LINES: usize = 10_000;
 pub enum TerminalEvent {
     /// Bytes for the remote side: keystrokes, paste, mouse reports and query replies.
     Output(Vec<u8>),
+    /// What the user typed, pasted or clicked (mouse reports): the same bytes as the
+    /// [`Self::Output`] that precedes it, without the terminal's own replies to the remote.
+    /// A listener that mirrors input to other sessions wants this one.
+    Typed(Vec<u8>),
     /// The grid changed size; tell the remote (debounced by the view).
     Resized {
         cols: u16,
@@ -332,7 +336,8 @@ impl Terminal {
 
     /// Send bytes to the remote side (keyboard, paste, mouse reports).
     pub fn write(&mut self, bytes: Vec<u8>, cx: &mut Context<Self>) {
-        cx.emit(TerminalEvent::Output(bytes));
+        cx.emit(TerminalEvent::Output(bytes.clone()));
+        cx.emit(TerminalEvent::Typed(bytes));
     }
 
     /// Resize the local grid. Returns whether the size changed. The remote

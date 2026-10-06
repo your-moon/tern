@@ -33,6 +33,8 @@ actions!(
     ]
 );
 
+#[path = "shell_broadcast.rs"]
+mod broadcast_ui;
 #[path = "shell_menu.rs"]
 mod menu;
 #[path = "shell_settings.rs"]
@@ -126,6 +128,8 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 tabs: Vec::new(),
                 renaming: None,
                 restoring: false,
+                broadcast: None,
+                broadcast_picker: None,
                 active: 0,
                 error: None,
                 picker: None,
@@ -184,6 +188,9 @@ pub struct Shell {
     renaming: Option<tabs_ui::Rename>,
     /// True while the last run's tabs are being reopened, so half a list is never saved.
     restoring: bool,
+    /// Input typed in one tab also going to others, and the list that picks them.
+    broadcast: Option<broadcast_ui::Broadcast>,
+    broadcast_picker: Option<broadcast_ui::BroadcastPicker>,
     active: usize,
     error: Option<String>,
     picker: Option<Picker>,
@@ -359,6 +366,7 @@ impl Shell {
         }
         self.renaming = None;
         self.tabs.remove(ix);
+        self.sync_broadcast(cx);
         if self.tabs.is_empty() {
             self.active = 0;
             self.persist_tabs();
@@ -570,6 +578,7 @@ impl Shell {
                 title: tab.title.clone(),
                 local: tab.session.read(cx).is_local(),
                 logging: tab.session.read(cx).is_logging(),
+                broadcast: self.is_broadcasting(tab.session.entity_id()),
                 status: tab.session.read(cx).status.clone(),
                 rename: self
                     .renaming
@@ -751,6 +760,16 @@ impl Render for Shell {
             .on_action(cx.listener(|s, _: &NewConnection, w, cx| s.open_form(None, None, w, cx)))
             .on_action(cx.listener(|s, _: &NewLocalTerminal, w, cx| s.open_local_tab(w, cx)))
             .on_action(cx.listener(|s, _: &OpenSettings, w, cx| s.toggle_settings(w, cx)))
+            // Capture phase: the terminal handles Escape itself, and ending a broadcast must
+            // not depend on which pane has focus.
+            .capture_key_down(cx.listener(|s, e: &gpui::KeyDownEvent, _, cx| {
+                if e.keystroke.key == "escape"
+                    && e.keystroke.modifiers == gpui::Modifiers::default()
+                    && s.on_broadcast_escape(cx)
+                {
+                    cx.stop_propagation();
+                }
+            }))
             .on_key_down(cx.listener(|s, e: &gpui::KeyDownEvent, w, cx| {
                 if s.on_rename_key(e, w, cx) {
                     cx.stop_propagation();
@@ -830,6 +849,7 @@ impl Render for Shell {
             .when_some(snippet_form, |el, f| el.child(f))
             .when_some(theme_picker, |el, p| el.child(p))
             .when_some(context_menu, |el, m| el.child(m))
+            .when_some(self.render_broadcast_picker(cx), |el, p| el.child(p))
             .when_some(toast, |el, t| el.child(t))
             .when_some(self.picker.as_ref(), |el, p| {
                 el.child(picker::render(

@@ -1,7 +1,7 @@
 //! One SSH session shown in one terminal: remote output feeds the terminal, keystrokes go to
 //! the remote, and login questions are answered in the terminal itself (see `login.rs`).
 
-use gpui::{App, AppContext, Context, Entity, Subscription, Task, Window};
+use gpui::{App, AppContext, Context, Entity, Subscription, Task, WeakEntity, Window};
 use tern_ssh::{ConnectSpec, InputError, SecretString, SessionEvent, SessionHandle, TermSize};
 use tern_term::{Terminal, TerminalEvent, TerminalView};
 
@@ -68,6 +68,8 @@ pub struct Session {
     /// The tab's name, for the log file.
     name: String,
     log: Option<SessionLog>,
+    /// Sessions that get a copy of what is typed here (broadcast input).
+    mirrors: Vec<WeakEntity<Session>>,
     /// Every connection of this session is logged, as the settings ask.
     auto_log: bool,
     size: TermSize,
@@ -125,6 +127,7 @@ impl Session {
                 link,
                 name,
                 log: None,
+                mirrors: Vec::new(),
                 auto_log,
                 size,
                 login: None,
@@ -202,6 +205,37 @@ impl Session {
         match &self.link {
             Link::Ssh { spec, .. } => Some(spec),
             Link::Local(_) => None,
+        }
+    }
+
+    /// Sends a copy of everything typed in this session to `mirrors`.
+    pub fn set_mirrors(&mut self, mirrors: Vec<WeakEntity<Session>>) {
+        self.mirrors = mirrors;
+    }
+
+    /// What was typed here also goes to the mirrors, except while a login question is open: a
+    /// password typed for this server must not reach another one.
+    fn mirror_typed(&mut self, bytes: &[u8], cx: &mut Context<Self>) {
+        if self.login.is_some() || !self.accepts_input() {
+            return;
+        }
+        self.mirrors.retain(|m| m.upgrade().is_some());
+        for mirror in &self.mirrors {
+            let bytes = bytes.to_vec();
+            let _ = mirror.update(cx, |s, _| s.send_if_live(bytes));
+        }
+    }
+
+    /// Connected, with no login question waiting for an answer.
+    fn accepts_input(&self) -> bool {
+        self.status == Status::Connected && self.login.is_none()
+    }
+
+    /// Input from another tab: delivered only while this session is live, never to a closed
+    /// or not-yet-connected one.
+    fn send_if_live(&self, bytes: Vec<u8>) {
+        if self.accepts_input() {
+            self.send(bytes);
         }
     }
 
@@ -351,6 +385,7 @@ impl Session {
                     _ => {}
                 }
             }
+            TerminalEvent::Typed(bytes) => self.mirror_typed(bytes, cx),
             TerminalEvent::TitleChanged(_) | TerminalEvent::Bell => {}
         }
     }

@@ -49,6 +49,8 @@ pub struct TabInfo {
     pub local: bool,
     /// The session's output is being written to a file.
     pub logging: bool,
+    /// Typing here, or receiving what is typed in another tab.
+    pub broadcast: bool,
     pub status: Status,
     /// The field that is editing this tab's title right now.
     pub rename: Option<Entity<TextInput>>,
@@ -193,6 +195,18 @@ fn tab_pill(
                 .when(active, |el| el.font_weight(FontWeight::MEDIUM))
                 .child(SharedString::from(middle_ellipsis(tab.label(), 18)))
                 .into_any_element(),
+        })
+        .when(tab.broadcast, |el| {
+            el.child(
+                div()
+                    .flex_none()
+                    .px(px(4.))
+                    .rounded(px(3.))
+                    .bg(t.accent.opacity(0.22))
+                    .text_color(t.accent)
+                    .text_size(px(9.))
+                    .child("BCAST"),
+            )
         })
         .when(tab.logging, |el| {
             el.child(

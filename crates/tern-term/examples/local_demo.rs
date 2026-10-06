@@ -104,7 +104,7 @@ fn main() {
                         pixel_height: *pixel_height,
                     });
                 }
-                TerminalEvent::TitleChanged(_) | TerminalEvent::Bell => {}
+                TerminalEvent::Typed(_) | TerminalEvent::TitleChanged(_) | TerminalEvent::Bell => {}
             })
             .detach();
             *slot.borrow_mut() = Some(terminal.clone());
