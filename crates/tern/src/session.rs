@@ -320,7 +320,9 @@ impl Session {
                 self.offer_save(cx);
                 cx.notify();
             }
-            SessionEvent::Closed { exit_status, error } => {
+            SessionEvent::Closed {
+                exit_status, error, ..
+            } => {
                 self.status = Status::Closed;
                 self.ended_at = Some(std::time::Instant::now());
                 self.login = None;

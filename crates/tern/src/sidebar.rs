@@ -556,6 +556,7 @@ mod tests {
             user: user.map(Into::into),
             identity_files: Vec::new(),
             proxy_command: None,
+            ..Default::default()
         }
     }
 

@@ -45,6 +45,7 @@ impl Connection {
             user: Some(self.user.clone()),
             identity_files: self.identity_file.iter().map(|p| expand_home(p)).collect(),
             proxy_command: self.proxy_command.clone(),
+            ..Default::default()
         }
     }
 
@@ -314,6 +315,7 @@ mod tests {
             user: Some("root".into()),
             identity_files: vec![PathBuf::from("/k/id")],
             proxy_command: None,
+            ..Default::default()
         };
         let c = Connection::from_entry(&entry);
         assert_eq!((c.name.as_str(), c.user.as_str()), ("grape", "root"));

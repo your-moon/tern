@@ -296,6 +296,7 @@ mod tests {
             user: user.map(Into::into),
             identity_files: vec![PathBuf::from("/k/id")],
             proxy_command: Some("ssh -W %h:%p bastion".into()),
+            ..Default::default()
         }
     }
 

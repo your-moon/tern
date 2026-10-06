@@ -397,6 +397,7 @@ mod tests {
             user: Some("deploy".into()),
             identity_files: Vec::new(),
             proxy_command: None,
+            ..Default::default()
         }
     }
 
