@@ -15,6 +15,10 @@ pub struct TerminalTheme {
     pub background: Hsla,
     pub cursor: Hsla,
     pub selection: Hsla,
+    /// Wash over find matches.
+    pub search_match: Hsla,
+    /// Wash over the current find match.
+    pub search_current: Hsla,
     pub font_family: SharedString,
     pub font_size: f32,
     /// Line height as a multiple of the font size.
@@ -47,6 +51,8 @@ impl Default for TerminalTheme {
             background: c(0x16181a),
             cursor: c(0xe0e0e0),
             selection: rgba(0x81a2be55).into(),
+            search_match: rgba(0xf0c67455).into(),
+            search_current: rgba(0xf0a030b0).into(),
             font_family: default_font_family().into(),
             font_size: 13.0,
             line_height_ratio: 1.35,

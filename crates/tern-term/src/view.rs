@@ -13,10 +13,11 @@ use alacritty_terminal::term::TermMode;
 use gpui::{
     App, ClipboardItem, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
-    Render, ScrollDelta, ScrollWheelEvent, Styled, Subscription, Task, TouchPhase, Window, div,
+    Render, ScrollDelta, ScrollWheelEvent, Styled, Subscription, Task, TouchPhase, Window, div, px,
 };
 
 use crate::element::TerminalElement;
+use crate::find_bar::{FindKey, apply_key, paste_into};
 use crate::mappings::keys::keystroke_bytes;
 use crate::mappings::mouse::{alt_scroll, mouse_button_report, mouse_moved_report, scroll_report};
 use crate::terminal::{SelectionType, Side, Terminal};
@@ -62,6 +63,8 @@ pub struct TerminalView {
     scroll_remainder: f32,
     /// A mouse-reporting button is held, so its release must be reported.
     reporting_button: bool,
+    /// The find bar's query while the bar is open.
+    find: Option<String>,
     _subscription: Subscription,
 }
 
@@ -95,6 +98,7 @@ impl TerminalView {
             selection_scroll_task: None,
             scroll_remainder: 0.0,
             reporting_button: false,
+            find: None,
             _subscription: subscription,
         }
     }
@@ -110,6 +114,91 @@ impl TerminalView {
 
     pub fn set_option_as_meta(&mut self, on: bool) {
         self.option_as_meta = on;
+    }
+
+    // ---- find in scrollback ----
+    //
+    // The find bar is bound to Cmd+F (Ctrl+Shift+F elsewhere) while the view
+    // has focus. Enter / Shift+Enter step through matches, Escape closes.
+
+    /// Open the find bar on `query` and highlight every match, jumping to the
+    /// newest. An empty query opens an empty bar.
+    pub fn find(&mut self, query: &str, cx: &mut Context<Self>) {
+        self.find = Some(query.to_string());
+        self.terminal.update(cx, |t, cx| {
+            t.search(query);
+            cx.notify();
+        });
+        cx.notify();
+    }
+
+    /// The next match, going up into older output; wraps.
+    pub fn find_next(&mut self, cx: &mut Context<Self>) {
+        self.step_find(true, cx);
+    }
+
+    /// The previous match, going down toward newer output; wraps.
+    pub fn find_prev(&mut self, cx: &mut Context<Self>) {
+        self.step_find(false, cx);
+    }
+
+    /// Close the find bar and drop the highlights.
+    pub fn clear_find(&mut self, cx: &mut Context<Self>) {
+        self.find = None;
+        self.terminal.update(cx, |t, cx| {
+            t.clear_search();
+            cx.notify();
+        });
+        cx.notify();
+    }
+
+    /// Matches for the current query (0 when no search is open).
+    pub fn match_count(&self, cx: &App) -> usize {
+        self.terminal.read(cx).search_count()
+    }
+
+    /// Whether the find bar is open.
+    pub fn is_finding(&self) -> bool {
+        self.find.is_some()
+    }
+
+    fn step_find(&mut self, older: bool, cx: &mut Context<Self>) {
+        self.terminal.update(cx, |t, cx| {
+            t.search_step(older);
+            cx.notify();
+        });
+    }
+
+    /// Keystrokes while the find bar is open. Always swallowed.
+    fn on_find_key(&mut self, ks: &gpui::Keystroke, cx: &mut Context<Self>) {
+        let Some(query) = self.find.as_mut() else {
+            return;
+        };
+        let mods = &ks.modifiers;
+        let action = if ks.key == "v" && (mods.platform || (mods.control && mods.shift)) {
+            match cx.read_from_clipboard().and_then(|item| item.text()) {
+                Some(text) => paste_into(query, &text),
+                None => FindKey::Ignored,
+            }
+        } else if ks.key == "g" && mods.platform {
+            if mods.shift {
+                FindKey::Prev
+            } else {
+                FindKey::Next
+            }
+        } else {
+            apply_key(query, ks)
+        };
+        match action {
+            FindKey::Close => self.clear_find(cx),
+            FindKey::Next => self.find_next(cx),
+            FindKey::Prev => self.find_prev(cx),
+            FindKey::Edited => {
+                let query = self.find.clone().unwrap_or_default();
+                self.find(&query, cx);
+            }
+            FindKey::Ignored => {}
+        }
     }
 
     fn mode(&self, cx: &App) -> TermMode {
@@ -150,6 +239,17 @@ impl TerminalView {
     fn on_key_down(&mut self, event: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
         let ks = &event.keystroke;
         let mods = &ks.modifiers;
+        if is_find_chord(ks) {
+            let query = self.find.clone().unwrap_or_default();
+            self.find(&query, cx);
+            cx.stop_propagation();
+            return;
+        }
+        if self.find.is_some() {
+            self.on_find_key(ks, cx);
+            cx.stop_propagation();
+            return;
+        }
         // Paste: Cmd+V (macOS) / Ctrl+Shift+V.
         if ks.key == "v" && (mods.platform || (mods.control && mods.shift)) {
             self.paste(cx);
@@ -490,6 +590,29 @@ impl Focusable for TerminalView {
 impl Render for TerminalView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let focused = self.focus_handle.is_focused(window);
+        let find_bar = self.find.as_ref().map(|query| {
+            let t = self.terminal.read(cx);
+            let theme = t.theme();
+            let status = find_status(query, t.search_count(), t.search_index());
+            div()
+                .absolute()
+                .top(px(10.0))
+                .right(px(18.0))
+                .px(px(10.0))
+                .py(px(5.0))
+                .gap(px(10.0))
+                .flex()
+                .items_center()
+                .rounded(px(6.0))
+                .border_1()
+                .border_color(theme.ansi[8])
+                .bg(theme.ansi[0])
+                .text_color(theme.foreground)
+                .font_family(theme.font_family.clone())
+                .text_size(px(theme.font_size))
+                .child(div().min_w(px(160.0)).child(format!("{query}\u{258f}")))
+                .child(div().text_color(theme.ansi[8]).child(status))
+        });
         div()
             .id("tern-terminal")
             .size_full()
@@ -513,6 +636,23 @@ impl Render for TerminalView {
                 cx.listener(|this, event: &ScrollWheelEvent, _, cx| this.on_scroll(event, cx)),
             )
             .child(TerminalElement::new(cx.entity(), focused))
+            .children(find_bar)
+    }
+}
+
+/// Cmd+F (macOS) / Ctrl+Shift+F: open the find bar.
+fn is_find_chord(ks: &gpui::Keystroke) -> bool {
+    let mods = &ks.modifiers;
+    ks.key == "f" && (mods.platform || (mods.control && mods.shift))
+}
+
+/// "3/12", "No matches", or "" for an empty query.
+fn find_status(query: &str, count: usize, index: Option<usize>) -> String {
+    match (query.is_empty(), count, index) {
+        (true, ..) => String::new(),
+        (false, 0, _) => "No matches".to_string(),
+        (false, n, Some(i)) => format!("{}/{n}", i + 1),
+        (false, n, None) => format!("{n}"),
     }
 }
 

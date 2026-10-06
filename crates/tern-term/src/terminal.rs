@@ -17,12 +17,14 @@ use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Line, Point};
 use alacritty_terminal::selection::{Selection, SelectionRange};
 use alacritty_terminal::term::cell::Flags;
+use alacritty_terminal::term::search::Match;
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::vte::ansi::{
     Color as AnsiColor, CursorShape, NamedColor, Processor, Rgb as AnsiRgb,
 };
 use gpui::{Context, EventEmitter};
 
+use crate::search::{Search, SearchMark, mark_at};
 use crate::theme::TerminalTheme;
 
 pub use alacritty_terminal::index::Side;
@@ -134,6 +136,8 @@ pub struct CellSnapshot {
     /// Spacer half of a wide char: never shaped, only background-painted.
     pub wide_spacer: bool,
     pub selected: bool,
+    /// Find-in-scrollback overlay.
+    pub search: SearchMark,
 }
 
 impl CellSnapshot {
@@ -171,7 +175,7 @@ impl EventListener for EventCapture {
 
 /// Side effects of a [`Terminal::process`] call that need a gpui context.
 #[derive(Debug, PartialEq, Eq)]
-enum Notice {
+pub(crate) enum Notice {
     Event(TerminalEvent),
     ClipboardStore(String),
 }
@@ -183,6 +187,7 @@ pub struct Terminal {
     theme: TerminalTheme,
     /// Cell size in pixels, for text-area size queries and the resize callback.
     cell_px: (f32, f32),
+    search: Option<Search>,
 }
 
 impl std::fmt::Debug for Terminal {
@@ -211,6 +216,7 @@ impl Terminal {
             capture,
             theme: TerminalTheme::default(),
             cell_px: (0.0, 0.0),
+            search: None,
         }
     }
 
@@ -230,8 +236,11 @@ impl Terminal {
 
     /// The context-free core of [`Self::feed`]: runs the parser, sends replies
     /// through `write`, and returns what still needs a gpui context.
-    fn process(&mut self, bytes: &[u8]) -> Vec<Notice> {
+    pub(crate) fn process(&mut self, bytes: &[u8]) -> Vec<Notice> {
         self.parser.advance(&mut self.term, bytes);
+        if let Some(search) = self.search.as_mut() {
+            search.refresh(&self.term);
+        }
         let mut reply = Vec::new();
         let mut notices = Vec::new();
         let events: Vec<Event> = self.capture.events.borrow_mut().drain(..).collect();
@@ -390,12 +399,89 @@ impl Terminal {
             .and_then(|selection| selection.to_range(&self.term))
     }
 
+    // ---- find ----
+
+    /// Search the whole grid, history included, for `query` (literal,
+    /// smart-case) and make the newest match current, scrolling it into view.
+    /// An empty query clears the search. Returns the number of matches.
+    pub fn search(&mut self, query: &str) -> usize {
+        if query.is_empty() {
+            self.search = None;
+            return 0;
+        }
+        let search = Search::new(&self.term, query);
+        let count = search.count();
+        self.search = Some(search);
+        self.reveal_current_match();
+        count
+    }
+
+    /// Move to the next match, going up into older output (`older`) or down
+    /// toward newer output, wrapping at the ends, and scroll it into view.
+    /// Returns whether there is a current match.
+    pub fn search_step(&mut self, older: bool) -> bool {
+        let Some(search) = self.search.as_mut() else {
+            return false;
+        };
+        let found = search.step(&self.term, older).is_some();
+        self.reveal_current_match();
+        found
+    }
+
+    pub fn clear_search(&mut self) {
+        self.search = None;
+    }
+
+    /// The active query, if a search is open.
+    pub fn search_query(&self) -> Option<&str> {
+        self.search.as_ref().map(Search::query)
+    }
+
+    pub fn search_count(&self) -> usize {
+        self.search.as_ref().map_or(0, Search::count)
+    }
+
+    /// Zero-based index of the current match, in document order.
+    pub fn search_index(&self) -> Option<usize> {
+        self.search.as_ref().and_then(Search::current_index)
+    }
+
+    /// Matches touching the viewport, as grid-line ranges.
+    pub(crate) fn visible_matches(&self) -> Vec<(Match, bool)> {
+        let Some(search) = self.search.as_ref() else {
+            return Vec::new();
+        };
+        let top = -(self.display_offset() as i32);
+        search.visible(top, top + self.rows() as i32 - 1)
+    }
+
+    /// Scroll so the current match is on screen; a match already visible does
+    /// not move the view, one off screen lands mid-viewport.
+    fn reveal_current_match(&mut self) {
+        let Some(line) = self
+            .search
+            .as_ref()
+            .and_then(Search::current)
+            .map(|m| m.start().line.0)
+        else {
+            return;
+        };
+        let offset = self.display_offset() as i32;
+        let rows = self.rows() as i32;
+        if line >= -offset && line < rows - offset {
+            return;
+        }
+        let target = (rows / 2 - line).clamp(0, self.history_size() as i32);
+        self.term.scroll_display(Scroll::Delta(target - offset));
+    }
+
     // ---- snapshots ----
 
     fn line_inner(
         &self,
         viewport_row: usize,
         selection: Option<SelectionRange>,
+        matches: &[(Match, bool)],
     ) -> Vec<CellSnapshot> {
         let offset = self.display_offset() as i32;
         let line = Line(viewport_row as i32 - offset);
@@ -420,6 +506,7 @@ impl Terminal {
                         .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER),
                     selected: selection
                         .is_some_and(|range| range.contains(Point::new(line, Column(col)))),
+                    search: mark_at(matches, Point::new(line, Column(col))),
                 }
             })
             .collect()
@@ -427,7 +514,11 @@ impl Terminal {
 
     /// One viewport row (0 = top), honoring the scrollback offset.
     pub fn line(&self, viewport_row: usize) -> Vec<CellSnapshot> {
-        self.line_inner(viewport_row, self.selection_range())
+        self.line_inner(
+            viewport_row,
+            self.selection_range(),
+            &self.visible_matches(),
+        )
     }
 
     /// All viewport rows, top to bottom.
@@ -435,8 +526,9 @@ impl Terminal {
         // Resolve the selection once: `to_range` re-walks the grid for
         // semantic and line selections.
         let selection = self.selection_range();
+        let matches = self.visible_matches();
         (0..self.rows())
-            .map(|r| self.line_inner(r, selection))
+            .map(|r| self.line_inner(r, selection, &matches))
             .collect()
     }
 

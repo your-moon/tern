@@ -15,6 +15,7 @@ use gpui::{
 };
 
 use crate::box_drawing;
+use crate::search::SearchMark;
 use crate::terminal::{CellColor, CellSnapshot, CursorSnapshot};
 use crate::theme::TerminalTheme;
 use crate::view::{GridGeometry, TERM_PADDING, TerminalView};
@@ -152,18 +153,15 @@ impl gpui::Element for TerminalElement {
                     color,
                 )
             };
-            // Selected runs, one quad per contiguous span.
-            let mut sel_start: Option<usize> = None;
-            for col in 0..=row.len() {
-                let selected = row.get(col).is_some_and(|cell| cell.selected);
-                match (sel_start, selected) {
-                    (None, true) => sel_start = Some(col),
-                    (Some(start), false) => {
-                        sel_quads.push(quad_at(start, col, theme.selection));
-                        sel_start = None;
-                    }
-                    _ => {}
-                }
+            // Selected and found runs, one quad per contiguous span.
+            for (start, end) in spans(row, |cell| cell.selected) {
+                sel_quads.push(quad_at(start, end, theme.selection));
+            }
+            for (start, end) in spans(row, |cell| cell.search == SearchMark::Match) {
+                sel_quads.push(quad_at(start, end, theme.search_match));
+            }
+            for (start, end) in spans(row, |cell| cell.search == SearchMark::Current) {
+                sel_quads.push(quad_at(start, end, theme.search_current));
             }
             // Merge consecutive non-default background cells into quads.
             let mut run_start: Option<(usize, Hsla)> = None;
@@ -252,6 +250,23 @@ impl gpui::Element for TerminalElement {
             }
         });
     }
+}
+
+/// Contiguous `[start, end)` column runs of cells satisfying `pred`.
+fn spans(row: &[CellSnapshot], pred: impl Fn(&CellSnapshot) -> bool) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let mut start: Option<usize> = None;
+    for col in 0..=row.len() {
+        match (start, row.get(col).is_some_and(&pred)) {
+            (None, true) => start = Some(col),
+            (Some(s), false) => {
+                out.push((s, col));
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 fn mono_font(theme: &TerminalTheme) -> gpui::Font {
