@@ -1,6 +1,7 @@
 // Adapted from zeron crates/ui/src/shell/command_palette.rs (palette card and overlay) (MIT).
 //! Adding, editing and removing connections: the form, its vault step, and the list changes.
 
+use crate::hover::HoverFade as _;
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
@@ -455,9 +456,8 @@ impl Shell {
                         .rounded(px(6.))
                         .text_xs()
                         .text_color(t.muted)
-                        .bg(t.row_hover)
+                        .hover_fade(format!("group-chip-{n}"), t.row_hover, t.row_active)
                         .cursor_pointer()
-                        .hover(|s| s.bg(t.row_active))
                         .on_click(cx.listener(move |shell, _, _, cx| {
                             if let Some(form) = shell.form.as_ref() {
                                 let group = form.group.clone();
@@ -617,9 +617,8 @@ pub(super) fn button(
         .cursor_pointer()
         .when(primary, |el| el.bg(t.accent).text_color(gpui::white()))
         .when(!primary, |el| {
-            el.bg(t.row_hover)
+            el.hover_fade(format!("form-button-{id}"), t.row_hover, t.row_active)
                 .text_color(t.text)
-                .hover(|s| s.bg(t.row_active))
         })
         .child(label.into())
 }

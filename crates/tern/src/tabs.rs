@@ -1,6 +1,7 @@
 // Adapted from zeron crates/ui/src/shell.rs (JumpSession slot action, titlebar group rhythm) (MIT).
 //! Session tabs in the titlebar strip and the shortcuts that move between them.
 
+use crate::hover::HoverFade as _;
 use std::time::Duration;
 
 use gpui::prelude::FluentBuilder;
@@ -141,7 +142,11 @@ fn tab_pill(
         .text_sm()
         .when(active, |el| el.bg(t.row_active).text_color(t.text))
         .when(!active, |el| {
-            el.text_color(t.muted).hover(|s| s.bg(t.row_hover))
+            el.text_color(t.muted).hover_fade(
+                format!("tab-{ix}"),
+                gpui::transparent_black(),
+                t.row_hover,
+            )
         })
         // A click on a tab must not also start a window drag from the titlebar.
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
@@ -227,7 +232,12 @@ fn tab_pill(
                 .invisible()
                 .group_hover("tab", |s| s.visible())
                 .when(active, |el| el.visible())
-                .hover(|s| s.bg(t.row_hover).text_color(t.text))
+                .hover_fade(
+                    format!("tab-close-{ix}"),
+                    gpui::transparent_black(),
+                    t.row_hover,
+                )
+                .hover(|s| s.text_color(t.text))
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_click(cx.listener(move |shell, _, window, cx| {
                     cx.stop_propagation();

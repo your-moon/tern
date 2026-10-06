@@ -62,6 +62,8 @@ mod update_ui;
 #[path = "shell_wallpaper.rs"]
 mod wallpaper_ui;
 
+pub(crate) use toast::CubicBezier;
+
 pub(crate) use toast::{Kind as ToastKind, Toast};
 #[path = "shell_themes.rs"]
 mod themes_ui;
@@ -709,7 +711,7 @@ impl Render for Shell {
         }
         let collapsed = self.settings.sidebar_collapsed;
         let handle = (!collapsed && self.sidebar_tween.is_none()).then(|| self.resize_handle(cx));
-        div()
+        let root = div()
             .track_focus(&self.focus)
             .size_full()
             .relative()
@@ -855,6 +857,11 @@ impl Render for Shell {
                     &t,
                     cx,
                 ))
-            })
+            });
+        // Another frame while any hover fade is mid-flight (zeron drives it the same way).
+        if crate::hover::fades_active() {
+            window.request_animation_frame();
+        }
+        root
     }
 }

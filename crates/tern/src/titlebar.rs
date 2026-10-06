@@ -1,6 +1,7 @@
 // Adapted from zeron crates/ui/src/shell.rs (traffic-light-aware titlebar layout) (MIT).
 //! The custom titlebar: app name, tabs, and an empty strip that drags the window.
 
+use crate::hover::HoverFade as _;
 use gpui::{
     InteractiveElement, IntoElement, MouseButton, ParentElement, StatefulInteractiveElement,
     Styled, WindowControlArea, div, px,
@@ -67,7 +68,11 @@ fn control(id: &'static str, t: &Theme) -> gpui::Stateful<gpui::Div> {
         .justify_center()
         .rounded(px(6.))
         .cursor_pointer()
-        .hover(|s| s.bg(t.ink(0.11)))
+        .hover_fade(
+            format!("titlebar-{id}"),
+            gpui::transparent_black(),
+            t.ink(0.11),
+        )
         .occlude()
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
 }

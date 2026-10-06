@@ -3,6 +3,7 @@
 //! fuzzy picker and Enter types the chosen command into the active session. The text is
 //! written as typed: only a snippet that ends with a newline runs by itself.
 
+use crate::hover::HoverFade as _;
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, AppContext, Context, Entity, FocusHandle, Focusable, FontWeight,
@@ -202,8 +203,12 @@ impl Shell {
                 .items_center()
                 .gap(px(10.))
                 .cursor_pointer()
+                .hover_fade(
+                    format!("snippet-{n}"),
+                    gpui::transparent_black(),
+                    t.row_active,
+                )
                 .when(n == active, |el| el.bg(t.row_active))
-                .hover(|s| s.bg(t.row_active))
                 .on_click(
                     cx.listener(move |shell, _, window, cx| shell.insert_snippet(ix, window, cx)),
                 )

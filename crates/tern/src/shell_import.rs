@@ -3,6 +3,7 @@
 //! the checked ones into `hosts.json` as ordinary, editable connections. There is no link back:
 //! later edits to `~/.ssh/config` do not reach tern, and tern never writes that file.
 
+use crate::hover::HoverFade as _;
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, Context, FocusHandle, InteractiveElement, IntoElement, KeyDownEvent, ParentElement,
@@ -163,7 +164,11 @@ impl Shell {
                     .gap(px(10.))
                     .when(!off, |el| {
                         el.cursor_pointer()
-                            .hover(|s| s.bg(t.row_hover))
+                            .hover_fade(
+                                format!("import-row-{ix}"),
+                                gpui::transparent_black(),
+                                t.row_hover,
+                            )
                             .on_click(cx.listener(move |shell, _, _, cx| {
                                 if let Some(row) = shell
                                     .import

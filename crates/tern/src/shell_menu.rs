@@ -2,6 +2,7 @@
 //! The right-click menu for host rows and tabs: every action on a host in one place, opened
 //! at the pointer. A click outside, Escape or choosing an item closes it.
 
+use crate::hover::HoverFade as _;
 use std::rc::Rc;
 
 use gpui::prelude::FluentBuilder;
@@ -235,7 +236,11 @@ impl Shell {
                             .cursor_pointer()
                             .text_color(t.text.opacity(0.9))
                             .when(*destructive, |el| el.text_color(t.danger))
-                            .hover(|s| s.bg(t.row_active))
+                            .hover_fade(
+                                format!("menu-item-{ix}"),
+                                gpui::transparent_black(),
+                                t.row_active,
+                            )
                             .on_click(cx.listener(move |s, _, w, cx| {
                                 s.context_menu = None;
                                 run(s, w, cx);

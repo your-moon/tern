@@ -4,6 +4,7 @@
 //! own connections, then `~/.ssh/config`), one-line rows, and a footer with sync and settings.
 //! Every row action lives in the right-click menu; hover shows a "…" that opens the same menu.
 
+use crate::hover::HoverFade as _;
 use gpui::prelude::FluentBuilder;
 use gpui::{
     Context, Entity, Hsla, InteractiveElement, IntoElement, MouseButton, MouseDownEvent,
@@ -248,9 +249,8 @@ fn empty_state(t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
                 .rounded(px(8.))
                 .cursor_pointer()
                 .text_size(px(13.))
-                .bg(t.row_hover)
+                .hover_fade("import-ssh-config", t.row_hover, t.row_active)
                 .text_color(t.text)
-                .hover(|s| s.bg(t.row_active))
                 .on_click(cx.listener(|s, _, w, cx| s.open_import(w, cx)))
                 .child("Import from ~/.ssh/config…"),
         )
@@ -313,6 +313,8 @@ fn section_header(
     on_toggle: impl Fn(&mut Shell, &mut Context<Shell>) + 'static,
 ) -> gpui::Stateful<gpui::Div> {
     let faint = t.muted.opacity(0.5);
+    let id = id.into();
+    let key = format!("section-{id}");
     div()
         .id(id)
         .mt(px(if nested { 4. } else { 12. }))
@@ -324,7 +326,7 @@ fn section_header(
         .gap(px(8.))
         .rounded(px(8.))
         .cursor_pointer()
-        .hover(|s| s.bg(t.row_hover))
+        .hover_fade(key, gpui::transparent_black(), t.row_hover)
         .on_click(cx.listener(move |s, _, _, cx| on_toggle(s, cx)))
         .child(
             icon(icons::CHEVRON_RIGHT)
@@ -394,8 +396,12 @@ fn row(
         .items_center()
         .gap(px(8.))
         .cursor_pointer()
+        .hover_fade(
+            format!("host-{scope}-{ix}"),
+            gpui::transparent_black(),
+            t.ink(0.11),
+        )
         .when(active || top, |el| el.bg(t.ink(0.11)))
-        .when(!(active || top), |el| el.hover(|s| s.bg(t.ink(0.11))))
         .on_click(cx.listener(move |shell, _, window, cx| {
             shell.connect_host(target.clone(), window, cx);
         }))
@@ -473,7 +479,7 @@ fn footer(t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
                 .text_size(px(13.))
                 .font_weight(gpui::FontWeight::MEDIUM)
                 .text_color(t.text.opacity(0.8))
-                .hover(|s| s.bg(t.ink(0.09)))
+                .hover_fade("footer-sync", gpui::transparent_black(), t.ink(0.09))
                 .on_click(cx.listener(|s, _, w, cx| s.open_settings_at_sync(w, cx)))
                 .child(icon(icons::CLOUD).size(px(16.)).text_color(t.muted))
                 .child("Sync"),
@@ -491,6 +497,8 @@ pub fn icon_button(
     icon_size: f32,
     t: &Theme,
 ) -> gpui::Stateful<gpui::Div> {
+    let id = id.into();
+    let key = format!("icon-button-{id}");
     div()
         .id(id)
         .flex_none()
@@ -500,7 +508,7 @@ pub fn icon_button(
         .justify_center()
         .rounded(px(6.))
         .cursor_pointer()
-        .hover(|s| s.bg(t.ink(0.11)))
+        .hover_fade(key, gpui::transparent_black(), t.ink(0.11))
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .child(icon(path).size(px(icon_size)).text_color(t.muted))
 }

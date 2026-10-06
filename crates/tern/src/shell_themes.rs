@@ -4,6 +4,7 @@
 //! Moving the highlight previews the scheme on the affected tabs; Enter keeps it, Escape
 //! puts the saved one back. It sets the default scheme, or one host's.
 
+use crate::hover::HoverFade as _;
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, Context, FocusHandle, InteractiveElement, IntoElement, KeyDownEvent, ParentElement,
@@ -236,8 +237,12 @@ impl Shell {
                 .items_center()
                 .gap(px(12.))
                 .cursor_pointer()
+                .hover_fade(
+                    format!("theme-{row}"),
+                    gpui::transparent_black(),
+                    t.row_active,
+                )
                 .when(row == active, |el| el.bg(t.row_active))
-                .hover(|s| s.bg(t.row_active))
                 .on_click(cx.listener(move |shell, _, window, cx| {
                     if let Some(p) = shell.theme_picker.as_mut() {
                         p.active = row;

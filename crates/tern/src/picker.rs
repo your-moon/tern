@@ -3,6 +3,7 @@
 //! ⌘K host picker: type to fuzzy-filter tern's connections, Enter connects. An empty query
 //! lists recents first; text that matches nothing connects as a typed target.
 
+use crate::hover::HoverFade as _;
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, App, Context, FocusHandle, FontWeight, InteractiveElement, IntoElement,
@@ -227,8 +228,12 @@ pub fn render(
             .items_center()
             .gap(px(10.))
             .cursor_pointer()
+            .hover_fade(
+                format!("pick-{row}"),
+                gpui::transparent_black(),
+                t.row_active,
+            )
             .when(row == active, |el| el.bg(t.row_active))
-            .hover(|s| s.bg(t.row_active))
             .on_click(cx.listener(move |shell, _, window, cx| {
                 shell.close_picker(window, cx);
                 shell.connect_host(target.clone(), window, cx);

@@ -11,6 +11,7 @@ use gpui::{
     SharedString, Stateful, Styled, Window, div, px,
 };
 
+use crate::hover::HoverFade as _;
 use crate::theme::Theme;
 
 const PAGE_MAX_WIDTH: f32 = 760.0;
@@ -152,7 +153,8 @@ pub fn nav_tab(
         })
         .when(!selected, |el| {
             el.text_color(t.muted)
-                .hover(|s| s.bg(t.row_hover).text_color(t.text))
+                .hover_fade(id, gpui::transparent_black(), t.row_hover)
+                .hover(|s| s.text_color(t.text))
         })
         .when_some(glyph, |el, g| {
             el.child(crate::icons::icon(g).size(px(16.)).text_color(if selected {
@@ -170,6 +172,8 @@ pub fn button(
     id: impl Into<gpui::ElementId>,
     label: impl Into<SharedString>,
 ) -> Stateful<Div> {
+    let id = id.into();
+    let key = format!("button-{id}");
     div()
         .id(id)
         .flex()
@@ -182,9 +186,8 @@ pub fn button(
         .py(px(5.))
         .text_size(px(12.5))
         .cursor_pointer()
-        .bg(t.ink(0.06))
+        .hover_fade(key, t.ink(0.06), t.ink(0.10))
         .text_color(t.text)
-        .hover(|s| s.bg(t.ink(0.10)))
         .child(label.into())
 }
 
