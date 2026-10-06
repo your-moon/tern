@@ -530,12 +530,7 @@ impl Shell {
                     .flex_col()
                     .items_center()
                     .gap(px(4.))
-                    .when(hero_height.is_some(), |el| {
-                        el.px(px(20.))
-                            .py(px(12.))
-                            .rounded(px(12.))
-                            .bg(panel_bg.opacity(0.85))
-                    })
+                    .when(hero_height.is_some(), |el| look::plate(el, panel_bg))
                     .child(div().text_size(px(15.)).text_color(t.text).child(title))
                     .when_some(detail, |el, d| {
                         el.child(div().text_sm().text_color(t.muted).child(d))
@@ -568,6 +563,7 @@ impl Shell {
                     .flex()
                     .flex_col()
                     .gap(px(8.))
+                    .when(hero_height.is_some(), |el| look::plate(el, panel_bg))
                     .child(hint(crate::keymap::ShortcutId::HostPicker, "Find a host"))
                     .child(hint(
                         crate::keymap::ShortcutId::NewConnection,

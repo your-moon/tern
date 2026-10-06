@@ -124,3 +124,13 @@ impl Shell {
         }));
     }
 }
+
+/// Text over the wallpaper hero sits on a plate of the panel colour, so it never depends on
+/// what the picture holds.
+pub(super) fn plate(el: gpui::Div, panel: gpui::Hsla) -> gpui::Div {
+    use gpui::Styled;
+    el.px(gpui::px(20.))
+        .py(gpui::px(12.))
+        .rounded(gpui::px(12.))
+        .bg(panel.opacity(0.85))
+}
