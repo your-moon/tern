@@ -15,6 +15,10 @@ pub const SIDEBAR_DEFAULT: f32 = 256.0;
 pub const FONT_MIN: f32 = 8.0;
 pub const FONT_MAX: f32 = 32.0;
 pub const FONT_DEFAULT: f32 = 13.0;
+/// How strongly the wallpaper shows through the frosted window.
+pub const WALLPAPER_OPACITY_MIN: f32 = 0.1;
+pub const WALLPAPER_OPACITY_MAX: f32 = 1.0;
+pub const WALLPAPER_OPACITY_DEFAULT: f32 = 0.3;
 const FILE_NAME: &str = "settings.json";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -31,6 +35,10 @@ pub struct Settings {
     pub terminal_theme: Option<String>,
     /// Per-host scheme by host alias, as Termius does per host.
     pub host_themes: BTreeMap<String, String>,
+    /// Image (png, jpeg, webp) drawn behind the whole window; `None` is the plain frost.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wallpaper: Option<String>,
+    pub wallpaper_opacity: f32,
     /// A git remote to sync through (any host git can reach); `None` uses a GitHub gist.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sync_remote: Option<String>,
@@ -77,6 +85,8 @@ impl Default for Settings {
             option_as_meta: true,
             terminal_theme: None,
             host_themes: BTreeMap::new(),
+            wallpaper: None,
+            wallpaper_opacity: WALLPAPER_OPACITY_DEFAULT,
             sync_remote: None,
             cursor_style: CursorStyle::Block,
             cursor_blink: false,
@@ -128,6 +138,12 @@ impl Settings {
         self.terminal_font_size =
             clamp_or(self.terminal_font_size, FONT_MIN, FONT_MAX, FONT_DEFAULT);
         self.scrollback_lines = self.scrollback_lines.clamp(SCROLLBACK_MIN, SCROLLBACK_MAX);
+        self.wallpaper_opacity = clamp_or(
+            self.wallpaper_opacity,
+            WALLPAPER_OPACITY_MIN,
+            WALLPAPER_OPACITY_MAX,
+            WALLPAPER_OPACITY_DEFAULT,
+        );
         self
     }
 
@@ -221,6 +237,20 @@ mod tests {
     }
 
     #[test]
+    fn wallpaper_opacity_is_clamped() {
+        let low = Settings {
+            wallpaper_opacity: 0.0,
+            ..Settings::default()
+        };
+        assert_eq!(low.clamped().wallpaper_opacity, WALLPAPER_OPACITY_MIN);
+        let nan = Settings {
+            wallpaper_opacity: f32::NAN,
+            ..Settings::default()
+        };
+        assert_eq!(nan.clamped().wallpaper_opacity, WALLPAPER_OPACITY_DEFAULT);
+    }
+
+    #[test]
     fn save_then_load_round_trips() {
         let dir = temp_dir("roundtrip");
         let saved = Settings {
@@ -231,6 +261,8 @@ mod tests {
             option_as_meta: false,
             terminal_theme: Some("Dracula".into()),
             host_themes: BTreeMap::from([("grape".into(), "Nord".into())]),
+            wallpaper: Some("/tmp/w.png".into()),
+            wallpaper_opacity: 0.5,
             sync_remote: Some("git@github.com:me/tern-sync.git".into()),
             cursor_style: CursorStyle::Bar,
             cursor_blink: true,

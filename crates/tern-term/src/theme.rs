@@ -13,6 +13,9 @@ pub struct TerminalTheme {
     pub ansi: [Hsla; 16],
     pub foreground: Hsla,
     pub background: Hsla,
+    /// Opacity of the view's own background fill; below 1.0 whatever is behind the terminal
+    /// (a wallpaper) shows through. Cells with their own background colour stay opaque.
+    pub background_alpha: f32,
     pub cursor: Hsla,
     pub selection: Hsla,
     /// Wash over find matches.
@@ -49,6 +52,7 @@ impl Default for TerminalTheme {
             ],
             foreground: c(0xc5c8c6),
             background: c(0x16181a),
+            background_alpha: 1.0,
             cursor: c(0xe0e0e0),
             selection: rgba(0x81a2be55).into(),
             search_match: rgba(0xf0c67455).into(),

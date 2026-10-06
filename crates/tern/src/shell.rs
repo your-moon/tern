@@ -432,9 +432,22 @@ impl Shell {
             .and_then(|name| crate::themes::find(name))
     }
 
+    /// The wallpaper to draw: the chosen file, if it is still there.
+    pub(crate) fn active_wallpaper(&self) -> Option<&str> {
+        self.settings
+            .wallpaper
+            .as_deref()
+            .filter(|p| std::path::Path::new(p).is_file())
+    }
+
     fn terminal_theme(&self, alias: &str) -> tern_term::TerminalTheme {
-        self.theme
-            .terminal(self.settings.terminal_font_size, self.scheme_for(alias))
+        let mut theme = self
+            .theme
+            .terminal(self.settings.terminal_font_size, self.scheme_for(alias));
+        if self.active_wallpaper().is_some() {
+            theme.background_alpha = crate::theme::GLASS_ALPHA;
+        }
+        theme
     }
 
     /// Re-applies font and scheme to every open terminal; each re-measures its cells and the
@@ -648,7 +661,15 @@ impl Render for Shell {
         let import = self.render_import(window, cx);
         let snippet_picker = self.render_snippet_picker(window, cx);
         let snippet_form = self.render_snippet_form(window, cx);
+        let wallpaper = self.active_wallpaper().map(str::to_owned);
+        let has_tab = !self.tabs.is_empty();
         let panel_bg = self.panel_background();
+        let panel_bg = if wallpaper.is_some() {
+            panel_bg.opacity(crate::theme::GLASS_ALPHA)
+        } else {
+            panel_bg
+        };
+        let wallpaper_opacity = self.settings.wallpaper_opacity;
         let theme_picker = self.render_theme_picker(window, cx);
         let toast = self.render_toast(window, cx);
         let context_menu = self.render_menu(cx);
@@ -665,9 +686,22 @@ impl Render for Shell {
         div()
             .track_focus(&self.focus)
             .size_full()
+            .relative()
             .flex()
             .flex_col()
             .bg(t.glass())
+            .when_some(wallpaper.clone(), |el, path| {
+                el.child({
+                    use gpui::StyledImage as _;
+                    gpui::img(std::path::PathBuf::from(path))
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .size_full()
+                        .object_fit(gpui::ObjectFit::Cover)
+                        .opacity(wallpaper_opacity)
+                })
+            })
             .font_family(UI_FONT)
             .text_color(t.text)
             .on_action(cx.listener(|s, _: &CloseTab, w, cx| s.close_tab_at(s.active, w, cx)))
@@ -748,7 +782,9 @@ impl Render for Shell {
                             .rounded(px(PANEL_RADIUS))
                             .border_1()
                             .border_color(t.border)
-                            .bg(panel_bg)
+                            // With a wallpaper the terminal view paints its own translucent
+                            // fill; a second one here would stack.
+                            .when(!(wallpaper.is_some() && has_tab), |el| el.bg(panel_bg))
                             .overflow_hidden()
                             .child(self.panel_content(cx)),
                     )

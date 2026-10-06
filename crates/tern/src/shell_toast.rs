@@ -363,7 +363,7 @@ impl Colors {
 
 /// CSS `cubic-bezier()` evaluated exactly (zeron `motion::CubicBezier`).
 #[derive(Debug, Clone, Copy)]
-struct CubicBezier {
+pub(crate) struct CubicBezier {
     x1: f32,
     y1: f32,
     x2: f32,
@@ -371,7 +371,7 @@ struct CubicBezier {
 }
 
 impl CubicBezier {
-    const fn new(x1: f32, y1: f32, x2: f32, y2: f32) -> Self {
+    pub(crate) const fn new(x1: f32, y1: f32, x2: f32, y2: f32) -> Self {
         Self { x1, y1, x2, y2 }
     }
 
@@ -412,7 +412,7 @@ impl CubicBezier {
         (lo + hi) / 2.0
     }
 
-    fn eval(&self, x: f32) -> f32 {
+    pub(crate) fn eval(&self, x: f32) -> f32 {
         if x <= 0.0 {
             return 0.0;
         }

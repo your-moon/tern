@@ -600,7 +600,10 @@ impl Render for TerminalView {
         div()
             .id("tern-terminal")
             .size_full()
-            .bg(self.terminal.read(cx).theme().background)
+            .bg({
+                let theme = self.terminal.read(cx).theme();
+                theme.background.opacity(theme.background_alpha)
+            })
             .when(linking, |d| d.cursor_pointer())
             .key_context("Terminal")
             .track_focus(&self.focus_handle)
