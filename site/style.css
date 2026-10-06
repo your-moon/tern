@@ -13,9 +13,9 @@ code,kbd{font-family:"Geist Mono",ui-monospace,monospace;font-size:.88em;backgro
 .icon-link:hover{color:var(--fg)}
 .pill{background:var(--fg);color:#17141d;font-size:12px;font-weight:500;padding:6px 13px;border-radius:8px}
 .hero{position:relative;padding:150px 20px 70px;text-align:center;overflow:hidden}
-#tex{position:absolute;inset:0;width:100%;height:100%;opacity:.2;pointer-events:none;-webkit-mask-image:radial-gradient(ellipse 70% 75% at 50% 45%,#000 20%,transparent 75%);mask-image:radial-gradient(ellipse 70% 75% at 50% 45%,#000 20%,transparent 75%)}
+#tex{position:absolute;inset:0;width:100%;height:100%;opacity:.11;pointer-events:none;-webkit-mask-image:radial-gradient(ellipse 60% 55% at 50% 42%,transparent 30%,#000 70%,transparent 100%);mask-image:radial-gradient(ellipse 60% 55% at 50% 42%,transparent 30%,#000 70%,transparent 100%)}
 @media (prefers-reduced-motion:no-preference){#tex{animation:breathe 9s ease-in-out infinite alternate}}
-@keyframes breathe{from{opacity:.12}to{opacity:.24}}
+@keyframes breathe{from{opacity:.07}to{opacity:.13}}
 .hero-in{position:relative;max-width:720px;margin:0 auto}
 .badge{display:inline-flex;gap:6px;align-items:center;font-size:12px;padding:5px 12px;border-radius:15px;background:rgba(31,24,46,.44);border:1px solid var(--line);margin-bottom:26px}
 .badge:hover{border-color:rgba(236,231,247,.25)}
