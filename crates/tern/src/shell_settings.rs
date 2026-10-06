@@ -148,10 +148,16 @@ impl Shell {
             Section::Sync => self.sync_page(cx),
             Section::About => self.about_page(cx),
         };
+        // Over a wallpaper the page gets the main panel's frost, so cards and their muted
+        // descriptions sit on a known surface rather than straight on the picture.
+        let wallpaper = self.has_wallpaper();
         div()
             .flex_1()
             .min_h_0()
             .flex()
+            .when(wallpaper, |el| {
+                el.bg(t.shell.opacity(crate::theme::GLASS_ALPHA))
+            })
             .child(nav)
             .child(
                 div()

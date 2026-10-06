@@ -27,6 +27,14 @@ pub const CROSSFADE: Duration = Duration::from_millis(180);
 const CROSSFADE_CURVE: CubicBezier = CubicBezier::new(1.0 / 3.0, 1.0, 2.0 / 3.0, 1.0);
 /// WCAG contrast terminal text keeps over the wallpaper.
 pub const TEXT_CONTRAST: f32 = 4.5;
+/// Share of a text/background pair's own contrast the wallpaper may not take away.
+const KEEP: f32 = 0.85;
+
+/// The contrast a pair must keep over the wallpaper: 85% of what it has without one, capped at
+/// WCAG 4.5 (a pair that starts above 4.5/0.85 only has to stay at 4.5).
+fn guard_target(base: f32) -> f32 {
+    (base * KEEP).min(TEXT_CONTRAST)
+}
 
 /// What the window should be showing: a file with an effect.
 #[derive(Debug, Clone, PartialEq)]
@@ -189,19 +197,30 @@ impl Shell {
         }
     }
 
-    /// The opacity the wallpaper may have: the user's, held down where it would wash out the
-    /// active terminal's text (WCAG 4.5 against the brightest, or darkest, part of the image).
+    /// The opacity the wallpaper may have: the user's, held down where it would wash out text
+    /// drawn over it — the active terminal's, the shell's, and its muted secondary text (the
+    /// weakest pair). Each may lose at most `KEEP` of its own contrast, and never needs more than
+    /// WCAG 4.5, measured against the brightest (or darkest) part of the image.
     pub(crate) fn wallpaper_opacity_cap(&self) -> Option<f32> {
         let shown = self.wp.shown.as_ref()?;
         let alias = self.tabs.get(self.active).map_or("", |t| t.alias.as_str());
-        let theme = self.terminal_theme(alias);
-        Some(wallpaper::safe_opacity(
-            &shown.prepared.sample,
-            rgb_u32(theme.foreground),
-            rgb_u32(theme.background),
-            TEXT_CONTRAST,
-            1.0,
-        ))
+        let term = self.terminal_theme(alias);
+        let t = self.theme;
+        let pairs = [
+            (term.foreground, term.background),
+            (t.text, t.shell),
+            (t.muted, t.shell),
+        ];
+        Some(
+            pairs
+                .into_iter()
+                .map(|(fg, bg)| {
+                    let (fg, bg) = (rgb_u32(fg), rgb_u32(bg));
+                    let target = guard_target(crate::wallpaper_fx::contrast_ratio(fg, bg));
+                    wallpaper::safe_opacity(&shown.prepared.sample, fg, bg, target, 1.0)
+                })
+                .fold(1.0, f32::min),
+        )
     }
 
     fn wallpaper_opacity(&self) -> f32 {
@@ -468,5 +487,19 @@ mod tests {
     #[test]
     fn crossfade_matches_zerons_180_ms() {
         assert_eq!(CROSSFADE, Duration::from_millis(180));
+    }
+}
+
+#[cfg(test)]
+mod guard_tests {
+    use super::guard_target;
+
+    #[test]
+    fn keeps_most_of_weak_contrast_and_caps_strong_at_wcag() {
+        // Muted text at 4.0 must keep 3.4; it never asks for more than it had.
+        assert!((guard_target(4.0) - 3.4).abs() < 1e-4);
+        // Body text at 15:1 only has to stay readable at WCAG AA.
+        assert!((guard_target(15.0) - 4.5).abs() < 1e-4);
+        assert!(guard_target(2.0) < 2.0);
     }
 }
