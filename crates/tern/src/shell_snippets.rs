@@ -21,7 +21,7 @@ use crate::text_input::{InputColors, TextInput};
 
 actions!(tern, [ToggleSnippets]);
 
-const HINT: &str = "Typed as is. End the command with \\n to run it.";
+const HINT: &str = "↵ runs when picked; the rest are typed for you to finish.";
 
 pub(super) struct SnippetsUi {
     pub items: Vec<Snippet>,
@@ -225,7 +225,7 @@ impl Shell {
                         .truncate()
                         .text_xs()
                         .text_color(t.muted)
-                        .child(SharedString::from(snippets::to_field(&s.command))),
+                        .child(SharedString::from(snippets::preview(&s.command))),
                 )
         });
         let query: SharedString = if p.query.is_empty() {
@@ -350,7 +350,7 @@ impl Shell {
                 &t,
                 ix == 0,
                 s.name.clone(),
-                Some(SharedString::from(snippets::to_field(&s.command))),
+                Some(SharedString::from(snippets::preview(&s.command))),
                 actions,
             ));
         }

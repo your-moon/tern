@@ -93,6 +93,13 @@ pub fn validate(name: &str, command: &str, others: &[&str]) -> Result<Snippet, S
         },
     })
 }
+/// How a snippet reads in lists: the command on one line, with "↵" when picking it runs it
+/// (it ends with a newline), so the trailing newline never shows as an escape.
+pub fn preview(command: &str) -> String {
+    let runs = command.ends_with('\n');
+    let body = command.trim_end_matches('\n').replace('\n', " ⏎ ");
+    if runs { format!("{body}  ↵") } else { body }
+}
 
 /// What the form shows for a stored command: a trailing newline is written `\n`, since a
 /// single-line field cannot hold one.
@@ -145,5 +152,15 @@ mod tests {
         assert_eq!(load(dir.path()).unwrap(), list);
         std::fs::write(dir.path().join(FILE_NAME), "{ nope").unwrap();
         assert!(matches!(load(dir.path()), Err(StoreError::Unreadable(_))));
+    }
+
+    #[test]
+    fn preview_marks_running_snippets_and_hides_the_newline() {
+        assert_eq!(super::preview("df -h\n"), "df -h  ↵");
+        assert_eq!(
+            super::preview("sudo docker restart "),
+            "sudo docker restart "
+        );
+        assert_eq!(super::preview("a\nb\n"), "a ⏎ b  ↵");
     }
 }
