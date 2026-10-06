@@ -7,8 +7,9 @@ use std::time::Duration;
 use ssh2_config::{ParseRule, SshConfig};
 
 use crate::error::{Error, Result};
+use crate::sshconf;
 use crate::{
-    ConnectSpec, DEFAULT_SERVER_ALIVE_COUNT_MAX, DEFAULT_SERVER_ALIVE_INTERVAL, HostEntry,
+    ConnectSpec, DEFAULT_SERVER_ALIVE_COUNT_MAX, DEFAULT_SERVER_ALIVE_INTERVAL, HostEntry, JumpHop,
 };
 
 const DEFAULT_IDENTITIES: [&str; 3] = ["id_ed25519", "id_ecdsa", "id_rsa"];
@@ -21,6 +22,7 @@ pub(crate) struct Resolved {
     pub user: Option<String>,
     pub identity_files: Vec<PathBuf>,
     pub proxy_command: Option<String>,
+    pub proxy_jump: Vec<JumpHop>,
     pub server_alive_interval: Option<Duration>,
     pub server_alive_count_max: Option<u32>,
 }
@@ -29,21 +31,35 @@ pub(crate) fn home_dir() -> Option<PathBuf> {
     std::env::home_dir()
 }
 
-pub(crate) fn load_config() -> Option<SshConfig> {
-    let path = home_dir()?.join(".ssh").join("config");
-    let file = std::fs::File::open(&path).ok()?;
-    let mut reader = std::io::BufReader::new(file);
-    let rules = ParseRule::ALLOW_UNKNOWN_FIELDS | ParseRule::ALLOW_UNSUPPORTED_FIELDS;
-    match SshConfig::default().parse(&mut reader, rules) {
-        Ok(c) => Some(c),
-        Err(e) => {
-            tracing::warn!(error = %e, "ssh_config_parse_failed");
-            None
+/// The parsed `~/.ssh/config` plus its text, which [`sshconf`] reads for line order.
+pub(crate) struct Loaded {
+    pub config: SshConfig,
+    pub text: String,
+}
+
+impl Loaded {
+    pub(crate) fn parse(text: &str) -> Option<Self> {
+        let rules = ParseRule::ALLOW_UNKNOWN_FIELDS | ParseRule::ALLOW_UNSUPPORTED_FIELDS;
+        match SshConfig::default().parse(&mut text.as_bytes(), rules) {
+            Ok(config) => Some(Loaded {
+                config,
+                text: text.to_string(),
+            }),
+            Err(e) => {
+                tracing::warn!(error = %e, "ssh_config_parse_failed");
+                None
+            }
         }
     }
 }
 
-pub(crate) fn resolve(config: Option<&SshConfig>, alias: &str) -> Resolved {
+pub(crate) fn load_config() -> Option<Loaded> {
+    let path = home_dir()?.join(".ssh").join("config");
+    Loaded::parse(&std::fs::read_to_string(path).ok()?)
+}
+
+/// Host, port, user and identities of `alias`, without following its own ProxyJump.
+fn resolve_base(config: Option<&Loaded>, alias: &str) -> Resolved {
     let Some(config) = config else {
         return Resolved {
             host_name: alias.to_string(),
@@ -51,24 +67,74 @@ pub(crate) fn resolve(config: Option<&SshConfig>, alias: &str) -> Resolved {
             ..Default::default()
         };
     };
-    let p = config.query(alias);
-    let proxy_command = p
-        .unsupported_fields
-        .get("proxycommand")
-        .map(|args| args.join(" "))
-        .filter(|c| !c.trim().is_empty() && !c.trim().eq_ignore_ascii_case("none"));
+    let p = config.config.query(alias);
     Resolved {
         host_name: p.host_name.unwrap_or_else(|| alias.to_string()),
         port: p.port.unwrap_or(22),
         user: p.user,
         identity_files: p.identity_file.unwrap_or_default(),
-        proxy_command,
+        proxy_command: None,
+        proxy_jump: Vec::new(),
         server_alive_interval: p.server_alive_interval,
         server_alive_count_max: p
             .unsupported_fields
             .get("serveralivecountmax")
             .and_then(|a| a.first())
             .and_then(|n| n.parse().ok()),
+    }
+}
+
+pub(crate) fn resolve(config: Option<&Loaded>, alias: &str) -> Resolved {
+    let mut r = resolve_base(config, alias);
+    let Some(config) = config else {
+        return r;
+    };
+    // man ssh_config, ProxyJump: it "will compete with the ProxyCommand option - whichever is
+    // specified first will prevent later instances of the other from taking effect".
+    let d = sshconf::directives(&config.text, alias);
+    let claimed = d
+        .iter()
+        .find(|x| matches!(x.keyword.as_str(), "proxyjump" | "proxycommand"));
+    if let Some(x) = claimed.filter(|x| !x.args.trim().eq_ignore_ascii_case("none")) {
+        if x.keyword == "proxyjump" {
+            r.proxy_jump = x
+                .args
+                .split(',')
+                .map(str::trim)
+                .filter(|h| !h.is_empty())
+                .map(|h| parse_hop(h, Some(config)))
+                .collect();
+        } else if !x.args.trim().is_empty() {
+            r.proxy_command = Some(x.args.clone());
+        }
+    }
+    r
+}
+
+/// One `ProxyJump` entry: `[user@]host[:port]` or `ssh://[user@]host[:port]`, where `host` may
+/// be an alias from the same config. An entry that cannot be read keeps its text with port 0, so
+/// the connection fails with that text rather than skipping the hop and going direct.
+fn parse_hop(raw: &str, config: Option<&Loaded>) -> JumpHop {
+    let t = raw
+        .strip_prefix("ssh://")
+        .unwrap_or(raw)
+        .trim_end_matches('/');
+    match split_target(t) {
+        Ok((user, host, port)) => {
+            let r = resolve_base(config, &host);
+            JumpHop {
+                host: r.host_name,
+                port: port.unwrap_or(r.port),
+                user: user.or(r.user),
+                identity_files: r.identity_files,
+            }
+        }
+        Err(_) => JumpHop {
+            host: raw.to_string(),
+            port: 0,
+            user: None,
+            identity_files: Vec::new(),
+        },
     }
 }
 
@@ -80,10 +146,10 @@ fn is_concrete_alias(alias: &str) -> bool {
             .any(|c| matches!(c, '*' | '?' | '[' | ']' | '\\'))
 }
 
-pub(crate) fn hosts_from(config: &SshConfig) -> Vec<HostEntry> {
+pub(crate) fn hosts_from(config: &Loaded) -> Vec<HostEntry> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
-    for block in config.get_hosts().iter().skip(1) {
+    for block in config.config.get_hosts().iter().skip(1) {
         for clause in &block.pattern {
             let alias = clause.pattern.trim();
             if clause.negated || !is_concrete_alias(alias) {
@@ -100,6 +166,7 @@ pub(crate) fn hosts_from(config: &SshConfig) -> Vec<HostEntry> {
                 user: r.user,
                 identity_files: r.identity_files,
                 proxy_command: r.proxy_command,
+                proxy_jump: r.proxy_jump,
                 server_alive_interval: r.server_alive_interval,
                 server_alive_count_max: r.server_alive_count_max,
             });
@@ -178,7 +245,7 @@ fn split_target(target: &str) -> Result<(Option<String>, String, Option<u16>)> {
     Ok((user, host, port))
 }
 
-pub(crate) fn parse_target(target: &str, config: Option<&SshConfig>) -> Result<ConnectSpec> {
+pub(crate) fn parse_target(target: &str, config: Option<&Loaded>) -> Result<ConnectSpec> {
     let (user, host, port) = split_target(target)?;
     let r = resolve(config, &host);
     let user = user
@@ -191,6 +258,7 @@ pub(crate) fn parse_target(target: &str, config: Option<&SshConfig>) -> Result<C
         user,
         identity_files: r.identity_files,
         proxy_command: r.proxy_command,
+        proxy_jump: r.proxy_jump,
         known_hosts: None,
         memory_keys: Vec::new(),
         server_alive_interval: r
@@ -245,6 +313,7 @@ impl ConnectSpec {
                 .ok_or(Error::NoLocalUser)?,
             identity_files: e.identity_files.clone(),
             proxy_command: e.proxy_command.clone(),
+            proxy_jump: e.proxy_jump.clone(),
             known_hosts: None,
             memory_keys: Vec::new(),
             server_alive_interval: e
@@ -275,11 +344,8 @@ mod tests {
 
     use super::*;
 
-    fn cfg(s: &str) -> SshConfig {
-        let rules = ParseRule::ALLOW_UNKNOWN_FIELDS | ParseRule::ALLOW_UNSUPPORTED_FIELDS;
-        SshConfig::default()
-            .parse(&mut s.as_bytes(), rules)
-            .unwrap()
+    fn cfg(s: &str) -> Loaded {
+        Loaded::parse(s).unwrap()
     }
 
     const CONF: &str = "Host web\n  HostName 10.1.2.3\n  Port 2222\n  User deploy\n  IdentityFile /keys/web\n\n\

@@ -38,6 +38,10 @@ pub(crate) enum Failure {
     AuthFailed,
     AuthCancelled,
     Proxy(String),
+    /// A `ProxyJump` entry that could not be read; the text is the entry as written.
+    BadJump(String),
+    /// A failure while reaching or logging in to one jump host (`host:port`).
+    Jump(String, Box<Failure>),
     ConnectTimeout,
     /// The server could not be reached; the text already names where tern tried to go.
     Unreachable(String),
@@ -65,6 +69,8 @@ impl fmt::Display for Failure {
                 "permission denied: the server accepted none of the passwords or keys tried"
             ),
             Failure::AuthCancelled => write!(f, "authentication cancelled"),
+            Failure::BadJump(e) => write!(f, "invalid ProxyJump host {e:?}"),
+            Failure::Jump(hop, e) => write!(f, "{e} (while going through jump host {hop})"),
             Failure::Proxy(e) => write!(f, "ProxyCommand failed: {e}"),
             Failure::ConnectTimeout => write!(f, "no answer within 15 seconds"),
             Failure::Unreachable(e) | Failure::Transport(e) => write!(f, "{e}"),

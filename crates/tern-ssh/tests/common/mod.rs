@@ -30,6 +30,8 @@ struct TestServer {
     shell: Shell,
     /// Every direct-tcpip request this server accepted, as `host:port`.
     opened: Arc<Mutex<Vec<String>>>,
+    /// The channel the shell runs on; other channels (tunnels) are not echoed.
+    shell_channel: Option<ChannelId>,
 }
 
 impl server::Handler for TestServer {
@@ -66,6 +68,7 @@ impl server::Handler for TestServer {
 
     async fn shell_request(&mut self, ch: ChannelId, s: &mut Session) -> Result<(), Self::Error> {
         s.channel_success(ch)?;
+        self.shell_channel = Some(ch);
         match self.shell {
             Shell::Exit(code) => {
                 s.data(ch, &b"hi\r\n"[..])?;
@@ -92,7 +95,7 @@ impl server::Handler for TestServer {
         data: &[u8],
         s: &mut Session,
     ) -> Result<(), Self::Error> {
-        if matches!(self.shell, Shell::Echo) {
+        if matches!(self.shell, Shell::Echo) && self.shell_channel == Some(ch) {
             s.data(ch, data.to_vec())?;
         }
         Ok(())
@@ -179,6 +182,7 @@ pub async fn serve(shell: Shell) -> Server {
             let handler = TestServer {
                 shell,
                 opened: log.clone(),
+                shell_channel: None,
             };
             let config = config.clone();
             tokio::spawn(async move {

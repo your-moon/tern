@@ -12,8 +12,10 @@ mod config;
 mod disconnect;
 mod error;
 mod hostkey;
+mod jump;
 mod outbox;
 mod session;
+mod sshconf;
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -32,6 +34,17 @@ pub const DEFAULT_SERVER_ALIVE_INTERVAL: Duration = Duration::from_secs(30);
 /// `ServerAliveCountMax` (OpenSSH's default too).
 pub const DEFAULT_SERVER_ALIVE_COUNT_MAX: u32 = 3;
 
+/// One hop of a `ProxyJump` chain, already resolved through `~/.ssh/config`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct JumpHop {
+    pub host: String,
+    /// `0` marks an entry that could not be read; connecting through it fails by name.
+    pub port: u16,
+    /// `None` means the local user name, as in OpenSSH.
+    pub user: Option<String>,
+    pub identity_files: Vec<PathBuf>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct HostEntry {
     pub alias: String,
@@ -40,6 +53,8 @@ pub struct HostEntry {
     pub user: Option<String>,
     pub identity_files: Vec<PathBuf>,
     pub proxy_command: Option<String>,
+    /// `ProxyJump` hops in connection order; empty when none, or when `ProxyCommand` came first.
+    pub proxy_jump: Vec<JumpHop>,
     /// `ServerAliveInterval`; `None` when the host does not set it, `Some(ZERO)` when it
     /// turns keep-alives off.
     pub server_alive_interval: Option<Duration>,
@@ -55,6 +70,10 @@ pub struct ConnectSpec {
     pub identity_files: Vec<PathBuf>,
     /// Run as the transport instead of dialling `host:port`; `%h %p %r` are expanded.
     pub proxy_command: Option<String>,
+    /// Jump hosts to pass through, in order, each checked and logged in to like the target.
+    /// Used instead of `proxy_command` when both are set. A hop's own `ProxyJump` is not
+    /// followed; list every hop here.
+    pub proxy_jump: Vec<JumpHop>,
     /// known_hosts file to check and learn host keys in; `None` means `~/.ssh/known_hosts`.
     pub known_hosts: Option<PathBuf>,
     /// Private keys held in memory (tern's vault), offered after the agent and before the key
@@ -77,6 +96,7 @@ impl Default for ConnectSpec {
             user: String::new(),
             identity_files: Vec::new(),
             proxy_command: None,
+            proxy_jump: Vec::new(),
             known_hosts: None,
             memory_keys: Vec::new(),
             server_alive_interval: DEFAULT_SERVER_ALIVE_INTERVAL,

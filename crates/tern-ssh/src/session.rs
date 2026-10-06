@@ -17,10 +17,11 @@ use crate::config;
 use crate::disconnect::{Cause, classify};
 use crate::error::Failure;
 use crate::hostkey::{Handler, known_algorithms};
+use crate::jump;
 use crate::outbox::Outbox;
 use crate::{ConnectSpec, Disconnect, SessionEvent, TermSize};
 
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long to wait for russh to say why a connection that went quiet has died.
 const CAUSE_GRACE: Duration = Duration::from_millis(500);
 /// After exit-status, how long to wait for the server to close the channel.
@@ -133,25 +134,11 @@ fn spawn_proxy(
     Ok((child, tokio::io::join(stdout, stdin), reason))
 }
 
-async fn run_inner(
-    spec: &ConnectSpec,
-    size: TermSize,
-    cmds: &mut mpsc::Receiver<Command>,
-    events: &async_channel::Sender<SessionEvent>,
-    cause: &Cause,
-    handshaken: &mut bool,
-) -> Result<Outcome, Failure> {
-    let known_hosts = spec.known_hosts.clone();
-    let handler = Handler {
-        host: spec.host.clone(),
-        port: spec.port,
-        known_hosts: known_hosts.clone(),
-        events: events.clone(),
-        cause: cause.clone(),
-    };
-
+/// The russh settings for one connection: keep-alive from the spec, and the host key types
+/// already in known_hosts for `host:port` asked for first.
+pub(crate) fn client_config(spec: &ConnectSpec, host: &str, port: u16) -> Arc<client::Config> {
     let mut preferred = Preferred::default();
-    let known = known_algorithms(&spec.host, spec.port, known_hosts.as_deref());
+    let known = known_algorithms(host, port, spec.known_hosts.as_deref());
     if !known.is_empty() {
         let mut keys = known;
         let rest: Vec<_> = preferred
@@ -163,7 +150,7 @@ async fn run_inner(
         keys.extend(rest);
         preferred.key = Cow::Owned(keys);
     }
-    let cfg = Arc::new(client::Config {
+    Arc::new(client::Config {
         // OpenSSH: an interval of 0 turns keep-alives off; a count of 0 never gives up (russh
         // reads 0 the same way).
         keepalive_interval: Some(spec.server_alive_interval).filter(|d| !d.is_zero()),
@@ -172,14 +159,44 @@ async fn run_inner(
         channel_buffer_size: CHANNEL_BUFFER,
         preferred,
         ..Default::default()
-    });
+    })
+}
+
+async fn run_inner(
+    spec: &ConnectSpec,
+    size: TermSize,
+    cmds: &mut mpsc::Receiver<Command>,
+    events: &async_channel::Sender<SessionEvent>,
+    cause: &Cause,
+    handshaken: &mut bool,
+) -> Result<Outcome, Failure> {
+    let handler = Handler {
+        host: spec.host.clone(),
+        port: spec.port,
+        known_hosts: spec.known_hosts.clone(),
+        events: events.clone(),
+        cause: cause.clone(),
+    };
+
+    let cfg = client_config(spec, &spec.host, spec.port);
 
     tracing::info!(host = %spec.host, port = spec.port, user = %spec.user, "ssh_connecting");
+    // Jump hosts are logged in to first; their connections stay open for the whole session.
+    let mut _hops = Vec::new();
+    let mut jump_stream = None;
+    if !spec.proxy_jump.is_empty() {
+        let chain = jump::open(spec, events).await?;
+        _hops = chain.hops;
+        jump_stream = Some(chain.stream);
+    }
     let proxy = spec.proxy_command.as_deref();
     // Held for the whole session so the proxy process lives as long as the connection.
     let mut _proxy_child: Option<Child> = None;
     let mut proxy_reason: Option<ProxyReason> = None;
     let connecting = async {
+        if let Some(stream) = jump_stream.take() {
+            return Ok(client::connect_stream(cfg, stream, handler).await);
+        }
         match proxy {
             Some(cmd) => {
                 let cmd = config::expand_proxy_command(cmd, &spec.host, spec.port, &spec.user);
@@ -309,7 +326,7 @@ fn proxy_exit(child: &mut Option<Child>, reason: Option<&ProxyReason>) -> Option
 }
 
 /// A connect error in words a person can act on, naming where tern tried to go.
-fn connect_failure(e: Failure, host: &str, port: u16) -> Failure {
+pub(crate) fn connect_failure(e: Failure, host: &str, port: u16) -> Failure {
     match e {
         Failure::Io(io) => Failure::Unreachable(describe_io(&io, host, port)),
         other => other,

@@ -80,6 +80,7 @@ impl Cause {
 /// Classifies a failure. `connected` is true once the SSH handshake had finished.
 pub(crate) fn classify(f: &Failure, connected: bool) -> Disconnect {
     match f {
+        Failure::Jump(_, inner) => classify(inner, connected),
         Failure::KeepaliveTimeout => Disconnect::Timeout,
         Failure::Unreachable(_) | Failure::ConnectTimeout => Disconnect::Unreachable,
         Failure::Io(e) => match e.kind() {
