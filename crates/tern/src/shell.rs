@@ -117,6 +117,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 record_notice: None,
                 record_interceptor: None,
                 sync_ui: None,
+                auto_sync: sync_ui::AutoSync::default(),
                 toasts: toast::Toasts::new(),
                 tab_scroll: gpui::ScrollHandle::new(),
                 context_menu: None,
@@ -138,6 +139,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
         })
         .detach();
         shell.check_for_updates(cx);
+        shell.start_auto_sync(cx);
     })?;
     // With no tab open nothing else holds focus, and gpui only dispatches key bindings along
     // the focused element's path, so the shell itself must be focused for ⌘K to work.
@@ -170,6 +172,7 @@ pub struct Shell {
     record_notice: Option<String>,
     record_interceptor: Option<Subscription>,
     sync_ui: Option<sync_ui::SyncUi>,
+    auto_sync: sync_ui::AutoSync,
     toasts: toast::Toasts,
     tab_scroll: gpui::ScrollHandle,
     context_menu: Option<menu::ContextMenu>,

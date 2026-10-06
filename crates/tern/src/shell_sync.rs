@@ -2,35 +2,38 @@
 //! Mac through a private GitHub gist (see `tern-sync`). The vault file travels as it is; the
 //! rest is sealed with the vault passphrase first, so GitHub only ever holds ciphertext.
 
-use std::collections::BTreeMap;
-use std::path::Path;
+use std::time::{Duration, Instant};
 
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD as B64;
+use gpui::InteractiveElement as _;
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AppContext, Context, Entity, IntoElement, ParentElement, SharedString,
     StatefulInteractiveElement, Styled, Subscription, div, px,
 };
-use serde::{Deserialize, Serialize};
-use tern_ssh::SecretString;
-use tern_sync::{Files, Gist, Plan, TokenSource};
-use tern_vault::{Vault, VaultError};
+use tern_sync::{Plan, TokenSource};
 
 use super::{Shell, ToastKind};
 use crate::keeper::Keeper;
 use crate::settings_widgets as w;
 use crate::text_input::{InputColors, TextInput};
 
-/// The files that travel besides the vault, by their name in the settings directory.
-const SYNCED: [&str; 3] = ["hosts.json", "settings.json", "keymap.json"];
-const VAULT_FILE: &str = "vault.age";
-const STATE_FILE: &str = "sync.json";
+#[path = "shell_sync_engine.rs"]
+mod engine;
+use engine::{Outcome, Resolutions, Side, Snapshot, run, snapshot};
 
-#[derive(Default, Serialize, Deserialize)]
-struct SyncState {
-    /// The bundle hash both sides had after the last sync.
-    last_hash: Option<String>,
+/// Edits are batched this long, so typing a host name is one sync, not twenty.
+const DEBOUNCE: Duration = Duration::from_secs(5);
+/// How often the synced files are looked at for changes.
+const POLL: Duration = Duration::from_secs(2);
+/// After a failed automatic sync, the same data is not retried for this long (offline).
+const BACKOFF: Duration = Duration::from_secs(300);
+
+/// What the user still has to decide after a conflict.
+struct Ask {
+    /// Nothing is known about the last sync: one choice for the whole bundle.
+    whole: bool,
+    items: Vec<String>,
+    choices: Resolutions,
 }
 
 pub(super) struct SyncUi {
@@ -41,15 +44,34 @@ pub(super) struct SyncUi {
     busy: bool,
     /// The last outcome: ok?, text.
     message: Option<(bool, String)>,
-    conflict: bool,
+    ask: Option<Ask>,
     _repaint: Vec<Subscription>,
 }
 
-enum Outcome {
-    UpToDate,
-    Pushed,
-    Pulled,
-    Conflict,
+/// Automatic sync's bookkeeping; lives on the shell so it runs before Settings is opened.
+#[derive(Default)]
+pub(super) struct AutoSync {
+    started: bool,
+    /// Sync once when the app starts (waits for the vault to be unlocked).
+    launch_pending: bool,
+    /// The local hash the debounce is waiting on, and when it may run.
+    seen: Option<String>,
+    deadline: Option<Instant>,
+    /// The last automatic failure: the data it failed on, when, and the text already shown.
+    failed: Option<(String, Instant)>,
+    toasted: Option<String>,
+    /// The line shown in Settings → Sync.
+    status: Option<String>,
+}
+
+fn item_label(name: &str) -> &'static str {
+    match name {
+        "hosts.json" => "Connections",
+        "settings.json" => "Settings",
+        "keymap.json" => "Shortcuts",
+        "snippets.json" => "Snippets",
+        _ => "Vault",
+    }
 }
 
 impl Shell {
@@ -87,7 +109,7 @@ impl Shell {
             token_source: None,
             busy: false,
             message: None,
-            conflict: false,
+            ask: None,
             _repaint: repaint,
         });
         self.refresh_token_source(cx);
@@ -170,31 +192,49 @@ impl Shell {
         self.refresh_token_source(cx);
     }
 
-    /// Syncs; `force` settles a conflict (Push keeps this Mac, Pull takes GitHub's copy).
-    fn sync_now(&mut self, force: Option<Plan>, cx: &mut Context<Self>) {
+    /// Syncs. `force` settles a whole-bundle conflict (Push keeps this Mac, Pull takes the
+    /// remote's copy); `resolve` answers a per-item conflict. `auto` is the background run:
+    /// it never asks for a passphrase and keeps its errors to the status line and one toast.
+    fn sync_now(
+        &mut self,
+        force: Option<Plan>,
+        resolve: Resolutions,
+        auto: bool,
+        cx: &mut Context<Self>,
+    ) {
         let Some(dir) = crate::settings::dir() else {
             return;
         };
+        if auto {
+            self.ensure_sync_ui(cx);
+        }
         let Some(ui) = self.sync_ui.as_mut() else {
             return;
         };
         if ui.busy {
             return;
         }
-        let passphrase = Some(ui.pass_input.read(cx).text().to_owned()).filter(|p| !p.is_empty());
+        let passphrase = if auto {
+            None
+        } else {
+            Some(ui.pass_input.read(cx).text().to_owned()).filter(|p| !p.is_empty())
+        };
         let remote_url = self.settings.sync_remote.clone();
         let open = Keeper::take(cx);
         if open.is_none() && passphrase.is_none() {
-            self.notify_toast(
-                ToastKind::Critical,
-                "Enter the vault passphrase first: it encrypts what goes to GitHub",
-                cx,
-            );
+            if !auto {
+                self.notify_toast(
+                    ToastKind::Critical,
+                    "Enter the vault passphrase first: it encrypts what goes to GitHub",
+                    cx,
+                );
+            }
             return;
         }
         ui.busy = true;
         ui.message = None;
-        ui.conflict = false;
+        ui.ask = None;
+        let started_on = self.auto_sync.seen.clone();
         cx.notify();
         let work = cx.background_spawn(async move {
             run(
@@ -203,6 +243,7 @@ impl Shell {
                 open,
                 passphrase.as_deref(),
                 force,
+                &resolve,
             )
         });
         cx.spawn(async move |this, cx| {
@@ -212,46 +253,183 @@ impl Shell {
                     Keeper::put(v, cx);
                 }
                 // The passphrase field may now be hidden; a hidden field must not keep focus,
-                // or Escape and every shortcut go nowhere.
-                window.focus(&s.focus, cx);
-                let pulled = matches!(result, Ok(Outcome::Pulled));
+                // or Escape and every shortcut go nowhere. A background run leaves focus be.
+                if !auto {
+                    window.focus(&s.focus, cx);
+                }
+                let reload = matches!(result, Ok(Outcome::Pulled | Outcome::Merged));
                 if let Some(ui) = s.sync_ui.as_mut() {
                     ui.busy = false;
                     // A conflict needs a choice, so it stays on the page; the rest is feedback.
-                    ui.message = match &result {
-                        Ok(Outcome::Conflict) => Some((
+                    ui.ask = None;
+                    ui.message = None;
+                    if let Ok(Outcome::Conflict { whole, items }) = &result {
+                        ui.message = Some((
                             false,
-                            "This Mac and GitHub both changed since the last sync. Choose which \
-                             one to keep."
-                                .into(),
-                        )),
-                        _ => None,
-                    };
-                    ui.conflict = matches!(result, Ok(Outcome::Conflict));
-                    if result.is_ok() {
+                            if *whole {
+                                "This Mac and the remote both changed since the last sync. \
+                                 Choose which one to keep."
+                                    .into()
+                            } else {
+                                "Both sides changed these items. Choose which copy to keep \
+                                 for each."
+                                    .into()
+                            },
+                        ));
+                        ui.ask = Some(Ask {
+                            whole: *whole,
+                            items: items.clone(),
+                            choices: Resolutions::new(),
+                        });
+                    }
+                    if result.is_ok() && !auto {
                         ui.pass_input.update(cx, |i, cx| i.set_text("", cx));
                     }
                 }
+                s.auto_sync.seen = None;
+                s.auto_sync.status = Some(match &result {
+                    Ok(Outcome::UpToDate) => "Up to date".into(),
+                    Ok(Outcome::Pushed) => "Uploaded this Mac's changes".into(),
+                    Ok(Outcome::Pulled) => "Downloaded the remote's changes".into(),
+                    Ok(Outcome::Merged) => "Merged this Mac with the remote".into(),
+                    Ok(Outcome::Conflict { .. }) => "Waiting for your choice".into(),
+                    Err(e) => format!("Last sync failed: {e}"),
+                });
                 match &result {
-                    Ok(Outcome::UpToDate) => {
-                        s.notify_toast(ToastKind::Default, "Already up to date", cx)
+                    Ok(Outcome::Conflict { .. }) => {
+                        if auto && s.auto_sync.toasted.is_none() {
+                            s.auto_sync.toasted = Some("conflict".into());
+                            s.notify_toast(
+                                ToastKind::Critical,
+                                "Sync needs your decision: open Settings, Sync",
+                                cx,
+                            );
+                        }
                     }
-                    Ok(Outcome::Pushed) => {
-                        s.notify_toast(ToastKind::Positive, "Uploaded to GitHub", cx)
+                    Ok(outcome) => {
+                        s.auto_sync.toasted = None;
+                        s.auto_sync.failed = None;
+                        // A quiet background run only speaks when something changed here.
+                        let (kind, text) = match outcome {
+                            Outcome::UpToDate => (ToastKind::Default, "Already up to date"),
+                            Outcome::Pushed => (ToastKind::Positive, "Uploaded to the remote"),
+                            Outcome::Pulled => (ToastKind::Positive, "Downloaded from the remote"),
+                            _ => (ToastKind::Positive, "Merged with the remote"),
+                        };
+                        if !auto || reload {
+                            s.notify_toast(kind, text, cx);
+                        }
                     }
-                    Ok(Outcome::Pulled) => {
-                        s.notify_toast(ToastKind::Positive, "Downloaded from GitHub", cx)
+                    Err(e) if auto => {
+                        if let Some(h) = started_on {
+                            s.auto_sync.failed = Some((h, Instant::now()));
+                        }
+                        // Offline retries must not repeat the same toast.
+                        if s.auto_sync.toasted.as_deref() != Some(e.as_str()) {
+                            s.auto_sync.toasted = Some(e.clone());
+                            s.notify_toast(ToastKind::Critical, e.clone(), cx);
+                        }
                     }
-                    Ok(Outcome::Conflict) => {}
                     Err(e) => s.notify_toast(ToastKind::Critical, e.clone(), cx),
                 }
-                if pulled {
+                if reload {
                     s.reload_from_disk(cx);
                 }
                 cx.notify();
             });
         })
         .detach();
+    }
+
+    /// Starts watching the synced files; called once, when the window opens.
+    pub(super) fn start_auto_sync(&mut self, cx: &mut Context<Self>) {
+        if self.auto_sync.started {
+            return;
+        }
+        self.auto_sync.started = true;
+        self.auto_sync.launch_pending = true;
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(POLL).await;
+                let Some(dir) = crate::settings::dir() else {
+                    break;
+                };
+                let snap = cx
+                    .background_executor()
+                    .spawn(async move { snapshot(&dir) })
+                    .await;
+                if let Some(snap) = snap
+                    && this.update(cx, |s, cx| s.auto_tick(snap, cx)).is_err()
+                {
+                    break;
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// One look at the files: arms the debounce on a change, and runs the sync once it is due.
+    fn auto_tick(&mut self, snap: Snapshot, cx: &mut Context<Self>) {
+        let enabled =
+            self.settings.sync_auto && (self.settings.sync_remote.is_some() || snap.last.is_some());
+        if !enabled {
+            return;
+        }
+        // One sync at a time; a change meanwhile shows up as a difference afterwards.
+        if self
+            .sync_ui
+            .as_ref()
+            .is_some_and(|u| u.busy || u.ask.is_some())
+        {
+            return;
+        }
+        let dirty = snap.last.as_deref() != Some(snap.local.as_str());
+        let now = Instant::now();
+        let a = &mut self.auto_sync;
+        if !dirty && !a.launch_pending {
+            a.seen = None;
+            a.deadline = None;
+            return;
+        }
+        if dirty && a.seen.as_deref() != Some(snap.local.as_str()) {
+            a.seen = Some(snap.local.clone());
+            a.deadline = Some(now + DEBOUNCE);
+        }
+        if !(a.launch_pending || a.deadline.is_some_and(|d| now >= d)) {
+            return;
+        }
+        if let Some((hash, at)) = &a.failed
+            && *hash == snap.local
+            && now.duration_since(*at) < BACKOFF
+        {
+            return;
+        }
+        if Keeper::len(cx).is_none() {
+            // Never prompt for a passphrase from the background.
+            let text = "Automatic sync is waiting for the vault to be unlocked";
+            if a.status.as_deref() != Some(text) {
+                a.status = Some(text.into());
+                cx.notify();
+            }
+            return;
+        }
+        a.launch_pending = false;
+        a.deadline = None;
+        a.seen = Some(snap.local);
+        self.sync_now(None, Resolutions::new(), true, cx);
+    }
+
+    /// Records the answer for one conflicted item; the sync runs once every item has one.
+    fn choose(&mut self, item: &str, side: Side, cx: &mut Context<Self>) {
+        let Some(ask) = self.sync_ui.as_mut().and_then(|u| u.ask.as_mut()) else {
+            return;
+        };
+        ask.choices.insert(item.to_owned(), side);
+        cx.notify();
+        if ask.choices.len() == ask.items.len() {
+            let choices = ask.choices.clone();
+            self.sync_now(None, choices, false, cx);
+        }
     }
 
     /// After a pull: settings, shortcuts and connections are re-read and applied.
@@ -338,29 +516,96 @@ impl Shell {
                 "Connections, settings, shortcuts and the vault, encrypted before they leave"
                     .into(),
             ),
-            w::button(&t, "sync-now", label)
-                .on_click(cx.listener(|s, _, _, cx| s.sync_now(None, cx))),
+            w::button(&t, "sync-now", label).on_click(
+                cx.listener(|s, _, _, cx| s.sync_now(None, Resolutions::new(), false, cx)),
+            ),
         ));
-        if ui.conflict {
-            sync = sync.child(w::row(
+        sync = sync
+            .child(w::row(
                 &t,
                 false,
-                "Resolve",
+                "Sync automatically",
                 Some(
-                    "Keep this Mac uploads it over GitHub's; Use GitHub replaces this Mac's".into(),
+                    "At launch and 5 seconds after a change to connections, settings, shortcuts \
+                     or the vault"
+                        .into(),
                 ),
                 div()
-                    .flex()
-                    .gap(px(6.))
-                    .child(
-                        w::button(&t, "sync-keep-mac", "Keep this Mac")
-                            .on_click(cx.listener(|s, _, _, cx| s.sync_now(Some(Plan::Push), cx))),
-                    )
-                    .child(
-                        w::button(&t, "sync-use-github", "Use GitHub")
-                            .on_click(cx.listener(|s, _, _, cx| s.sync_now(Some(Plan::Pull), cx))),
+                    .id("toggle-sync-auto")
+                    .cursor_pointer()
+                    .on_click(cx.listener(|s, _, _, cx| {
+                        s.update_settings(|st| st.sync_auto = !st.sync_auto, cx);
+                    }))
+                    .child(w::toggle(&t, self.settings.sync_auto, "sync-auto")),
+            ))
+            .when_some(self.auto_sync.status.clone(), |c, status| {
+                c.child(w::row(&t, false, "Status", Some(status.into()), div()))
+            });
+        if let Some(ask) = &ui.ask {
+            if ask.whole {
+                sync = sync.child(w::row(
+                    &t,
+                    false,
+                    "Resolve",
+                    Some(
+                        "Keep this Mac uploads it over the remote's; Use remote replaces this Mac's"
+                            .into(),
                     ),
-            ));
+                    div()
+                        .flex()
+                        .gap(px(6.))
+                        .child(
+                            w::button(&t, "sync-keep-mac", "Keep this Mac").on_click(
+                                cx.listener(|s, _, _, cx| {
+                                    s.sync_now(Some(Plan::Push), Resolutions::new(), false, cx)
+                                }),
+                            ),
+                        )
+                        .child(
+                            w::button(&t, "sync-use-github", "Use remote").on_click(
+                                cx.listener(|s, _, _, cx| {
+                                    s.sync_now(Some(Plan::Pull), Resolutions::new(), false, cx)
+                                }),
+                            ),
+                        ),
+                ));
+            } else {
+                for name in &ask.items {
+                    let picked = ask.choices.get(name).copied();
+                    let (keep, take) = (name.clone(), name.clone());
+                    let mark = |side| if picked == Some(side) { " ✓" } else { "" };
+                    sync =
+                        sync.child(w::row(
+                            &t,
+                            false,
+                            item_label(name),
+                            Some("Changed on this Mac and on the remote".into()),
+                            div()
+                                .flex()
+                                .gap(px(6.))
+                                .child(
+                                    w::button(
+                                        &t,
+                                        SharedString::from(format!("sync-keep-{name}")),
+                                        format!("Keep this Mac{}", mark(Side::Mac)),
+                                    )
+                                    .on_click(cx.listener(
+                                        move |s, _, _, cx| s.choose(&keep, Side::Mac, cx),
+                                    )),
+                                )
+                                .child(
+                                    w::button(
+                                        &t,
+                                        SharedString::from(format!("sync-use-{name}")),
+                                        format!("Use remote{}", mark(Side::Remote)),
+                                    )
+                                    .on_click(cx.listener(
+                                        move |s, _, _, cx| s.choose(&take, Side::Remote, cx),
+                                    )),
+                                ),
+                        ));
+                }
+            }
         }
         w::page_column()
             .child(w::page_header(&t, "Sync"))
@@ -433,221 +678,4 @@ fn field(input: &Entity<TextInput>, t: &crate::theme::Theme) -> impl IntoElement
         .overflow_hidden()
         .text_sm()
         .child(input.clone())
-}
-
-/// The whole sync, off the UI thread. Returns the vault to hand back to the keeper (the
-/// downloaded one after a pull) and what happened.
-fn run(
-    dir: &Path,
-    remote_url: Option<&str>,
-    open: Option<Vault>,
-    passphrase: Option<&str>,
-    force: Option<Plan>,
-) -> (Option<Vault>, Result<Outcome, String>) {
-    let vault_path = dir.join(VAULT_FILE);
-    let vault = match (open, passphrase) {
-        (Some(v), _) => v,
-        (None, Some(p)) if vault_path.exists() => {
-            match Vault::unlock(&vault_path, SecretString::from(p.to_owned())) {
-                Ok(v) => v,
-                Err(VaultError::WrongPassphrase) => {
-                    return (None, Err("Wrong vault passphrase.".into()));
-                }
-                Err(e) => return (None, Err(e.to_string())),
-            }
-        }
-        (None, Some(p)) => Vault::new(SecretString::from(p.to_owned())),
-        (None, None) => return (None, Err("The vault is locked.".into())),
-    };
-    let result = sync(dir, remote_url, &vault, passphrase, force);
-    match result {
-        Ok((outcome, Some(pulled))) => (Some(pulled), Ok(outcome)),
-        Ok((outcome, None)) => (Some(vault), Ok(outcome)),
-        Err(e) => (Some(vault), Err(e)),
-    }
-}
-
-/// Where the bundle lives: the user's own git repository when one is set, else a gist.
-enum Backend {
-    Git(tern_sync::GitRepo),
-    Gist(Gist),
-}
-
-impl Backend {
-    fn open(dir: &Path, remote_url: Option<&str>) -> Result<Self, String> {
-        Ok(match remote_url {
-            Some(url) => Backend::Git(tern_sync::GitRepo::new(
-                url.to_owned(),
-                dir.join("sync-repo"),
-            )),
-            None => {
-                let (token, _) = tern_sync::token().map_err(|e| e.to_string())?;
-                Backend::Gist(Gist::new(token))
-            }
-        })
-    }
-
-    fn fetch(&self) -> Result<Option<tern_sync::RemoteBundle>, String> {
-        match self {
-            Backend::Git(g) => g.fetch(),
-            Backend::Gist(g) => g.fetch(),
-        }
-        .map_err(|e| e.to_string())
-    }
-
-    fn push(&self, hash: &str, device: &str, vault: &[u8], sealed: &[u8]) -> Result<(), String> {
-        match self {
-            Backend::Git(g) => g.push(hash, device, vault, sealed),
-            Backend::Gist(g) => g.push(hash, device, vault, sealed),
-        }
-        .map_err(|e| e.to_string())
-    }
-}
-
-/// Returns the outcome, and the downloaded vault after a pull.
-fn sync(
-    dir: &Path,
-    remote_url: Option<&str>,
-    vault: &Vault,
-    passphrase: Option<&str>,
-    force: Option<Plan>,
-) -> Result<(Outcome, Option<Vault>), String> {
-    let vault_path = dir.join(VAULT_FILE);
-    if !vault_path.exists() {
-        vault.save(&vault_path).map_err(|e| e.to_string())?;
-    }
-    let local = read_local(dir)?;
-    let local_hash = tern_sync::hash(&local);
-    let state: SyncState = std::fs::read_to_string(dir.join(STATE_FILE))
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default();
-    let backend = Backend::open(dir, remote_url)?;
-    let remote = backend.fetch()?;
-    // A Mac that never synced and holds nothing of its own (no connections, an empty vault)
-    // just takes GitHub's copy instead of asking which side wins.
-    let fresh = state.last_hash.is_none() && !local.contains_key("hosts.json") && vault.is_empty();
-    let plan = force.unwrap_or_else(|| match (&remote, fresh) {
-        (Some(_), true) => Plan::Pull,
-        _ => tern_sync::decide(
-            &local_hash,
-            remote.as_ref().map(|r| r.hash.as_str()),
-            state.last_hash.as_deref(),
-        ),
-    });
-    match plan {
-        Plan::UpToDate => {
-            write_state(dir, &local_hash)?;
-            Ok((Outcome::UpToDate, None))
-        }
-        Plan::Conflict => Ok((Outcome::Conflict, None)),
-        Plan::Push => {
-            let mut rest = local.clone();
-            let vault_bytes = rest.remove(VAULT_FILE).unwrap_or_default();
-            let sealed = vault.seal(&encode(&rest)?).map_err(|e| e.to_string())?;
-            let device = std::env::var("USER").unwrap_or_else(|_| "mac".into());
-            backend.push(&local_hash, &device, &vault_bytes, &sealed)?;
-            write_state(dir, &local_hash)?;
-            Ok((Outcome::Pushed, None))
-        }
-        Plan::Pull => {
-            let Some(remote) = remote else {
-                return Err("GitHub has no tern-sync gist yet.".into());
-            };
-            // GitHub's vault may use another passphrase than this Mac's: a typed one wins.
-            let theirs = match passphrase {
-                Some(p) => Vault::unlock_bytes(&remote.vault, SecretString::from(p.to_owned())),
-                None => vault.reopen(&remote.vault),
-            }
-            .map_err(|e| match e {
-                VaultError::WrongPassphrase => {
-                    "GitHub's vault uses another passphrase: enter it above and sync again."
-                        .to_owned()
-                }
-                other => other.to_string(),
-            })?;
-            let rest = decode(&theirs.open(&remote.sealed).map_err(|e| e.to_string())?)?;
-            for (name, bytes) in &rest {
-                write_atomic(&dir.join(name), bytes)?;
-            }
-            for name in SYNCED {
-                if !rest.contains_key(name) {
-                    let _ = std::fs::remove_file(dir.join(name));
-                }
-            }
-            write_atomic(&vault_path, &remote.vault)?;
-            write_state(dir, &remote.hash)?;
-            Ok((Outcome::Pulled, Some(theirs)))
-        }
-    }
-}
-
-fn read_local(dir: &Path) -> Result<Files, String> {
-    let mut files = Files::new();
-    for name in SYNCED.into_iter().chain([VAULT_FILE]) {
-        match std::fs::read(dir.join(name)) {
-            Ok(bytes) => {
-                files.insert(name.to_owned(), bytes);
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(format!("{name}: {e}")),
-        }
-    }
-    Ok(files)
-}
-
-fn encode(files: &Files) -> Result<Vec<u8>, String> {
-    let map: BTreeMap<&str, String> = files
-        .iter()
-        .map(|(n, b)| (n.as_str(), B64.encode(b)))
-        .collect();
-    serde_json::to_vec(&map).map_err(|e| e.to_string())
-}
-
-/// The inverse of [`encode`]; names outside [`SYNCED`] are dropped, so a tampered bundle
-/// cannot write elsewhere.
-fn decode(bytes: &[u8]) -> Result<Files, String> {
-    let map: BTreeMap<String, String> =
-        serde_json::from_slice(bytes).map_err(|e| format!("sync data: {e}"))?;
-    map.into_iter()
-        .filter(|(n, _)| SYNCED.contains(&n.as_str()))
-        .map(|(n, b)| {
-            B64.decode(b)
-                .map(|bytes| (n.clone(), bytes))
-                .map_err(|e| format!("{n}: {e}"))
-        })
-        .collect()
-}
-
-fn write_state(dir: &Path, hash: &str) -> Result<(), String> {
-    let json = serde_json::to_vec_pretty(&SyncState {
-        last_hash: Some(hash.to_owned()),
-    })
-    .map_err(|e| e.to_string())?;
-    write_atomic(&dir.join(STATE_FILE), &json)
-}
-
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let tmp = path.with_extension("sync.tmp");
-    std::fs::write(&tmp, bytes)
-        .and_then(|()| std::fs::rename(&tmp, path))
-        .map_err(|e| format!("{}: {e}", path.display()))
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn encode_decode_round_trips_and_drops_unknown_names() {
-        let mut files = Files::new();
-        files.insert("hosts.json".into(), b"{\"v\":1}".to_vec());
-        files.insert("settings.json".into(), vec![0, 255, 7]);
-        assert_eq!(decode(&encode(&files).unwrap()).unwrap(), files);
-
-        let evil = br#"{"../../.ssh/authorized_keys":"aGk=","hosts.json":"e30="}"#;
-        let out = decode(evil).unwrap();
-        assert_eq!(out.keys().collect::<Vec<_>>(), vec!["hosts.json"]);
-    }
 }

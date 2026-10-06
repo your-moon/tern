@@ -157,7 +157,7 @@ mod tests {
 
     fn names(m: HostsMerge) -> Vec<String> {
         let HostsMerge::Merged(text) = m else {
-            panic!("expected a clean merge, got {m:?}");
+            return vec![format!("not a clean merge: {m:?}")];
         };
         connections(&text)
             .unwrap()
@@ -270,9 +270,9 @@ mod tests {
         let mut c = conn("web", "1.1.1.1");
         c["identityFile"] = json!("~/.ssh/id_ed25519");
         let out = merge_hosts("", &file(&[c.clone()]), "").unwrap();
-        let HostsMerge::Merged(text) = out else {
-            panic!()
+        let HostsMerge::Merged(text) = &out else {
+            unreachable!("{out:?}")
         };
-        assert_eq!(connections(&text).unwrap()[0].1, c);
+        assert_eq!(connections(text).unwrap()[0].1, c);
     }
 }

@@ -48,6 +48,8 @@ pub struct Settings {
     pub bell_bounces_dock: bool,
     /// Ask GitHub once a day whether a newer release exists; tern only says so, never installs.
     pub check_for_updates: bool,
+    /// Sync at launch and after local changes, once a remote is set up.
+    pub sync_auto: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,6 +86,7 @@ impl Default for Settings {
             visual_bell: false,
             bell_bounces_dock: true,
             check_for_updates: true,
+            sync_auto: true,
         }
     }
 }
@@ -237,6 +240,7 @@ mod tests {
             visual_bell: true,
             bell_bounces_dock: false,
             check_for_updates: false,
+            sync_auto: false,
         };
         saved.save(&dir).unwrap();
         assert_eq!(Settings::load(&dir), saved);
