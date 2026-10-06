@@ -95,10 +95,7 @@ mod tests {
             for color in colors {
                 let accent = accent_for(color, surface);
                 let ratio = contrast_ratio(pack(accent), pack(surface));
-                assert!(
-                    ratio >= 3.0,
-                    "{color:?} on {surface:?}: {ratio}"
-                );
+                assert!(ratio >= 3.0, "{color:?} on {surface:?}: {ratio}");
             }
         }
     }
