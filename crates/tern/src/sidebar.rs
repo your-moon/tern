@@ -108,7 +108,7 @@ pub fn render(
             .open
             .iter()
             .rev()
-            .find(|tab| !tab.local && tab.alias == host.alias)
+            .find(|tab| tab.alias == host.alias)
             .map(|tab| &tab.status);
         let active = s.active_alias == Some(host.alias.as_str());
         row(scope, ix, host, status, active, top, t, cx)

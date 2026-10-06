@@ -152,7 +152,7 @@ impl Shell {
                     true,
                     "Reopen tabs on launch",
                     Some(
-                        "Local shells start again; connections wait for Enter before they dial"
+                        "Connections come back waiting for Enter, so none dials until you ask"
                             .into(),
                     ),
                     reopen,

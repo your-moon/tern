@@ -106,7 +106,6 @@ impl Shell {
         };
         let alias = tab.alias.clone();
         let closed = tab.session().read(cx).status.is_dormant();
-        let local = tab.session().read(cx).is_local();
         let logging = tab.session().read(cx).is_logging();
         let broadcasting = self.is_broadcasting(tab.id);
         let mut items = Vec::new();
@@ -120,20 +119,14 @@ impl Shell {
             }));
         }
         let again = alias.clone();
-        if local {
-            items.push(action(icons::PLUS, "New local terminal", |s, w, cx| {
-                s.open_local_tab(w, cx)
-            }));
-        } else {
-            items.push(action(
-                icons::PLUS,
-                "New tab to this host",
-                move |s, w, cx| match s.hosts.iter().find(|h| h.alias == again).cloned() {
-                    Some(host) => s.open_new_tab(&host, w, cx),
-                    None => s.connect_target(&again, w, cx),
-                },
-            ));
-        }
+        items.push(action(
+            icons::PLUS,
+            "New tab to this host",
+            move |s, w, cx| match s.hosts.iter().find(|h| h.alias == again).cloned() {
+                Some(host) => s.open_new_tab(&host, w, cx),
+                None => s.connect_target(&again, w, cx),
+            },
+        ));
         items.push(action(icons::PEN, "Rename…", move |s, w, cx| {
             s.start_rename(ix, w, cx)
         }));

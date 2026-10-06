@@ -13,10 +13,11 @@ const FILE_NAME: &str = "tabs.json";
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum SavedKind {
     /// A connection, by the alias or `user@host:port` it was opened with.
-    Ssh {
-        alias: String,
-    },
-    Local,
+    Ssh { alias: String },
+    /// A kind this version does not know, such as the local shell tabs older versions kept.
+    /// It is dropped when the file is read and never written.
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,12 +40,26 @@ impl SavedTabs {
     pub fn load(dir: &Path) -> Option<Self> {
         let text = std::fs::read_to_string(dir.join(FILE_NAME)).ok()?;
         match serde_json::from_str::<Self>(&text) {
-            Ok(saved) => Some(saved),
+            Ok(saved) => Some(saved.without_unknown()),
             Err(e) => {
                 tracing::warn!(error = %e, "tabs_json_unreadable_ignored");
                 None
             }
         }
+    }
+
+    /// Drops tabs of a kind this version cannot open. The active slot keeps pointing at the
+    /// same tab, or at the one that took the dropped tab's place.
+    fn without_unknown(mut self) -> Self {
+        let dropped_before_active = self
+            .tabs
+            .iter()
+            .take(self.active)
+            .filter(|t| t.kind == SavedKind::Unknown)
+            .count();
+        self.active = self.active.saturating_sub(dropped_before_active);
+        self.tabs.retain(|t| t.kind != SavedKind::Unknown);
+        self
     }
 
     /// Temp file + rename, so a crash mid-write never leaves half a file.
@@ -84,7 +99,9 @@ mod tests {
                     title: Some("prod db".into()),
                 },
                 SavedTab {
-                    kind: SavedKind::Local,
+                    kind: SavedKind::Ssh {
+                        alias: "staging".into(),
+                    },
                     title: None,
                 },
                 SavedTab {
@@ -103,6 +120,31 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         sample().save(dir.path()).unwrap();
         assert_eq!(SavedTabs::load(dir.path()), Some(sample()));
+    }
+
+    fn ssh(alias: &str) -> SavedTab {
+        SavedTab {
+            kind: SavedKind::Ssh {
+                alias: alias.into(),
+            },
+            title: None,
+        }
+    }
+
+    #[test]
+    fn a_file_with_old_local_tabs_loads_and_skips_them() {
+        let old = |active: usize| {
+            format!(
+                r#"{{"tabs":[{{"kind":"ssh","alias":"a"}},{{"kind":"local","title":"mine"}},{{"kind":"ssh","alias":"b"}}],"active":{active}}}"#
+            )
+        };
+        for (active, expect) in [(0, 0), (1, 1), (2, 1)] {
+            let dir = tempfile::tempdir().unwrap();
+            std::fs::write(dir.path().join(FILE_NAME), old(active)).unwrap();
+            let loaded = SavedTabs::load(dir.path()).unwrap();
+            assert_eq!(loaded.tabs, [ssh("a"), ssh("b")]);
+            assert_eq!(loaded.active, expect, "active {active}");
+        }
     }
 
     #[test]
@@ -129,7 +171,7 @@ mod tests {
         sample().save(dir.path()).unwrap();
         let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
         assert!(text.contains("\"kind\": \"ssh\""), "{text}");
-        assert!(text.contains("\"kind\": \"local\""), "{text}");
+        assert!(!text.contains("unknown"), "{text}");
         for secret in ["password", "passphrase", "identity", "key"] {
             assert!(!text.contains(secret), "{secret} in {text}");
         }

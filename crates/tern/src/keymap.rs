@@ -20,7 +20,6 @@ pub enum ShortcutId {
     SearchHosts,
     Snippets,
     NewConnection,
-    NewLocalTerminal,
     SplitRight,
     SplitDown,
     PaneLeft,
@@ -38,12 +37,11 @@ pub enum ShortcutId {
 }
 
 impl ShortcutId {
-    pub const ALL: [ShortcutId; 19] = [
+    pub const ALL: [ShortcutId; 18] = [
         ShortcutId::HostPicker,
         ShortcutId::SearchHosts,
         ShortcutId::Snippets,
         ShortcutId::NewConnection,
-        ShortcutId::NewLocalTerminal,
         ShortcutId::SplitRight,
         ShortcutId::SplitDown,
         ShortcutId::PaneLeft,
@@ -66,7 +64,6 @@ impl ShortcutId {
             ShortcutId::SearchHosts => "Search hosts",
             ShortcutId::Snippets => "Snippets",
             ShortcutId::NewConnection => "New connection",
-            ShortcutId::NewLocalTerminal => "New local terminal",
             ShortcutId::SplitRight => "Split right",
             ShortcutId::SplitDown => "Split down",
             ShortcutId::PaneLeft => "Focus pane left",
@@ -90,7 +87,6 @@ impl ShortcutId {
             ShortcutId::SearchHosts => "cmd-shift-f",
             ShortcutId::Snippets => "cmd-shift-s",
             ShortcutId::NewConnection => "cmd-n",
-            ShortcutId::NewLocalTerminal => "cmd-t",
             ShortcutId::SplitRight => "cmd-d",
             ShortcutId::SplitDown => "cmd-shift-d",
             ShortcutId::PaneLeft => "alt-cmd-left",
@@ -111,8 +107,8 @@ impl ShortcutId {
     fn action(self) -> Box<dyn Action> {
         use crate::shell::{
             DecreaseFontSize, FocusPaneDown, FocusPaneLeft, FocusPaneRight, FocusPaneUp,
-            IncreaseFontSize, NewConnection, NewLocalTerminal, OpenSettings, ResetFontSize,
-            SplitDown, SplitRight, ToggleSidebar,
+            IncreaseFontSize, NewConnection, OpenSettings, ResetFontSize, SplitDown, SplitRight,
+            ToggleSidebar,
         };
         use crate::tabs::{CloseTab, NextTab, PrevTab};
         match self {
@@ -120,7 +116,6 @@ impl ShortcutId {
             ShortcutId::SearchHosts => Box::new(crate::shell::FocusHostSearch),
             ShortcutId::Snippets => Box::new(crate::shell::ToggleSnippets),
             ShortcutId::NewConnection => Box::new(NewConnection),
-            ShortcutId::NewLocalTerminal => Box::new(NewLocalTerminal),
             ShortcutId::SplitRight => Box::new(SplitRight),
             ShortcutId::SplitDown => Box::new(SplitDown),
             ShortcutId::PaneLeft => Box::new(FocusPaneLeft),

@@ -29,7 +29,6 @@ actions!(
         DecreaseFontSize,
         ResetFontSize,
         NewConnection,
-        NewLocalTerminal,
         SplitRight,
         SplitDown,
         FocusPaneLeft,
@@ -226,9 +225,6 @@ pub struct Shell {
     wp: wallpaper_ui::State,
 }
 
-/// What a local shell tab is called until the user renames it.
-const LOCAL_ALIAS: &str = "Terminal";
-
 /// Debug builds: keep scripted logins out of the real ~/.ssh/known_hosts.
 #[cfg(debug_assertions)]
 fn with_dev_known_hosts(spec: ConnectSpec) -> ConnectSpec {
@@ -240,7 +236,7 @@ fn with_dev_known_hosts(spec: ConnectSpec) -> ConnectSpec {
     }
 }
 
-/// One terminal in a tab: a connection or a local shell.
+/// One terminal in a tab: a connection.
 struct Pane {
     id: PaneId,
     session: Entity<Session>,
@@ -251,8 +247,6 @@ struct Pane {
 struct Tab {
     id: broadcast_ui::TabId,
     alias: String,
-    /// A shell on this machine rather than a connection.
-    local: bool,
     /// The user's name for the tab. It belongs to the tab, not the session, so a reconnect
     /// keeps it.
     title: Option<String>,
@@ -278,11 +272,7 @@ impl Shell {
     /// a new tab.
     pub fn connect_host(&mut self, host: HostEntry, window: &mut Window, cx: &mut Context<Self>) {
         self.record_recent(&host.alias);
-        if let Some(ix) = self
-            .tabs
-            .iter()
-            .position(|tab| tab.alias == host.alias && !tab.session().read(cx).is_local())
-        {
+        if let Some(ix) = self.tabs.iter().position(|tab| tab.alias == host.alias) {
             let session = self.tabs[ix].session().clone();
             session.update(cx, |s, cx| {
                 if s.status.is_dormant() {
@@ -305,11 +295,6 @@ impl Shell {
         }
     }
 
-    /// A shell on this machine, in a tab of its own.
-    pub fn open_local_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.open_tab(Launch::Local, LOCAL_ALIAS.to_owned(), window, cx);
-    }
-
     fn open_tab(
         &mut self,
         launch: Launch,
@@ -317,13 +302,11 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let local = matches!(launch, Launch::Local);
         let pane = self.make_pane(launch, &alias, window, cx);
         self.next_tab += 1;
         self.tabs.push(Tab {
             id: self.next_tab,
             alias,
-            local,
             title: None,
             tree: split::Node::Leaf(pane.id),
             focused: pane.id,
@@ -346,7 +329,6 @@ impl Shell {
         let launch = match launch {
             Launch::Ssh(spec) => Launch::Ssh(with_dev_known_hosts(spec)),
             Launch::SshIdle(spec) => Launch::SshIdle(with_dev_known_hosts(spec)),
-            local => local,
         };
         let theme = self.terminal_theme(alias);
         let session = Session::open(
@@ -638,7 +620,6 @@ impl Shell {
             .map(|(ix, tab)| TabInfo {
                 alias: tab.alias.clone(),
                 title: tab.title.clone(),
-                local: tab.session().read(cx).is_local(),
                 logging: tab.session().read(cx).is_logging(),
                 broadcast: self.is_broadcasting(tab.id),
                 status: tab.session().read(cx).status.clone(),
@@ -730,10 +711,6 @@ impl Shell {
                     .child(hint(
                         crate::keymap::ShortcutId::NewConnection,
                         "New connection",
-                    ))
-                    .child(hint(
-                        crate::keymap::ShortcutId::NewLocalTerminal,
-                        "New local terminal",
                     ))
                     .child(hint(crate::keymap::ShortcutId::Settings, "Settings")),
             )
@@ -838,7 +815,6 @@ impl Render for Shell {
             .on_action(cx.listener(|s, _: &ToggleSnippets, w, cx| s.toggle_snippet_picker(w, cx)))
             .on_action(cx.listener(|s, _: &ToggleSidebar, _, cx| s.toggle_sidebar(cx)))
             .on_action(cx.listener(|s, _: &NewConnection, w, cx| s.open_form(None, None, w, cx)))
-            .on_action(cx.listener(|s, _: &NewLocalTerminal, w, cx| s.open_local_tab(w, cx)))
             .on_action(cx.listener(|s, _: &OpenSettings, w, cx| s.toggle_settings(w, cx)))
             // Capture phase: the terminal handles Escape itself, and ending a broadcast must
             // not depend on which pane has focus.

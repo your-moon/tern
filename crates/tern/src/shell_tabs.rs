@@ -155,12 +155,8 @@ impl Shell {
                 .tabs
                 .iter()
                 .map(|tab| SavedTab {
-                    kind: if tab.local {
-                        SavedKind::Local
-                    } else {
-                        SavedKind::Ssh {
-                            alias: tab.alias.clone(),
-                        }
+                    kind: SavedKind::Ssh {
+                        alias: tab.alias.clone(),
                     },
                     title: tab.title.clone(),
                 })
@@ -169,7 +165,7 @@ impl Shell {
         }
     }
 
-    /// Reopens the last run's tabs: shells start, connections wait for Enter.
+    /// Reopens the last run's tabs: connections wait for Enter.
     pub(crate) fn restore_tabs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.settings.reopen_tabs {
             return;
@@ -180,11 +176,8 @@ impl Shell {
         self.restoring = true;
         for saved_tab in &saved.tabs {
             let opened = match &saved_tab.kind {
-                SavedKind::Local => {
-                    self.open_local_tab(window, cx);
-                    true
-                }
                 SavedKind::Ssh { alias } => self.reopen_idle(alias, window, cx),
+                SavedKind::Unknown => false,
             };
             if opened {
                 let title = saved_tab.title.clone();
