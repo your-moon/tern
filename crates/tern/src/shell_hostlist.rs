@@ -5,6 +5,7 @@
 use gpui::{AppContext, Context, Entity, Focusable, Subscription, Window, actions};
 
 use super::Shell;
+use crate::connections::{self, Connection};
 use crate::picker;
 use crate::recent::{self, Recent};
 use crate::sidebar;
@@ -132,5 +133,28 @@ impl Shell {
 
     pub fn recent_aliases(&self) -> Vec<String> {
         self.hostlist.recent.aliases().map(str::to_owned).collect()
+    }
+}
+
+impl Shell {
+    /// Adds or replaces a connection and writes `hosts.json`.
+    pub(super) fn store_connection(
+        &mut self,
+        editing: Option<usize>,
+        connection: Connection,
+    ) -> Result<(), String> {
+        // A command typed in this form is approved by saving it.
+        crate::password_command::approve_saved(&connection);
+        let mut next = self.connections.clone();
+        match editing.and_then(|ix| next.get_mut(ix)) {
+            Some(slot) => *slot = connection,
+            None => next.push(connection),
+        }
+        if let Some(dir) = crate::settings::dir() {
+            connections::save(&dir, &next).map_err(|e| e.to_string())?;
+        }
+        self.connections = next;
+        self.refresh_hosts();
+        Ok(())
     }
 }

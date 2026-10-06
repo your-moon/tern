@@ -12,6 +12,7 @@ use tern_term::{Terminal, TerminalEvent, TerminalView};
 
 use crate::keeper::Keeper;
 use crate::login::Login;
+use crate::password_command::Auth;
 use crate::reconnect::{self, Backoff, Key};
 use crate::runtime::SshRuntime;
 use crate::session_log::{self, SessionLog};
@@ -42,6 +43,8 @@ struct Link {
     /// Names of vault keys offered at login. They are looked up each time the session dials,
     /// so the spec never holds key material between connections.
     vault_keys: Vec<String>,
+    /// Prints the login password; see `password_command`.
+    password_command: Option<String>,
 }
 
 impl Status {
@@ -72,6 +75,8 @@ pub struct Session {
     typed: Option<(tern_vault::Key, SecretString)>,
     /// Entries already answered from the vault on this connection.
     tried: Vec<tern_vault::Key>,
+    /// The password command already had its turn on this connection.
+    command_tried: bool,
     /// Secrets the user was already asked for on this connection.
     asked: Vec<tern_vault::Key>,
     /// When the remote last wrote, and whether that ended a line: the save offer waits for a
@@ -104,7 +109,7 @@ pub struct Session {
 impl Session {
     pub fn open(
         launch: Launch,
-        vault_keys: Vec<String>,
+        auth: Auth,
         name: String,
         auto_log: bool,
         theme: TerminalTheme,
@@ -128,7 +133,8 @@ impl Session {
             let mut link = Link {
                 spec,
                 handle: None,
-                vault_keys,
+                vault_keys: auth.vault_keys,
+                password_command: auth.password_command,
             };
             // A locked vault is unlocked before dialling, so its keys can be offered.
             let unlock_first = !idle && Self::keys_need_unlock(&link, cx);
@@ -150,6 +156,7 @@ impl Session {
                 asking: None,
                 typed: None,
                 tried: Vec::new(),
+                command_tried: false,
                 asked: Vec::new(),
                 last_output: std::time::Instant::now(),
                 ends_line: true,
@@ -366,6 +373,7 @@ impl Session {
                 self.asking = None;
                 self.typed = None;
                 self.tried.clear();
+                self.command_tried = false;
                 self.asked.clear();
                 if reconnect::should_retry(&reason, self.ever_connected) {
                     return self.schedule_retry(&reason, cx);
@@ -548,6 +556,8 @@ impl Session {
     }
 }
 
+#[path = "session_command.rs"]
+mod command;
 #[path = "session_vault.rs"]
 mod vault;
 

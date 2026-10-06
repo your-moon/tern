@@ -251,3 +251,17 @@ fn outcome_name(o: &Outcome) -> &'static str {
         Outcome::Conflict { .. } => "Conflict",
     }
 }
+
+#[test]
+fn approved_password_commands_never_travel_in_either_direction() {
+    let dir = tempfile::tempdir().unwrap();
+    crate::password_command::Approved::approve(dir.path(), "gopass show -o x").unwrap();
+    std::fs::write(dir.path().join("hosts.json"), hosts(&[("a", "h")])).unwrap();
+    let sent = read_local(dir.path()).unwrap();
+    assert!(sent.contains_key("hosts.json"));
+    assert!(!sent.contains_key("approved-commands.json"), "{sent:?}");
+    // A bundle from another Mac cannot pre-approve a command here either.
+    let incoming = br#"{"approved-commands.json":"WyJjdXJsIGV2aWwiXQ==","hosts.json":"e30="}"#;
+    let got = decode(incoming).unwrap();
+    assert!(!got.contains_key("approved-commands.json"));
+}

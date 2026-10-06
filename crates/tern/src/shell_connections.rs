@@ -37,6 +37,7 @@ pub(super) struct ConnectionForm {
     /// Kept from an import; the form has no field for these.
     proxy_command: Option<String>,
     vault_key: Entity<TextInput>,
+    password_command: Entity<TextInput>,
     agent_socket: Option<String>,
     /// One input per port forward, as `-L`/`-R`/`-D` text; blank rows are ignored on save.
     forwards: Vec<Entity<TextInput>>,
@@ -69,6 +70,7 @@ impl ConnectionForm {
             &self.proxy_jump,
             &self.keep_alive,
             &self.vault_key,
+            &self.password_command,
             &self.password,
             &self.vault_pass,
             &self.vault_repeat,
@@ -142,6 +144,11 @@ impl Shell {
                 "Name of a key in the vault (optional)",
                 false,
                 d.vault_key.unwrap_or_default(),
+            ),
+            password_command: field(
+                "Prints the password, e.g. gopass show -o …",
+                false,
+                d.password_command.unwrap_or_default(),
             ),
             agent_socket: d.agent_socket,
             forwards: d
@@ -312,7 +319,7 @@ impl Shell {
             &form.keep_alive,
         ];
         fields.extend(&form.forwards);
-        fields.extend([&form.vault_key, &form.password]);
+        fields.extend([&form.vault_key, &form.password_command, &form.password]);
         if step != VaultStep::None {
             fields.push(&form.vault_pass);
         }
@@ -368,6 +375,7 @@ impl Shell {
             group: read(&form.group, cx),
             tags: read(&form.tags, cx),
             vault_key: read(&form.vault_key, cx),
+            password_command: read(&form.password_command, cx),
             proxy_jump: read(&form.proxy_jump, cx),
             forward_agent: form.forward_agent,
             keep_alive: read(&form.keep_alive, cx),
@@ -437,25 +445,6 @@ impl Shell {
             SecretString::from(vault_pass),
             cx,
         );
-    }
-
-    /// Adds or replaces a connection and writes `hosts.json`.
-    fn store_connection(
-        &mut self,
-        editing: Option<usize>,
-        connection: Connection,
-    ) -> Result<(), String> {
-        let mut next = self.connections.clone();
-        match editing.and_then(|ix| next.get_mut(ix)) {
-            Some(slot) => *slot = connection,
-            None => next.push(connection),
-        }
-        if let Some(dir) = crate::settings::dir() {
-            connections::save(&dir, &next).map_err(|e| e.to_string())?;
-        }
-        self.connections = next;
-        self.refresh_hosts();
-        Ok(())
     }
 
     /// Unlocks or creates the vault as needed, stores the password and saves, all off the UI
@@ -654,6 +643,7 @@ impl Shell {
             )
             .child(self.forward_rows(form, cx))
             .child(row("Vault key", &form.vault_key, t))
+            .child(row("Password command", &form.password_command, t))
             .child(row("Password", &form.password, t));
         match step {
             VaultStep::None => {}

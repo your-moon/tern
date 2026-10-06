@@ -21,6 +21,8 @@ pub(super) enum Flow {
     /// "Vault passphrase (Enter to skip)", asked before dialling because the connection names
     /// a vault key; skipping dials anyway and falls back to the usual prompts.
     UnlockForKeys,
+    /// "This connection runs `…` to get its password. Run it? (yes/no)".
+    ApproveCommand(Prompt),
     /// "Save … in tern's vault? (yes/no)".
     OfferSave(Key, SecretString),
     UnlockToSave(Key, SecretString),
@@ -30,6 +32,10 @@ pub(super) enum Flow {
 
 impl Session {
     pub(super) fn on_prompt(&mut self, prompt: Prompt, cx: &mut Context<Self>) {
+        // The password command goes first, then the vault, then the user.
+        let Some(prompt) = self.try_command(prompt, cx) else {
+            return;
+        };
         let key = keeper::key_for(&prompt, self.host(), self.port());
         // Each secret is tried from the vault once per connection, so a stale one falls
         // through to asking instead of failing in a loop.
@@ -90,7 +96,7 @@ impl Session {
         self.show(&question, cx);
     }
 
-    fn ask_local(&mut self, text: &str, echo: bool, flow: Flow, cx: &mut Context<Self>) {
+    pub(super) fn ask_local(&mut self, text: &str, echo: bool, flow: Flow, cx: &mut Context<Self>) {
         let (login, question) = Login::ask(text, echo);
         self.login = Some(login);
         self.flow = Some(flow);
@@ -152,6 +158,9 @@ impl Session {
                 Some(passphrase) => self.unlock(passphrase, Some(prompt), None, cx),
                 None => self.ask_user(prompt, cx),
             },
+            Flow::ApproveCommand(prompt) => {
+                self.command_approved(prompt, keeper::is_yes(typed.as_ref()), cx)
+            }
             Flow::OfferSave(key, secret) => {
                 if !keeper::is_yes(typed.as_ref()) {
                     return;

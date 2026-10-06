@@ -15,6 +15,7 @@ mod login;
 mod menus;
 mod motion;
 mod pane;
+mod password_command;
 mod picker;
 mod recent;
 mod reconnect;

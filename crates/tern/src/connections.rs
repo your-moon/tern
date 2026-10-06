@@ -35,6 +35,10 @@ pub struct Connection {
     /// Name of a private key kept in the vault, offered at login.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vault_key: Option<String>,
+    /// A shell command whose stdout is the login password. It runs on this Mac, and one that
+    /// arrived through sync waits for approval first (see `password_command`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub password_command: Option<String>,
     /// Hosts to hop through, comma separated, each a saved connection's name or
     /// `[user@]host[:port]`, in connection order. Empty connects directly.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -114,6 +118,7 @@ impl Connection {
             tags: Vec::new(),
             proxy_command: entry.proxy_command.clone(),
             vault_key: None,
+            password_command: None,
             proxy_jump: entry
                 .proxy_jump
                 .iter()
@@ -265,6 +270,7 @@ pub struct Draft {
     /// Comma separated, as typed.
     pub tags: String,
     pub vault_key: String,
+    pub password_command: String,
     pub proxy_jump: String,
     pub forward_agent: bool,
     /// Seconds, as typed; empty means the default.
@@ -321,6 +327,9 @@ pub fn validate(draft: &Draft, others: &[&str], all: &[Connection]) -> Result<Co
     let vault_key = Some(draft.vault_key.trim())
         .filter(|k| !k.is_empty())
         .map(str::to_owned);
+    let password_command = Some(draft.password_command.trim())
+        .filter(|c| !c.is_empty())
+        .map(str::to_owned);
     let proxy_jump = split_list(&draft.proxy_jump).collect::<Vec<_>>();
     for t in &proxy_jump {
         hop(t, all)?;
@@ -353,6 +362,7 @@ pub fn validate(draft: &Draft, others: &[&str], all: &[Connection]) -> Result<Co
         tags: parse_tags(&draft.tags),
         proxy_command: None,
         vault_key,
+        password_command,
         proxy_jump: proxy_jump.join(", "),
         forward_agent: draft.forward_agent,
         agent_socket: None,
@@ -400,6 +410,41 @@ mod tests {
         let none = validate(&draft("web", "h", "", "u"), &[], &[]).unwrap();
         assert_eq!(none.vault_key, None);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_older_hosts_file_loads_unchanged_and_round_trips_without_the_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = r#"{"version":1,"connections":[{"name":"web","host":"h","port":22,"user":"u","vaultKey":"k"}]}"#;
+        std::fs::write(dir.path().join(FILE_NAME), old).unwrap();
+        let loaded = load(dir.path()).unwrap();
+        assert_eq!(loaded[0].password_command, None);
+        assert_eq!(loaded[0].vault_key.as_deref(), Some("k"));
+        save(dir.path(), &loaded).unwrap();
+        let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
+        assert!(!text.contains("passwordCommand"), "{text}");
+        assert_eq!(load(dir.path()).unwrap(), loaded);
+    }
+
+    #[test]
+    fn a_password_command_is_trimmed_and_kept_under_its_camel_case_name() {
+        let mut d = draft("web", "h", "", "u");
+        d.password_command = "  gopass show -o work/web ".into();
+        let c = validate(&d, &[], &[]).unwrap();
+        assert_eq!(
+            c.password_command.as_deref(),
+            Some("gopass show -o work/web")
+        );
+        let dir = tempfile::tempdir().unwrap();
+        save(dir.path(), std::slice::from_ref(&c)).unwrap();
+        let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
+        assert!(
+            text.contains(r#""passwordCommand": "gopass show -o work/web""#),
+            "{text}"
+        );
+        assert_eq!(load(dir.path()).unwrap(), vec![c]);
+        d.password_command = "   ".into();
+        assert_eq!(validate(&d, &[], &[]).unwrap().password_command, None);
     }
 
     #[test]

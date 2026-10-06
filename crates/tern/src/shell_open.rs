@@ -70,10 +70,10 @@ impl Shell {
             Launch::SshIdle(spec) => Launch::SshIdle(with_dev_known_hosts(spec)),
         };
         let theme = self.terminal_theme(alias);
-        let vault_keys = self.vault_keys_for(alias);
+        let auth = self.auth_for(alias);
         let session = Session::open(
             launch,
-            vault_keys,
+            auth,
             alias.to_owned(),
             self.settings.log_sessions,
             theme,

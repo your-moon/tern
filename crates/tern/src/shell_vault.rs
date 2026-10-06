@@ -440,6 +440,18 @@ impl Shell {
             .collect()
     }
 
+    /// What the session for `alias` may log in with besides answering the server's prompts.
+    pub(super) fn auth_for(&self, alias: &str) -> crate::password_command::Auth {
+        crate::password_command::Auth {
+            vault_keys: self.vault_keys_for(alias),
+            password_command: self
+                .connections
+                .iter()
+                .find(|c| c.name == alias)
+                .and_then(|c| c.password_command.clone()),
+        }
+    }
+
     // ---- passphrase, Keychain -------------------------------------------------------------
 
     pub(super) fn change_passphrase(&mut self, cx: &mut Context<Self>) {
