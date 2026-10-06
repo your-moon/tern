@@ -7,6 +7,9 @@ tern is held to a higher bar than the projects it copies from. These rules are e
   Errors are typed (`thiserror`) in libraries and reported to the user, never swallowed.
 - **No `unsafe`.** Forbidden workspace-wide.
 - **No god-files.** Every source file stays under 800 lines. Split by responsibility, not by size.
+- **Files: keep related code together.** Add to the closest related file while it stays under 800 lines;
+  split only when a file would cross the limit, along a real seam. Tests live in the module's own
+  `mod tests` unless that crosses the limit.
 - **Copy, don't invent — and say so.** Copied code keeps a `// Adapted from <repo> <path> (<license>).` header and is listed in `NOTICE.md`.
 - **Small seams.** `tern-ssh` knows nothing about GPUI; `tern-term` knows nothing about SSH. The app wires them.
 - **Idle means idle.** No per-frame loops; repaint only on new bytes, input or resize. Memory is a feature:
