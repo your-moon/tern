@@ -3,7 +3,7 @@
 //! The Settings page. ⌘, swaps the window body for it, as zeron does; Escape or Back returns.
 //! Every control writes `settings.json` at once.
 
-use crate::a11y::Accessible as _;
+use crate::hover::Accessible as _;
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, Context, InteractiveElement, IntoElement, ParentElement, SharedString,
@@ -295,7 +295,7 @@ impl Shell {
                         .cursor_pointer()
                         .on_click(cx.listener(|s, _, _, cx| {
                             s.update_settings(|st| st.reduce_motion = !st.reduce_motion, cx);
-                            crate::motion::apply(s.settings.reduce_motion, cx);
+                            crate::platform::apply_reduce_motion(s.settings.reduce_motion, cx);
                         }))
                         .child(w::toggle(&t, reduce, "reduce-motion")),
                 )),

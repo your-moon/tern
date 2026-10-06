@@ -1,11 +1,10 @@
 //! tern: a fast, low-memory SSH terminal.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-mod a11y;
+mod chrome;
 mod connections;
 #[cfg(debug_assertions)]
 mod devkeys;
-mod fonts;
 mod forward_spec;
 mod hover;
 mod icons;
@@ -13,15 +12,11 @@ mod keeper;
 mod keychain;
 mod keymap;
 mod login;
-mod menus;
-mod motion;
-mod pane;
 mod password_command;
 mod picker;
+mod platform;
 mod recent;
 mod reconnect;
-mod reveal;
-mod runtime;
 mod session;
 mod session_log;
 mod settings;
@@ -38,7 +33,6 @@ mod text_input;
 mod theme;
 mod theme_tint;
 mod themes;
-mod titlebar;
 mod vault_cli;
 mod vault_pin;
 mod wallpaper;
@@ -102,8 +96,8 @@ fn main() {
     gpui_platform::application()
         .with_assets(icons::Assets)
         .run(move |cx: &mut App| {
-            fonts::register(cx);
-            menus::init(cx);
+            platform::register_fonts(cx);
+            chrome::init_menus(cx);
             let keychain = settings::dir()
                 .map(|d| settings::Settings::load(&d).vault_keychain)
                 .unwrap_or(false);
@@ -114,7 +108,7 @@ fn main() {
                 .unwrap_or_default();
             cx.set_global(keymap);
             keymap::apply(cx);
-            if let Err(e) = runtime::SshRuntime::install(cx) {
+            if let Err(e) = platform::SshRuntime::install(cx) {
                 tracing::error!(error = %e, "ssh_runtime_start_failed");
                 cx.quit();
                 return;

@@ -15,8 +15,8 @@ use gpui::{
 };
 
 use super::{Section, Shell};
-use crate::a11y::Accessible as _;
 use crate::hover;
+use crate::hover::Accessible as _;
 use crate::icons::icon;
 use crate::shell::CubicBezier;
 use crate::theme::{self, SPACE_LG, SPACE_SM, Theme};

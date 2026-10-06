@@ -2,7 +2,7 @@
 //! Mac through a private GitHub gist (see `tern-sync`). The vault file travels as it is; the
 //! rest is sealed with the vault passphrase first, so GitHub only ever holds ciphertext.
 
-use crate::a11y::Accessible as _;
+use crate::hover::Accessible as _;
 use std::time::{Duration, Instant};
 
 use gpui::InteractiveElement as _;
@@ -474,7 +474,7 @@ impl Shell {
             return;
         };
         self.settings = crate::settings::Settings::load(&dir);
-        crate::motion::apply(self.settings.reduce_motion, cx);
+        crate::platform::apply_reduce_motion(self.settings.reduce_motion, cx);
         self.apply_appearance(cx);
         self.refresh_theme(cx);
         cx.set_global(crate::keymap::Keymap::load(&dir));

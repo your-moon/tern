@@ -3,7 +3,7 @@
 //! The building blocks of the Settings page, with zeron's sizes. zeron frosts its switch with
 //! gradients; tern's surfaces are opaque, so the flat tones are used.
 
-use crate::a11y::Accessible as _;
+use crate::hover::Accessible as _;
 use std::time::Instant;
 
 use gpui::prelude::FluentBuilder;

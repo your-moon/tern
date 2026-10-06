@@ -13,8 +13,8 @@ use tern_term::{Terminal, TerminalEvent, TerminalView};
 use crate::keeper::Keeper;
 use crate::login::Login;
 use crate::password_command::Auth;
+use crate::platform::SshRuntime;
 use crate::reconnect::{self, Backoff, Key};
-use crate::runtime::SshRuntime;
 use crate::session_log::{self, SessionLog};
 use tern_term::TerminalTheme;
 

@@ -1,7 +1,7 @@
 // Adapted from zeron crates/ui/src/shell.rs (JumpSession slot action, titlebar group rhythm) (MIT).
 //! Session tabs in the titlebar strip and the shortcuts that move between them.
 
-use crate::a11y::Accessible as _;
+use crate::hover::Accessible as _;
 use crate::hover::HoverFade as _;
 use std::time::Duration;
 

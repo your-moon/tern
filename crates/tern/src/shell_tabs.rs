@@ -112,7 +112,9 @@ impl Shell {
                     .unwrap_or_default();
                 self.toast(
                     super::Toast::new(super::ToastKind::Default, format!("Logging to {name}"))
-                        .action(crate::reveal::LABEL, move |_, _, cx| cx.reveal_path(&path)),
+                        .action(crate::platform::REVEAL_LABEL, move |_, _, cx| {
+                            cx.reveal_path(&path)
+                        }),
                     cx,
                 );
             }

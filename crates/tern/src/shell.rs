@@ -13,15 +13,15 @@ use gpui::{
 use tern_ssh::ConnectSpec;
 use tern_ssh::HostEntry;
 
+use crate::chrome::{self, DragGhost, SidebarResize, WidthTween};
 use crate::connections::{self, Connection};
-use crate::pane::{self, DragGhost, SidebarResize, WidthTween};
 use crate::picker::{self, Picker, ToggleHostPicker};
 use crate::session::{Launch, Session, Status};
 use crate::settings::{self, SIDEBAR_DEFAULT, Settings};
 use crate::split::{self, PaneId};
 use crate::tabs::{self, ActivateTab, CloseTab, NextTab, PrevTab, TabInfo};
 use crate::theme::{Theme, UI_FONT};
-use crate::{sidebar, statusline, titlebar};
+use crate::{sidebar, statusline};
 
 actions!(
     tern,
@@ -181,11 +181,11 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
         })
     })?;
     window.update(cx, |shell, window, cx| {
-        crate::motion::apply(shell.settings.reduce_motion, cx);
+        crate::platform::apply_reduce_motion(shell.settings.reduce_motion, cx);
         // macOS posts no notification gpui forwards, so re-read the preference whenever tern
         // comes to the front: the user changes it in System Settings, then switches back.
         cx.observe_window_activation(window, |shell, window, cx| {
-            crate::motion::apply(shell.settings.reduce_motion, cx);
+            crate::platform::apply_reduce_motion(shell.settings.reduce_motion, cx);
             if window.is_window_active() {
                 for pane in shell.tabs.iter().flat_map(|t| &t.panes) {
                     pane.session.update(cx, |s, cx| s.nudge(cx));
@@ -371,7 +371,7 @@ impl Shell {
 
     /// Live drag: follows the pointer without writing the file on every move.
     fn on_sidebar_drag(&mut self, x: f32, cx: &mut Context<Self>) {
-        self.settings.sidebar_width = frame_ui::snap(pane::dragged_width(x), self.frame.scale);
+        self.settings.sidebar_width = frame_ui::snap(chrome::dragged_width(x), self.frame.scale);
         self.settings.sidebar_collapsed = false;
         self.sidebar_tween = None;
         cx.notify();
@@ -383,8 +383,8 @@ impl Shell {
             .absolute()
             .top_0()
             .bottom_0()
-            .left(px(self.sidebar_now() - pane::HANDLE_HALF_WIDTH))
-            .w(px(pane::HANDLE_HALF_WIDTH * 2.0))
+            .left(px(self.sidebar_now() - chrome::HANDLE_HALF_WIDTH))
+            .w(px(chrome::HANDLE_HALF_WIDTH * 2.0))
             .occlude()
             .cursor_col_resize()
             .on_drag(SidebarResize, |_, _, _, cx| {
@@ -719,7 +719,7 @@ impl Render for Shell {
                     s.on_sidebar_drag(f32::from(e.event.position.x), cx)
                 }),
             )
-            .child(titlebar::render(
+            .child(chrome::render_titlebar(
                 &t,
                 window.is_fullscreen(),
                 !self.settings.sidebar_collapsed,

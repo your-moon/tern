@@ -12,7 +12,7 @@ use gpui::{
 };
 
 use super::Shell;
-use crate::a11y::Accessible as _;
+use crate::hover::Accessible as _;
 use crate::hover::HoverFade as _;
 use crate::theme::Theme;
 use crate::wallpaper_gallery::{self as data, BUILTINS, Builtin};

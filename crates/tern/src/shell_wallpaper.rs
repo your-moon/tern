@@ -3,7 +3,7 @@
 //! The wallpaper: loading it off the UI thread, drawing it as the hero of the empty view with a
 //! crossfade on change, taking the window's colours from it, and the Settings controls.
 
-use crate::a11y::Accessible as _;
+use crate::hover::Accessible as _;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 

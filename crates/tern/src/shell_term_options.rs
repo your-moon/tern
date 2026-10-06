@@ -1,7 +1,7 @@
 //! Settings → Terminal, and carrying those settings to every open terminal: cursor, scrollback,
 //! mouse habits and the bell. Rows follow the zeron settings widgets the other pages use.
 
-use crate::a11y::Accessible as _;
+use crate::hover::Accessible as _;
 use gpui::prelude::FluentBuilder;
 use gpui::{
     Context, Entity, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled,

@@ -302,7 +302,7 @@ impl Keymap {
 pub fn apply(cx: &mut App) {
     let keymap = cx.global::<Keymap>().clone();
     cx.clear_key_bindings();
-    cx.bind_keys(crate::menus::bindings());
+    cx.bind_keys(crate::chrome::menu_bindings());
     cx.bind_keys(crate::tabs::bindings());
     cx.bind_keys(crate::text_input::bindings());
     cx.bind_keys(keymap.bindings());

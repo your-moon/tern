@@ -446,7 +446,9 @@ impl Shell {
         tracing::info!(message = %message, "sftp_transfer_done");
         let mut toast = Toast::new(ToastKind::Positive, message);
         if let Some(path) = saved {
-            toast = toast.action(crate::reveal::LABEL, move |_, _, cx| cx.reveal_path(&path));
+            toast = toast.action(crate::platform::REVEAL_LABEL, move |_, _, cx| {
+                cx.reveal_path(&path)
+            });
         }
         self.toast(toast, cx);
     }

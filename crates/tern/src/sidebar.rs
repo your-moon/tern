@@ -4,7 +4,7 @@
 //! own connections, then `~/.ssh/config`), one-line rows, and a footer with sync and settings.
 //! Every row action lives in the right-click menu; hover shows a "…" that opens the same menu.
 
-use crate::a11y::Accessible as _;
+use crate::hover::Accessible as _;
 use crate::hover::HoverFade as _;
 use gpui::prelude::FluentBuilder;
 use gpui::{
