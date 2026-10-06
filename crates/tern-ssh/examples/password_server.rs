@@ -12,7 +12,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use russh::keys::{Algorithm, PrivateKey};
+use russh::keys::PrivateKey;
 use russh::server::{self, Auth, Msg, Session};
 use russh::{Channel, ChannelId, MethodKind, MethodSet};
 
@@ -103,7 +103,10 @@ async fn main() {
         },
         auth_rejection_time: Duration::ZERO,
         auth_rejection_time_initial: Some(Duration::ZERO),
-        keys: vec![PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519).unwrap()],
+        // A fixed key, so a restarted server is the same host to known_hosts (reconnect checks).
+        keys: vec![PrivateKey::from(
+            russh::keys::ssh_key::private::Ed25519Keypair::from_seed(&[7; 32]),
+        )],
         ..Default::default()
     });
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port))
