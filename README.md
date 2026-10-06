@@ -112,6 +112,17 @@ cargo install --locked --path crates/tern   # the `tern` command (tern <host>, t
 
 Losing a Mac doesn't lose your setup: see [docs/recovery.md](docs/recovery.md).
 
+## Architecture
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-dark.svg">
+    <img src="docs/architecture.svg" alt="tern architecture: the GPUI app (Shell, Session, Keeper) over the tern-term, tern-ssh, tern-vault and tern-sync crates, with the config dir, password manager, Keychain, Git repo, ~/.ssh and SSH servers around it" width="900">
+  </picture>
+</p>
+
+Server output reaches the screen in bounded 64 KiB chunks. When the UI falls behind, tern stops reading the socket rather than buffering without limit. Secrets live only in the Keeper, and come from the vault, the Keychain or a password command; the sync bundle is age-encrypted before it leaves the Mac. The editable source is [docs/architecture.excalidraw](docs/architecture.excalidraw): open it at excalidraw.com.
+
 ## Design and development
 
 - [Architecture](docs/architecture.html), [UI spec](docs/ui.md), [performance](docs/perf.md), and the [craft rules](CRAFT.md) every change passes.
