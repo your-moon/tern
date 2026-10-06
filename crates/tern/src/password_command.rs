@@ -290,6 +290,7 @@ mod tests {
         assert_eq!(plan(Some("c"), false, false), Step::Approve);
     }
 
+    #[cfg(unix)]
     #[test]
     fn stdout_is_the_password_minus_one_trailing_newline() {
         let ok = |c: &str| run(c, SHORT).unwrap().expose_secret().to_owned();
@@ -300,6 +301,7 @@ mod tests {
         assert_eq!(ok("printf 'ab '"), "ab ", "only a newline is trimmed");
     }
 
+    #[cfg(unix)]
     #[test]
     fn failures_carry_the_exit_code_and_first_stderr_line() {
         assert_eq!(
@@ -315,11 +317,13 @@ mod tests {
         assert_eq!(f.line(), "password command failed (exit 2): no such secret");
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_failing_command_never_yields_its_stdout() {
         assert!(run("echo leaked; exit 1", SHORT).is_err());
     }
 
+    #[cfg(unix)]
     #[test]
     fn empty_output_is_a_failure() {
         let f = run("true", SHORT).unwrap_err();
@@ -327,6 +331,7 @@ mod tests {
         assert!(run("printf '\\n'", SHORT).is_err());
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_slow_command_times_out_and_is_killed() {
         let started = Instant::now();
@@ -345,6 +350,7 @@ mod tests {
         assert_eq!(f.line(), "password command failed (exit 1): [31mred");
     }
 
+    #[cfg(unix)]
     #[test]
     fn the_path_gets_homebrew_and_go_bin_ahead_of_the_inherited_one() {
         assert_eq!(
@@ -354,6 +360,7 @@ mod tests {
         assert_eq!(command_path(None, None), "/opt/homebrew/bin:/usr/local/bin");
     }
 
+    #[cfg(unix)]
     #[test]
     fn the_command_sees_the_extended_path() {
         let out = run("printf %s \"$PATH\"", SHORT).unwrap();

@@ -166,6 +166,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn the_file_is_private_and_never_overwritten() {
         use std::os::unix::fs::PermissionsExt;

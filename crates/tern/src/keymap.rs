@@ -452,18 +452,23 @@ mod tests {
 
     #[test]
     fn overrides_fall_back_to_defaults_and_conflicts_name_the_owner() {
+        let (picker, quit) = if cfg!(target_os = "macos") {
+            ("cmd-k", "cmd-q")
+        } else {
+            ("ctrl-shift-k", "ctrl-shift-q")
+        };
         let mut k = Keymap::default();
-        assert_eq!(k.combo(ShortcutId::HostPicker), "cmd-k");
+        assert_eq!(k.combo(ShortcutId::HostPicker), picker);
         k.set(ShortcutId::HostPicker, "cmd-p");
         assert_eq!(k.combo(ShortcutId::HostPicker), "cmd-p");
         assert!(!k.is_default(ShortcutId::HostPicker));
         let refusal = k.refusal(ShortcutId::Settings, "cmd-p").unwrap();
         assert!(refusal.contains("Open host picker"), "{refusal}");
-        assert!(k.refusal(ShortcutId::Settings, "cmd-k").is_none());
+        assert!(k.refusal(ShortcutId::Settings, picker).is_none());
         // Re-recording a shortcut's own chord is not a conflict with itself.
         assert!(k.refusal(ShortcutId::HostPicker, "cmd-p").is_none());
-        assert!(k.refusal(ShortcutId::Settings, "cmd-q").is_some());
-        k.set(ShortcutId::HostPicker, "cmd-k");
+        assert!(k.refusal(ShortcutId::Settings, quit).is_some());
+        k.set(ShortcutId::HostPicker, picker);
         assert!(k.0.is_empty());
     }
 
@@ -477,11 +482,13 @@ mod tests {
                 "{id:?} is reserved"
             );
         }
-        assert_eq!(
-            Keymap::default().combo(ShortcutId::SearchHosts),
-            "cmd-shift-f"
-        );
-        assert_eq!(Keymap::default().combo(ShortcutId::Snippets), "cmd-shift-s");
+        let (search, snippets) = if cfg!(target_os = "macos") {
+            ("cmd-shift-f", "cmd-shift-s")
+        } else {
+            ("ctrl-alt-f", "ctrl-alt-s")
+        };
+        assert_eq!(Keymap::default().combo(ShortcutId::SearchHosts), search);
+        assert_eq!(Keymap::default().combo(ShortcutId::Snippets), snippets);
     }
 
     #[test]
