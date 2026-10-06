@@ -1,6 +1,6 @@
 //! Behaviour of each wallpaper effect and of the contrast guard, beyond zeron's own tests.
 
-use crate::wallpaper_fx::{Effect, render, safe_opacity};
+use crate::wallpaper_fx::{Effect, Guard, render, safe_opacity};
 
 fn solid(w: u32, h: u32, rgb: [u8; 3]) -> Vec<u8> {
     (0..w * h)
@@ -9,7 +9,7 @@ fn solid(w: u32, h: u32, rgb: [u8; 3]) -> Vec<u8> {
 }
 
 fn lit(out: &[u8]) -> usize {
-    out.chunks_exact(4).filter(|p| p[0] > 100).count()
+    out.as_chunks::<4>().0.iter().filter(|p| p[0] > 100).count()
 }
 
 #[test]
@@ -34,7 +34,7 @@ fn dither_lights_a_share_of_pixels_that_follows_brightness() {
     // Mid grey lights about half of a Bayer tile, not none and not all.
     assert!((100..160).contains(&lit(&mid)), "{}", lit(&mid));
     // A lit pixel is lifted to full peak brightness.
-    assert!(mid.chunks_exact(4).any(|p| p[0] == 255));
+    assert!(mid.as_chunks::<4>().0.iter().any(|p| p[0] == 255));
 }
 
 #[test]
@@ -42,7 +42,8 @@ fn ascii_prints_glyphs_only_where_the_image_is_bright() {
     let black = solid(12, 16, [0, 0, 0]);
     assert_eq!(render(black.clone(), 12, 16, Effect::Ascii, false), black);
     let out = render(solid(12, 16, [255, 255, 255]), 12, 16, Effect::Ascii, false);
-    let values: std::collections::HashSet<u8> = out.chunks_exact(4).map(|p| p[0]).collect();
+    let values: std::collections::HashSet<u8> =
+        out.as_chunks::<4>().0.iter().map(|p| p[0]).collect();
     assert!(values.len() > 1, "glyph pixels and gaps differ");
 }
 
@@ -56,7 +57,13 @@ fn halftone_dots_grow_with_brightness() {
         Effect::Halftone,
         false,
     );
-    let sum = |o: &[u8]| o.chunks_exact(4).map(|p| u32::from(p[0])).sum::<u32>();
+    let sum = |o: &[u8]| {
+        o.as_chunks::<4>()
+            .0
+            .iter()
+            .map(|p| u32::from(p[0]))
+            .sum::<u32>()
+    };
     assert!(sum(&dim) < sum(&bright));
 }
 
@@ -76,7 +83,20 @@ fn short_buffer_is_returned_untouched() {
 #[test]
 fn opacity_is_monotonic_in_image_brightness() {
     let (text, bg) = (0xE8E8EA, 0x060606);
-    let at = |v: u8| safe_opacity(solid(8, 8, [v, v, v]), 8, 8, text, bg, 1.0, 4.5, 1.0);
+    let at = |v: u8| {
+        safe_opacity(
+            &solid(8, 8, [v, v, v]),
+            8,
+            8,
+            Guard {
+                text_rgb: text,
+                background_rgb: bg,
+                region: 1.0,
+                min_contrast: 4.5,
+                max_opacity: 1.0,
+            },
+        )
+    };
     let (a, b, c) = (at(80), at(160), at(255));
     assert!(a >= b && b >= c, "{a} {b} {c}");
     assert!(c < a);
@@ -85,26 +105,73 @@ fn opacity_is_monotonic_in_image_brightness() {
 #[test]
 fn safe_opacity_never_exceeds_the_cap_and_judges_the_bright_tail() {
     let (text, bg) = (0xE8E8EA, 0x060606);
-    let capped = safe_opacity(solid(8, 8, [0, 0, 0]), 8, 8, text, bg, 1.0, 4.5, 0.4);
+    let capped = safe_opacity(
+        &solid(8, 8, [0, 0, 0]),
+        8,
+        8,
+        Guard {
+            text_rgb: text,
+            background_rgb: bg,
+            region: 1.0,
+            min_contrast: 4.5,
+            max_opacity: 0.4,
+        },
+    );
     assert!((capped - 0.4).abs() < 1e-6);
     // A lone white pixel is below the 95th-percentile tail and must not count; four rows must.
     let whiten = |img: &mut [u8], rows: usize| {
-        for p in img.chunks_exact_mut(4).take(rows * 10) {
+        for p in img.as_chunks_mut::<4>().0.iter_mut().take(rows * 10) {
             p[..3].copy_from_slice(&[255, 255, 255]);
         }
     };
     let mut img = solid(10, 10, [0, 0, 0]);
     img[..3].copy_from_slice(&[255, 255, 255]);
-    let few = safe_opacity(img.clone(), 10, 10, text, bg, 1.0, 4.5, 1.0);
+    let few = safe_opacity(
+        &img.clone(),
+        10,
+        10,
+        Guard {
+            text_rgb: text,
+            background_rgb: bg,
+            region: 1.0,
+            min_contrast: 4.5,
+            max_opacity: 1.0,
+        },
+    );
     whiten(&mut img, 4);
-    let many = safe_opacity(img, 10, 10, text, bg, 1.0, 4.5, 1.0);
+    let many = safe_opacity(
+        &img,
+        10,
+        10,
+        Guard {
+            text_rgb: text,
+            background_rgb: bg,
+            region: 1.0,
+            min_contrast: 4.5,
+            max_opacity: 1.0,
+        },
+    );
     assert!((few - 1.0).abs() < 1e-6, "{few}");
     assert!(many < 0.9, "{many}");
 }
 
 #[test]
 fn degenerate_input_gives_zero_opacity() {
-    assert_eq!(safe_opacity(vec![], 0, 0, 0xFF_FFFF, 0, 1.0, 4.5, 1.0), 0.0);
+    assert_eq!(
+        safe_opacity(
+            &[],
+            0,
+            0,
+            Guard {
+                text_rgb: 0xFF_FFFF,
+                background_rgb: 0,
+                region: 1.0,
+                min_contrast: 4.5,
+                max_opacity: 1.0
+            }
+        ),
+        0.0
+    );
 }
 
 #[test]

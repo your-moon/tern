@@ -131,7 +131,7 @@ fn ascii(s: &Source, light: bool) -> Vec<u8> {
 fn halftone(s: &Source, light: bool) -> Vec<u8> {
     let paper = if light { 255u8 } else { 0 };
     let mut out = vec![0u8; s.rgba.len()];
-    for px in out.chunks_exact_mut(4) {
+    for px in out.as_chunks_mut::<4>().0.iter_mut() {
         px.copy_from_slice(&[paper, paper, paper, 255]);
     }
     for y in (0..s.h).step_by(4) {
@@ -207,21 +207,30 @@ fn contrast(a: f32, b: f32) -> f32 {
     (hi + 0.05) / (lo + 0.05)
 }
 
+/// What the artwork must not wash out: the text colour over the surface colour (both `0xRRGGBB`),
+/// how much of the image's top the text covers, and the contrast it must keep.
+#[derive(Debug, Clone, Copy)]
+pub struct Guard {
+    pub text_rgb: u32,
+    pub background_rgb: u32,
+    pub region: f32,
+    pub min_contrast: f32,
+    pub max_opacity: f32,
+}
+
 /// The highest opacity the artwork may be drawn at over `background_rgb` so
 /// `text_rgb` keeps `min_contrast` (WCAG) against the *worst* part of the top
 /// `region` (0–1, fraction of the image height where text sits): the bright
 /// tail when text is light, the dark tail when text is dark. Clamped to
 /// [0, `max_opacity`].
-pub fn safe_opacity(
-    rgba: Vec<u8>,
-    width: u32,
-    height: u32,
-    text_rgb: u32,
-    background_rgb: u32,
-    region: f32,
-    min_contrast: f32,
-    max_opacity: f32,
-) -> f32 {
+pub fn safe_opacity(rgba: &[u8], width: u32, height: u32, guard: Guard) -> f32 {
+    let Guard {
+        text_rgb,
+        background_rgb,
+        region,
+        min_contrast,
+        max_opacity,
+    } = guard;
     if width == 0 || height == 0 || rgba.len() < (width * height * 4) as usize {
         return 0.0;
     }
@@ -309,23 +318,47 @@ mod tests {
         // hard; a black image can show fully.
         let text = 0xE8E8EA;
         let bg = 0x060606;
-        let white = safe_opacity(solid(8, 8, [255, 255, 255]), 8, 8, text, bg, 1.0, 4.5, 1.0);
+        let white = safe_opacity(
+            &solid(8, 8, [255, 255, 255]),
+            8,
+            8,
+            Guard {
+                text_rgb: text,
+                background_rgb: bg,
+                region: 1.0,
+                min_contrast: 4.5,
+                max_opacity: 1.0,
+            },
+        );
         assert!(white < 0.5, "{white}");
         let g = |v: f32| (v * 255.0 + (1.0 - v) * 6.0).round() as u32;
         let over = g(white) << 16 | g(white) << 8 | g(white);
         assert!(contrast(rel_luminance(text), rel_luminance(over)) >= 4.5 - 0.05);
-        let black = safe_opacity(solid(8, 8, [0, 0, 0]), 8, 8, text, bg, 1.0, 4.5, 1.0);
+        let black = safe_opacity(
+            &solid(8, 8, [0, 0, 0]),
+            8,
+            8,
+            Guard {
+                text_rgb: text,
+                background_rgb: bg,
+                region: 1.0,
+                min_contrast: 4.5,
+                max_opacity: 1.0,
+            },
+        );
         assert!((black - 1.0).abs() < 1e-6);
         // Light theme (dark text on white): a dark image is the threat.
         let dark = safe_opacity(
-            solid(8, 8, [20, 20, 40]),
+            &solid(8, 8, [20, 20, 40]),
             8,
             8,
-            0x303035,
-            0xF3F3F5,
-            1.0,
-            4.5,
-            1.0,
+            Guard {
+                text_rgb: 0x303035,
+                background_rgb: 0xF3F3F5,
+                region: 1.0,
+                min_contrast: 4.5,
+                max_opacity: 1.0,
+            },
         );
         assert!(dark < 0.75, "{dark}");
         assert!(dark > 0.2, "{dark}");
