@@ -65,15 +65,17 @@ const VERSION: u32 = 1;
 /// scrypt cost, log2(N). age's own default targets about a second; 18 is that on current Macs.
 const WORK_FACTOR: u8 = 18;
 
-/// A new file only the owner can read.
+/// A new file only the owner can read (mode 0600; on Windows the file inherits the owner-only
+/// access of the user's profile directory it is written under).
 fn private_file(path: &Path) -> io::Result<std::fs::File> {
-    use std::os::unix::fs::OpenOptionsExt as _;
-    std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(path)
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.mode(0o600);
+    }
+    options.open(path)
 }
 
 /// An unlocked vault: secrets in memory, the passphrase kept to re-encrypt on save.

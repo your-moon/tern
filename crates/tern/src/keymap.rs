@@ -3,6 +3,14 @@
 //! Every rebindable shortcut, the user's overrides in `keymap.json`, and the pure helpers the
 //! Shortcuts page records with. ⌘ chords belong to tern; everything else reaches the remote
 //! shell, so a recorded shortcut must use ⌘, ⌃ or ⌥ (or be a function key).
+//!
+//! Windows and Linux. ⌘ is the Super key there, which window managers keep, so the defaults
+//! are a second table (`other_combo`) built on the rule terminals on those systems follow: plain
+//! Ctrl-<letter> belongs to the shell (^C, ^D, ^W, ^K, ^R, ^B, ^N ...), so an app shortcut is
+//! Ctrl+Shift-<key>, or Ctrl+Alt-<key> where Ctrl+Shift is already taken (the terminal's own
+//! copy, paste and find use Ctrl+Shift+C/V/F). Keys that send nothing to a shell (Ctrl+comma,
+//! Ctrl+=, Ctrl+-, Ctrl+0) stay plain Ctrl. The file stores combos in the same `cmd-`/`ctrl-`
+//! spelling everywhere; a combo recorded on one system binds as written on the other.
 
 use std::collections::BTreeMap;
 use std::io;
@@ -87,7 +95,7 @@ impl ShortcutId {
         }
     }
 
-    pub fn default_combo(self) -> &'static str {
+    fn mac_combo(self) -> &'static str {
         match self {
             ShortcutId::HostPicker => "cmd-k",
             ShortcutId::SearchHosts => "cmd-shift-f",
@@ -109,6 +117,40 @@ impl ShortcutId {
             ShortcutId::FontSmaller => "cmd--",
             ShortcutId::FontReset => "cmd-0",
             ShortcutId::FillPassword => "cmd-\\",
+        }
+    }
+
+    fn other_combo(self) -> &'static str {
+        match self {
+            ShortcutId::HostPicker => "ctrl-shift-k",
+            ShortcutId::SearchHosts => "ctrl-alt-f",
+            ShortcutId::Snippets => "ctrl-alt-s",
+            ShortcutId::NewConnection => "ctrl-shift-n",
+            ShortcutId::SplitRight => "ctrl-shift-d",
+            ShortcutId::SplitDown => "ctrl-alt-d",
+            ShortcutId::PaneLeft => "ctrl-alt-left",
+            ShortcutId::PaneRight => "ctrl-alt-right",
+            ShortcutId::PaneUp => "ctrl-alt-up",
+            ShortcutId::PaneDown => "ctrl-alt-down",
+            ShortcutId::Settings => "ctrl-,",
+            ShortcutId::ToggleSidebar => "ctrl-shift-b",
+            ShortcutId::BrowseFiles => "ctrl-alt-o",
+            ShortcutId::CloseTab => "ctrl-shift-w",
+            ShortcutId::NextTab => "ctrl-shift-]",
+            ShortcutId::PrevTab => "ctrl-shift-[",
+            ShortcutId::FontBigger => "ctrl-=",
+            ShortcutId::FontSmaller => "ctrl--",
+            ShortcutId::FontReset => "ctrl-0",
+            // Ctrl+\ alone is SIGQUIT in a terminal.
+            ShortcutId::FillPassword => "ctrl-shift-\\",
+        }
+    }
+
+    pub fn default_combo(self) -> &'static str {
+        if cfg!(target_os = "macos") {
+            self.mac_combo()
+        } else {
+            self.other_combo()
         }
     }
 
@@ -146,7 +188,7 @@ impl ShortcutId {
 
 /// Chords tern keeps for itself outside the keymap: the menu's (quit, hide, minimise),
 /// clipboard, and tab slots.
-const RESERVED: [&str; 7] = [
+const RESERVED_MAC: [&str; 7] = [
     "cmd-q",
     "cmd-h",
     "alt-cmd-h",
@@ -155,6 +197,20 @@ const RESERVED: [&str; 7] = [
     "cmd-v",
     "cmd-a",
 ];
+
+/// Quit, and the terminal's copy / paste / find (see `tern-term`'s `view`).
+const RESERVED_OTHER: [&str; 4] = [
+    "ctrl-shift-q",
+    "ctrl-shift-c",
+    "ctrl-shift-v",
+    "ctrl-shift-f",
+];
+
+const RESERVED: &[&str] = if cfg!(target_os = "macos") {
+    &RESERVED_MAC
+} else {
+    &RESERVED_OTHER
+};
 
 /// The user's overrides; an empty string unbinds. Anything absent uses its default.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -212,7 +268,7 @@ impl Keymap {
     pub fn refusal(&self, id: ShortcutId, combo: &str) -> Option<String> {
         if RESERVED.contains(&combo) {
             return Some(format!(
-                "{} is kept by macOS or the clipboard",
+                "{} is kept for quitting and the clipboard",
                 badge(combo)
             ));
         }
@@ -296,8 +352,12 @@ pub fn record(key: &str, ctrl: bool, alt: bool, shift: bool, cmd: bool) -> Recor
     Record::Set(parts.join("-"))
 }
 
-/// `cmd-shift-]` → `⇧⌘]`, in the macOS menu order ⌃⌥⇧⌘.
+/// `cmd-shift-]` → `⇧⌘]` on macOS, in its menu order ⌃⌥⇧⌘; `Ctrl+Shift+]` elsewhere.
 pub fn badge(combo: &str) -> String {
+    badge_for(combo, cfg!(target_os = "macos"))
+}
+
+fn badge_for(combo: &str, mac: bool) -> String {
     if combo.is_empty() {
         return "—".into();
     }
@@ -307,18 +367,45 @@ pub fn badge(combo: &str) -> String {
         None => combo.rsplit_once('-').unwrap_or(("", combo)),
     };
     let parts: Vec<&str> = mods.split('-').collect();
-    let mut out = String::new();
-    for (name, glyph) in [("ctrl", '⌃'), ("alt", '⌥'), ("shift", '⇧'), ("cmd", '⌘')] {
-        if parts.contains(&name) {
-            out.push(glyph);
-        }
-    }
+    let mut key_label = String::new();
     let mut chars = key.chars();
     if let Some(first) = chars.next() {
-        out.extend(first.to_uppercase());
-        out.push_str(chars.as_str());
+        key_label.extend(first.to_uppercase());
+        key_label.push_str(chars.as_str());
     }
+    if mac {
+        let mut out = String::new();
+        for (name, glyph) in [("ctrl", '⌃'), ("alt", '⌥'), ("shift", '⇧'), ("cmd", '⌘')] {
+            if parts.contains(&name) {
+                out.push(glyph);
+            }
+        }
+        out.push_str(&key_label);
+        return out;
+    }
+    let mut out = String::new();
+    for (name, word) in [
+        ("ctrl", "Ctrl"),
+        ("alt", "Alt"),
+        ("shift", "Shift"),
+        ("cmd", "Super"),
+    ] {
+        if parts.contains(&name) {
+            out.push_str(word);
+            out.push('+');
+        }
+    }
+    out.push_str(&key_label);
     out
+}
+
+/// A fixed chord as the settings page shows it: ⌘ on macOS, Ctrl elsewhere.
+pub fn primary_hint(key: &str) -> String {
+    if cfg!(target_os = "macos") {
+        format!("⌘{key}")
+    } else {
+        format!("Ctrl+{key}")
+    }
 }
 
 #[cfg(test)]
@@ -354,26 +441,34 @@ mod tests {
 
     #[test]
     fn badges_read_like_macos_menus() {
-        assert_eq!(badge("cmd-shift-]"), "⇧⌘]");
-        assert_eq!(badge("cmd--"), "⌘-");
-        assert_eq!(badge("ctrl-alt-cmd-k"), "⌃⌥⌘K");
+        assert_eq!(badge_for("cmd-shift-]", true), "⇧⌘]");
+        assert_eq!(badge_for("ctrl-shift-]", false), "Ctrl+Shift+]");
+        assert_eq!(badge_for("cmd--", true), "⌘-");
+        assert_eq!(badge_for("ctrl--", false), "Ctrl+-");
+        assert_eq!(badge_for("ctrl-alt-cmd-k", true), "⌃⌥⌘K");
+        assert_eq!(badge_for("ctrl-alt-left", false), "Ctrl+Alt+Left");
         assert_eq!(badge(""), "—");
     }
 
     #[test]
     fn overrides_fall_back_to_defaults_and_conflicts_name_the_owner() {
+        let (picker, quit) = if cfg!(target_os = "macos") {
+            ("cmd-k", "cmd-q")
+        } else {
+            ("ctrl-shift-k", "ctrl-shift-q")
+        };
         let mut k = Keymap::default();
-        assert_eq!(k.combo(ShortcutId::HostPicker), "cmd-k");
+        assert_eq!(k.combo(ShortcutId::HostPicker), picker);
         k.set(ShortcutId::HostPicker, "cmd-p");
         assert_eq!(k.combo(ShortcutId::HostPicker), "cmd-p");
         assert!(!k.is_default(ShortcutId::HostPicker));
         let refusal = k.refusal(ShortcutId::Settings, "cmd-p").unwrap();
         assert!(refusal.contains("Open host picker"), "{refusal}");
-        assert!(k.refusal(ShortcutId::Settings, "cmd-k").is_none());
+        assert!(k.refusal(ShortcutId::Settings, picker).is_none());
         // Re-recording a shortcut's own chord is not a conflict with itself.
         assert!(k.refusal(ShortcutId::HostPicker, "cmd-p").is_none());
-        assert!(k.refusal(ShortcutId::Settings, "cmd-q").is_some());
-        k.set(ShortcutId::HostPicker, "cmd-k");
+        assert!(k.refusal(ShortcutId::Settings, quit).is_some());
+        k.set(ShortcutId::HostPicker, picker);
         assert!(k.0.is_empty());
     }
 
@@ -387,11 +482,44 @@ mod tests {
                 "{id:?} is reserved"
             );
         }
-        assert_eq!(
-            Keymap::default().combo(ShortcutId::SearchHosts),
-            "cmd-shift-f"
-        );
-        assert_eq!(Keymap::default().combo(ShortcutId::Snippets), "cmd-shift-s");
+        let (search, snippets) = if cfg!(target_os = "macos") {
+            ("cmd-shift-f", "cmd-shift-s")
+        } else {
+            ("ctrl-alt-f", "ctrl-alt-s")
+        };
+        assert_eq!(Keymap::default().combo(ShortcutId::SearchHosts), search);
+        assert_eq!(Keymap::default().combo(ShortcutId::Snippets), snippets);
+    }
+
+    #[test]
+    fn each_platform_table_has_distinct_chords() {
+        for table in [ShortcutId::mac_combo, ShortcutId::other_combo] {
+            let mut seen = std::collections::BTreeSet::new();
+            for id in ShortcutId::ALL {
+                assert!(seen.insert(table(id)), "{} is bound twice", table(id));
+            }
+        }
+    }
+
+    #[test]
+    fn windows_and_linux_defaults_leave_the_shells_control_keys_alone() {
+        for id in ShortcutId::ALL {
+            let combo = id.other_combo();
+            assert!(
+                !combo.contains("cmd"),
+                "{combo}: Super belongs to the desktop"
+            );
+            let parts: Vec<&str> = combo.split('-').collect();
+            let plain_ctrl_letter = parts.first() == Some(&"ctrl")
+                && parts.len() == 2
+                && parts[1].len() == 1
+                && parts[1].as_bytes()[0].is_ascii_alphabetic();
+            assert!(
+                !plain_ctrl_letter,
+                "{combo} would steal a control character"
+            );
+            assert!(!RESERVED_OTHER.contains(&combo), "{combo} is reserved");
+        }
     }
 
     #[test]

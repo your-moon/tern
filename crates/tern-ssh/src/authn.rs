@@ -101,14 +101,25 @@ impl<'a> Authenticator<'a> {
         Err(Failure::AuthFailed)
     }
 
+    /// The local agent: `$SSH_AUTH_SOCK` on Unix, the OpenSSH agent's named pipe on Windows.
     async fn try_agent(&mut self) -> Result<bool, Failure> {
-        let mut agent = match AgentClient::connect_env().await {
-            Ok(a) => a,
+        #[cfg(unix)]
+        let connected = AgentClient::connect_env().await;
+        #[cfg(windows)]
+        let connected = AgentClient::connect_named_pipe(crate::agent::WINDOWS_AGENT_PIPE).await;
+        match connected {
+            Ok(agent) => self.sign_with_agent(agent).await,
             Err(e) => {
                 tracing::debug!(error = %e, "ssh_agent_unavailable");
-                return Ok(false);
+                Ok(false)
             }
-        };
+        }
+    }
+
+    async fn sign_with_agent<S>(&mut self, mut agent: AgentClient<S>) -> Result<bool, Failure>
+    where
+        S: russh::keys::agent::client::AgentStream + Unpin + Send + 'static,
+    {
         let identities = match agent.request_identities().await {
             Ok(i) => i,
             Err(e) => {

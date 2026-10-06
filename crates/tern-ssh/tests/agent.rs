@@ -1,5 +1,7 @@
 //! Agent forwarding: the server opens an agent channel and it reaches (or does not reach) a
 //! local socket. The socket here is a test echo, standing in for ssh-agent.
+// The stand-in agent is a Unix socket; Windows forwards to a named pipe instead.
+#![cfg(unix)]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod common;

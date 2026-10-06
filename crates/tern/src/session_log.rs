@@ -3,15 +3,16 @@
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, BufWriter, Write};
+#[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use strip_ansi_escapes::Writer as Stripper;
 
-/// `~/Library/Logs/tern/sessions`, where every log goes.
+/// `sessions` in the log directory, where every log goes.
 pub fn directory() -> Option<PathBuf> {
-    std::env::home_dir().map(|home| home.join("Library/Logs/tern/sessions"))
+    crate::settings::log_dir().map(|dir| dir.join("sessions"))
 }
 
 pub struct SessionLog {
@@ -38,11 +39,11 @@ impl SessionLog {
         std::fs::create_dir_all(dir)?;
         let stamp = timestamp(now);
         let path = dir.join(format!("{}-{stamp}.log", file_stem(alias)));
-        let file = OpenOptions::new()
-            .create_new(true)
-            .write(true)
-            .mode(0o600)
-            .open(&path)?;
+        let mut options = OpenOptions::new();
+        options.create_new(true).write(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        let file = options.open(&path)?;
         let mut out = Stripper::new(BufWriter::new(file));
         writeln!(out, "# tern session log: {alias}, started {stamp}")?;
         out.flush()?;
@@ -165,6 +166,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn the_file_is_private_and_never_overwritten() {
         use std::os::unix::fs::PermissionsExt;

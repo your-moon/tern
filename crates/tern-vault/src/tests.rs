@@ -163,6 +163,7 @@ fn a_crash_between_write_and_rename_leaves_the_old_vault_readable() {
     assert_eq!(new.len(), 3);
 }
 
+#[cfg(unix)]
 #[test]
 fn saved_file_is_private_to_the_owner() {
     use std::os::unix::fs::PermissionsExt as _;

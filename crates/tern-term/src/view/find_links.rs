@@ -117,7 +117,7 @@ impl TerminalView {
                 Some(text) => paste_into(query, &text),
                 None => FindKey::Ignored,
             }
-        } else if ks.key == "g" && mods.platform {
+        } else if ks.key == "g" && (mods.platform || mods.control) {
             if mods.shift {
                 FindKey::Prev
             } else {
