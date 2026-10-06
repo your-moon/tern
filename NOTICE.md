@@ -12,5 +12,6 @@ tern is GPL-3.0-or-later. It copies and adapts code from the projects below; eac
 | alacritty/alacritty (`alacritty_terminal` crate) | Apache-2.0 | VT emulation (dependency) |
 | veeso/ssh2-config | MIT | `~/.ssh/config` parsing (dependency) |
 | mbadolato/iTerm2-Color-Schemes (Ghostty format) | MIT | terminal colour schemes, `crates/tern/assets/themes.txt` |
+| Solar Icons by 480 Design (via zeron) | CC BY 4.0 | UI icons, `crates/tern/assets/icons` |
 | daangn/seed-design | MIT | snackbar sizes, colours, motion and behaviour |
 | vercel/geist-font (via zeron) | SIL OFL 1.1 | Geist and Geist Mono fonts, `crates/tern/assets/fonts` |

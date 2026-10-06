@@ -2,13 +2,21 @@
 //! The custom titlebar: app name, tabs, and an empty strip that drags the window.
 
 use gpui::{
-    FontWeight, InteractiveElement, IntoElement, MouseButton, ParentElement, Styled,
-    WindowControlArea, div, px,
+    InteractiveElement, IntoElement, MouseButton, ParentElement, StatefulInteractiveElement,
+    Styled, WindowControlArea, div, px,
 };
 
 use crate::theme::{SPACE_SM, TITLEBAR_HEIGHT, TITLEBAR_TOP_PAD, Theme, titlebar_content_start};
 
-pub fn render(t: &Theme, fullscreen: bool, tabs: impl IntoElement) -> impl IntoElement {
+/// zeron's titlebar cluster: the sidebar toggle and + (find a host) at x = 88, 24 pt buttons,
+/// 16 pt icons, then the tabs.
+pub fn render(
+    t: &Theme,
+    fullscreen: bool,
+    sidebar_open: bool,
+    tabs: impl IntoElement,
+    cx: &mut gpui::Context<crate::shell::Shell>,
+) -> impl IntoElement {
     div()
         .h(px(TITLEBAR_HEIGHT))
         .flex_none()
@@ -20,11 +28,23 @@ pub fn render(t: &Theme, fullscreen: bool, tabs: impl IntoElement) -> impl IntoE
         .gap(px(SPACE_SM))
         .child(
             div()
-                .flex_none()
-                .text_sm()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(t.muted)
-                .child("tern"),
+                .flex()
+                .items_center()
+                .gap(px(2.))
+                .child(
+                    control("toggle-sidebar", t)
+                        .on_click(cx.listener(|s, _, _, cx| s.toggle_sidebar(cx)))
+                        .child(crate::icons::sidebar_glyph(sidebar_open, 16., t.muted)),
+                )
+                .child(
+                    control("find-host", t)
+                        .on_click(cx.listener(|s, _, w, cx| s.toggle_picker(w, cx)))
+                        .child(
+                            crate::icons::icon(crate::icons::PLUS)
+                                .size(px(16.))
+                                .text_color(t.muted),
+                        ),
+                ),
         )
         .child(tabs)
         .child(
@@ -36,4 +56,18 @@ pub fn render(t: &Theme, fullscreen: bool, tabs: impl IntoElement) -> impl IntoE
                 .window_control_area(WindowControlArea::Drag)
                 .on_mouse_down(MouseButton::Left, |_, window, _| window.start_window_move()),
         )
+}
+
+fn control(id: &'static str, t: &Theme) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .size(px(24.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(6.))
+        .cursor_pointer()
+        .hover(|s| s.bg(t.ink(0.11)))
+        .occlude()
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
 }

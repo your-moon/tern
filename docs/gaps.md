@@ -8,14 +8,14 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 
 | # | Gap | Today in tern | zeron |
 | --- | --- | --- | --- |
-| L1 | Icons | Unicode glyphs (◐ ✎ × ⧉ +) | Solar SVG icons everywhere (assets now bundled) |
-| L2 | Sidebar rows | Two lines, ~56 px, address under the name | One line ~32 px: dot, icon, name, faint meta on the right |
-| L3 | Hover actions | Three invisible buttons reserve width, so addresses truncate early | A single "…" on hover; actions in the right-click menu |
-| L4 | Section headers | Plain "Hosts" and "~/.ssh/config" labels | "Sessions" with a collapse chevron |
-| L5 | Sidebar footer | None | Account avatar + settings gear |
-| L6 | Titlebar controls | None next to the traffic lights | Sidebar toggle, back/forward, + |
-| L7 | Menus | Text only | 16 px icon per item, submenu chevrons |
-| L8 | Settings nav | Text only | Icon per section |
+| ✓ L1 | Icons | Unicode glyphs (◐ ✎ × ⧉ +) | Solar SVG icons everywhere (assets now bundled) |
+| ✓ L2 | Sidebar rows | Two lines, ~56 px, address under the name | One line ~32 px: dot, icon, name, faint meta on the right |
+| ✓ L3 | Hover actions | Three invisible buttons reserve width, so addresses truncate early | A single "…" on hover; actions in the right-click menu |
+| ✓ L4 | Section headers | Plain "Hosts" and "~/.ssh/config" labels | "Sessions" with a collapse chevron |
+| ✓ L5 | Sidebar footer | None | Account avatar + settings gear |
+| ✓ L6 | Titlebar controls | None next to the traffic lights | Sidebar toggle, back/forward, + |
+| ✓ L7 | Menus | Text only | 16 px icon per item, submenu chevrons |
+| ✓ L8 | Settings nav | Text only | Icon per section |
 | L9 | Light appearance | Dark only | Light, dark, follow system |
 | L10 | Empty states | Text and shortcuts | Illustration-free but iconised, with primary action buttons |
 | L11 | Status | Dot only | Status line under the panel (zeron: checkout, branch, usage) — tern: host, latency, session time |

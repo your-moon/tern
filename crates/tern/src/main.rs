@@ -4,6 +4,7 @@ mod connections;
 #[cfg(debug_assertions)]
 mod devkeys;
 mod fonts;
+mod icons;
 mod keeper;
 mod keymap;
 mod login;
@@ -30,44 +31,46 @@ fn main() {
     log_panics();
     let _app = tracing::info_span!("app", service = "tern", env = env()).entered();
     let target = std::env::args().nth(1);
-    gpui_platform::application().run(move |cx: &mut App| {
-        fonts::register(cx);
-        menus::init(cx);
-        keeper::Keeper::install(cx);
-        let keymap = settings::dir()
-            .map(|d| keymap::Keymap::load(&d))
-            .unwrap_or_default();
-        cx.set_global(keymap);
-        keymap::apply(cx);
-        if let Err(e) = runtime::SshRuntime::install(cx) {
-            tracing::error!(error = %e, "ssh_runtime_start_failed");
-            cx.quit();
-            return;
-        }
-        let window = match shell::open_main_window(cx) {
-            Ok(w) => w,
-            Err(e) => {
-                tracing::error!(error = %e, "window_open_failed");
+    gpui_platform::application()
+        .with_assets(icons::Assets)
+        .run(move |cx: &mut App| {
+            fonts::register(cx);
+            menus::init(cx);
+            keeper::Keeper::install(cx);
+            let keymap = settings::dir()
+                .map(|d| keymap::Keymap::load(&d))
+                .unwrap_or_default();
+            cx.set_global(keymap);
+            keymap::apply(cx);
+            if let Err(e) = runtime::SshRuntime::install(cx) {
+                tracing::error!(error = %e, "ssh_runtime_start_failed");
                 cx.quit();
                 return;
             }
-        };
-        if let Some(target) = target {
-            let _ = window.update(cx, |shell, window, cx| {
-                shell.connect_target(&target, window, cx)
-            });
-        }
-        #[cfg(debug_assertions)]
-        devkeys::replay(window, cx);
-        cx.on_window_closed(|cx, _| {
-            if cx.windows().is_empty() {
-                cx.quit();
+            let window = match shell::open_main_window(cx) {
+                Ok(w) => w,
+                Err(e) => {
+                    tracing::error!(error = %e, "window_open_failed");
+                    cx.quit();
+                    return;
+                }
+            };
+            if let Some(target) = target {
+                let _ = window.update(cx, |shell, window, cx| {
+                    shell.connect_target(&target, window, cx)
+                });
             }
-        })
-        .detach();
-        cx.activate(true);
-        tracing::info!("app_started");
-    });
+            #[cfg(debug_assertions)]
+            devkeys::replay(window, cx);
+            cx.on_window_closed(|cx, _| {
+                if cx.windows().is_empty() {
+                    cx.quit();
+                }
+            })
+            .detach();
+            cx.activate(true);
+            tracing::info!("app_started");
+        });
 }
 
 /// A panic is also written to `~/Library/Logs/tern/panic.log` with a backtrace: launched from

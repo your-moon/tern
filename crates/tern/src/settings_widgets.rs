@@ -127,7 +127,13 @@ pub fn row(
 
 /// Left-nav entry: radius 8, 8×6 padding, at least 32 tall, 13 pt; the selected one is
 /// medium weight on an 11% wash.
-pub fn nav_tab(t: &Theme, selected: bool, id: &'static str, label: &'static str) -> Stateful<Div> {
+pub fn nav_tab(
+    t: &Theme,
+    selected: bool,
+    id: &'static str,
+    label: &'static str,
+    glyph: Option<&'static str>,
+) -> Stateful<Div> {
     div()
         .id(id)
         .flex()
@@ -147,6 +153,13 @@ pub fn nav_tab(t: &Theme, selected: bool, id: &'static str, label: &'static str)
         .when(!selected, |el| {
             el.text_color(t.muted)
                 .hover(|s| s.bg(t.row_hover).text_color(t.text))
+        })
+        .when_some(glyph, |el, g| {
+            el.child(crate::icons::icon(g).size(px(16.)).text_color(if selected {
+                t.text
+            } else {
+                t.muted
+            }))
         })
         .child(label)
 }

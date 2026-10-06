@@ -13,12 +13,14 @@ use tern_ssh::{ConnectSpec, HostEntry};
 
 use super::{Shell, ThemeTarget};
 use crate::connections::Connection;
+use crate::icons::{self, icon};
 use crate::session::Status;
 
 type Run = Rc<dyn Fn(&mut Shell, &mut Window, &mut Context<Shell>)>;
 
 enum Item {
     Action {
+        icon: &'static str,
         label: &'static str,
         destructive: bool,
         run: Run,
@@ -27,10 +29,12 @@ enum Item {
 }
 
 fn action(
+    icon: &'static str,
     label: &'static str,
     run: impl Fn(&mut Shell, &mut Window, &mut Context<Shell>) + 'static,
 ) -> Item {
     Item::Action {
+        icon,
         label,
         destructive: false,
         run: Rc::new(run),
@@ -38,10 +42,12 @@ fn action(
 }
 
 fn destructive(
+    icon: &'static str,
     label: &'static str,
     run: impl Fn(&mut Shell, &mut Window, &mut Context<Shell>) + 'static,
 ) -> Item {
     Item::Action {
+        icon,
         label,
         destructive: true,
         run: Rc::new(run),
@@ -64,40 +70,44 @@ impl Shell {
     ) {
         let alias = host.alias.clone();
         let connect = host.clone();
-        let mut items = vec![action("Connect", move |s, w, cx| {
+        let mut items = vec![action(icons::TERMINAL, "Connect", move |s, w, cx| {
             s.connect_host(connect.clone(), w, cx)
         })];
         let fresh = host.clone();
-        items.push(action("Open in new tab", move |s, w, cx| {
+        items.push(action(icons::PLUS, "Open in new tab", move |s, w, cx| {
             s.open_new_tab(&fresh, w, cx)
         }));
         items.push(Item::Separator);
         match editable {
-            Some(ix) => items.push(action("Edit…", move |s, w, cx| {
+            Some(ix) => items.push(action(icons::PEN, "Edit…", move |s, w, cx| {
                 let draft = s.connection(ix);
                 s.open_form(Some(ix), draft, w, cx);
             })),
             None => {
                 let draft = Connection::from_entry(host);
-                items.push(action("Duplicate to edit…", move |s, w, cx| {
-                    s.open_form(None, Some(draft.clone()), w, cx)
-                }));
+                items.push(action(
+                    icons::COPY,
+                    "Duplicate to edit…",
+                    move |s, w, cx| s.open_form(None, Some(draft.clone()), w, cx),
+                ));
             }
         }
         let theme_alias = alias.clone();
-        items.push(action("Theme…", move |s, w, cx| {
+        items.push(action(icons::PALETTE, "Theme…", move |s, w, cx| {
             s.open_theme_picker(ThemeTarget::Host(theme_alias.clone()), w, cx)
         }));
         items.push(Item::Separator);
         match editable {
             // The menu is already a deliberate second step, so remove at once; Undo covers it.
-            Some(ix) => items.push(destructive("Remove", move |s, _, cx| {
+            Some(ix) => items.push(destructive(icons::TRASH, "Remove", move |s, _, cx| {
                 s.confirm_delete = Some(ix);
                 s.delete_connection(ix, cx);
             })),
-            None => items.push(destructive("Remove from list", move |s, _, cx| {
-                s.hide_host(alias.clone(), cx)
-            })),
+            None => items.push(destructive(
+                icons::EYE_CLOSED,
+                "Remove from list",
+                move |s, _, cx| s.hide_host(alias.clone(), cx),
+            )),
         }
         self.context_menu = Some(ContextMenu { position, items });
         cx.notify();
@@ -117,7 +127,7 @@ impl Shell {
         let closed = tab.session.read(cx).status == Status::Closed;
         let mut items = Vec::new();
         if closed {
-            items.push(action("Reconnect", move |s, w, cx| {
+            items.push(action(icons::RESTART, "Reconnect", move |s, w, cx| {
                 if let Some(tab) = s.tabs.get(ix) {
                     let session = tab.session.clone();
                     session.update(cx, |s, cx| s.reconnect(cx));
@@ -126,24 +136,28 @@ impl Shell {
             }));
         }
         let again = alias.clone();
-        items.push(action("New tab to this host", move |s, w, cx| {
-            match s.hosts.iter().find(|h| h.alias == again).cloned() {
+        items.push(action(
+            icons::PLUS,
+            "New tab to this host",
+            move |s, w, cx| match s.hosts.iter().find(|h| h.alias == again).cloned() {
                 Some(host) => s.open_new_tab(&host, w, cx),
                 None => s.connect_target(&again, w, cx),
-            }
-        }));
+            },
+        ));
         let theme_alias = alias.clone();
-        items.push(action("Theme…", move |s, w, cx| {
+        items.push(action(icons::PALETTE, "Theme…", move |s, w, cx| {
             s.open_theme_picker(ThemeTarget::Host(theme_alias.clone()), w, cx)
         }));
         items.push(Item::Separator);
-        items.push(destructive("Close tab", move |s, w, cx| {
+        items.push(destructive(icons::CLOSE, "Close tab", move |s, w, cx| {
             s.close_tab_at(ix, w, cx)
         }));
         if self.tabs.len() > 1 {
-            items.push(destructive("Close other tabs", move |s, w, cx| {
-                s.close_other_tabs(ix, w, cx)
-            }));
+            items.push(destructive(
+                icons::CLOSE,
+                "Close other tabs",
+                move |s, w, cx| s.close_other_tabs(ix, w, cx),
+            ));
         }
         self.context_menu = Some(ContextMenu { position, items });
         cx.notify();
@@ -178,7 +192,7 @@ impl Shell {
         let mut card = div()
             .id("context-menu")
             .occlude()
-            .min_w(px(180.))
+            .w(px(216.))
             .p(px(4.))
             .flex()
             .flex_col()
@@ -197,6 +211,7 @@ impl Shell {
                     card.child(div().h(px(1.)).mx(px(-4.)).my(px(2.)).bg(t.hairline))
                 }
                 Item::Action {
+                    icon: glyph,
                     label,
                     destructive,
                     run,
@@ -208,13 +223,22 @@ impl Shell {
                             .px(px(8.))
                             .py(px(6.))
                             .rounded(px(7.))
+                            .flex()
+                            .items_center()
+                            .gap(px(10.))
                             .cursor_pointer()
+                            .text_color(t.text.opacity(0.9))
                             .when(*destructive, |el| el.text_color(t.danger))
                             .hover(|s| s.bg(t.row_active))
                             .on_click(cx.listener(move |s, _, w, cx| {
                                 s.context_menu = None;
                                 run(s, w, cx);
                                 cx.notify();
+                            }))
+                            .child(icon(glyph).size(px(16.)).text_color(if *destructive {
+                                t.danger
+                            } else {
+                                t.muted
                             }))
                             .child(SharedString::from(*label)),
                     )

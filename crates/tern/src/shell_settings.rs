@@ -49,6 +49,18 @@ impl Section {
         }
     }
 
+    fn icon(self) -> &'static str {
+        match self {
+            Section::Appearance => crate::icons::PALETTE,
+            Section::Terminal => crate::icons::TERMINAL,
+            Section::Shortcuts => crate::icons::KEYBOARD,
+            Section::Connections => crate::icons::SERVER,
+            Section::Vault => crate::icons::KEY,
+            Section::Sync => crate::icons::CLOUD,
+            Section::About => crate::icons::INFO,
+        }
+    }
+
     fn id(self) -> &'static str {
         match self {
             Section::Appearance => "nav-appearance",
@@ -74,6 +86,14 @@ impl Shell {
         }
     }
 
+    pub(crate) fn open_settings_at_sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.picker = None;
+        self.settings_page = Some(Section::Sync);
+        self.ensure_sync_ui(cx);
+        window.focus(&self.focus, cx);
+        cx.notify();
+    }
+
     pub(crate) fn render_settings(&self, section: Section, cx: &mut Context<Self>) -> AnyElement {
         let t = self.theme;
         let mut nav = div()
@@ -87,21 +107,27 @@ impl Shell {
             .flex_col()
             .gap(px(2.))
             .child(
-                w::nav_tab(&t, false, "nav-back", "← Back")
-                    .on_click(cx.listener(|s, _, window, cx| s.toggle_settings(window, cx))),
+                w::nav_tab(
+                    &t,
+                    false,
+                    "nav-back",
+                    "Back",
+                    Some(crate::icons::CHEVRON_LEFT),
+                )
+                .on_click(cx.listener(|s, _, window, cx| s.toggle_settings(window, cx))),
             )
             .child(div().h(px(12.)));
         for s in Section::ALL {
             nav = nav.child(
-                w::nav_tab(&t, s == section, s.id(), s.label()).on_click(cx.listener(
-                    move |shell, _, _, cx| {
+                w::nav_tab(&t, s == section, s.id(), s.label(), Some(s.icon())).on_click(
+                    cx.listener(move |shell, _, _, cx| {
                         shell.settings_page = Some(s);
                         if s == Section::Sync {
                             shell.ensure_sync_ui(cx);
                         }
                         cx.notify();
-                    },
-                )),
+                    }),
+                ),
             );
         }
         let page = match section {

@@ -100,6 +100,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
             toasts: toast::Toasts::new(),
             tab_scroll: gpui::ScrollHandle::new(),
             context_menu: None,
+            collapsed_sections: Vec::new(),
         };
         shell.refresh_hosts();
         cx.new(|_| shell)
@@ -141,6 +142,7 @@ pub struct Shell {
     toasts: toast::Toasts,
     tab_scroll: gpui::ScrollHandle,
     context_menu: Option<menu::ContextMenu>,
+    collapsed_sections: Vec<&'static str>,
 }
 
 struct Tab {
@@ -422,6 +424,15 @@ impl Shell {
         cx.notify();
     }
 
+    pub(crate) fn toggle_section(&mut self, name: &'static str, cx: &mut Context<Self>) {
+        if let Some(at) = self.collapsed_sections.iter().position(|n| *n == name) {
+            self.collapsed_sections.remove(at);
+        } else {
+            self.collapsed_sections.push(name);
+        }
+        cx.notify();
+    }
+
     /// Focus back to the active terminal, or the window when there is none.
     fn restore_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let focus = match self.tabs.get(self.active) {
@@ -547,14 +558,16 @@ impl Render for Shell {
         let active_alias = infos.get(self.active).map(|i| i.alias.clone());
         let strip = tabs::strip(&infos, self.active, &self.tab_scroll, &t, cx);
         let sidebar = sidebar::render(
-            &self.hosts,
-            sidebar::Editable {
-                count: self.connections.len(),
-                confirm_delete: self.confirm_delete,
+            &sidebar::SidebarState {
+                hosts: &self.hosts,
+                editable: sidebar::Editable {
+                    count: self.connections.len(),
+                },
+                open: &infos,
+                active_alias: active_alias.as_deref(),
+                width: self.settings.sidebar_width,
+                collapsed: &self.collapsed_sections,
             },
-            &infos,
-            active_alias.as_deref(),
-            self.settings.sidebar_width,
             &t,
             cx,
         );
@@ -619,7 +632,13 @@ impl Render for Shell {
                     s.on_sidebar_drag(f32::from(e.event.position.x), cx)
                 }),
             )
-            .child(titlebar::render(&t, window.is_fullscreen(), strip))
+            .child(titlebar::render(
+                &t,
+                window.is_fullscreen(),
+                !self.settings.sidebar_collapsed,
+                strip,
+                cx,
+            ))
             .child(match self.settings_page {
                 Some(section) => self.render_settings(section, cx),
                 None => div()
