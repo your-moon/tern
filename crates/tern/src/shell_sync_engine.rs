@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
@@ -59,6 +60,30 @@ pub(super) enum Side {
 }
 
 pub(super) type Resolutions = BTreeMap<String, Side>;
+
+/// Lets an event through at most once per `every`; only an allowed event restarts the clock.
+/// Used for "check the remote when the window comes to the front" and the 5-minute poll.
+pub(super) struct Throttle {
+    every: Duration,
+    last: Option<Instant>,
+}
+
+impl Throttle {
+    pub(super) fn new(every: Duration) -> Self {
+        Self { every, last: None }
+    }
+
+    pub(super) fn allow(&mut self, now: Instant) -> bool {
+        if self
+            .last
+            .is_some_and(|last| now.duration_since(last) < self.every)
+        {
+            return false;
+        }
+        self.last = Some(now);
+        true
+    }
+}
 
 /// A cheap look at the synced files, taken off the UI thread.
 pub(super) struct Snapshot {

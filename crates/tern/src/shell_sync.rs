@@ -19,7 +19,7 @@ use crate::text_input::{InputColors, TextInput};
 
 #[path = "shell_sync_engine.rs"]
 mod engine;
-use engine::{Outcome, Resolutions, Side, Snapshot, run, snapshot};
+use engine::{Outcome, Resolutions, Side, Snapshot, Throttle, run, snapshot};
 
 /// Edits are batched this long, so typing a host name is one sync, not twenty.
 const DEBOUNCE: Duration = Duration::from_secs(5);
@@ -27,6 +27,10 @@ const DEBOUNCE: Duration = Duration::from_secs(5);
 const POLL: Duration = Duration::from_secs(2);
 /// After a failed automatic sync, the same data is not retried for this long (offline).
 const BACKOFF: Duration = Duration::from_secs(300);
+/// Bringing the window to the front looks at the remote, but not more than once a minute.
+const ACTIVATE_EVERY: Duration = Duration::from_secs(60);
+/// While tern stays open the remote is looked at this often, for changes from other Macs.
+const PERIODIC_EVERY: Duration = Duration::from_secs(300);
 
 /// What the user still has to decide after a conflict.
 struct Ask {
@@ -49,9 +53,12 @@ pub(super) struct SyncUi {
 }
 
 /// Automatic sync's bookkeeping; lives on the shell so it runs before Settings is opened.
-#[derive(Default)]
 pub(super) struct AutoSync {
     started: bool,
+    /// Looking at the remote when the window comes to the front: at most once a minute.
+    on_activate: Throttle,
+    /// And while the app stays open: every 5 minutes.
+    periodic: Throttle,
     /// Sync once when the app starts (waits for the vault to be unlocked).
     launch_pending: bool,
     /// The local hash the debounce is waiting on, and when it may run.
@@ -62,6 +69,22 @@ pub(super) struct AutoSync {
     toasted: Option<String>,
     /// The line shown in Settings → Sync.
     status: Option<String>,
+}
+
+impl Default for AutoSync {
+    fn default() -> Self {
+        Self {
+            started: false,
+            on_activate: Throttle::new(ACTIVATE_EVERY),
+            periodic: Throttle::new(PERIODIC_EVERY),
+            launch_pending: false,
+            seen: None,
+            deadline: None,
+            failed: None,
+            toasted: None,
+            status: None,
+        }
+    }
 }
 
 fn item_label(name: &str) -> &'static str {
@@ -342,12 +365,19 @@ impl Shell {
     }
 
     /// Starts watching the synced files; called once, when the window opens.
-    pub(super) fn start_auto_sync(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn start_auto_sync(&mut self, window: &mut gpui::Window, cx: &mut Context<Self>) {
         if self.auto_sync.started {
             return;
         }
         self.auto_sync.started = true;
-        self.auto_sync.launch_pending = true;
+        // Coming back to tern after working on another Mac: look at the remote.
+        cx.observe_window_activation(window, |s, window, cx| {
+            if window.is_window_active() && s.auto_sync.on_activate.allow(Instant::now()) {
+                s.auto_sync.launch_pending = true;
+                cx.notify();
+            }
+        })
+        .detach();
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(POLL).await;
@@ -374,6 +404,11 @@ impl Shell {
             self.settings.sync_auto && (self.settings.sync_remote.is_some() || snap.last.is_some());
         if !enabled {
             return;
+        }
+        // The first look is the launch sync; after that every few minutes. `launch_pending`
+        // is "look at the remote", and stays set until the vault is open and a run starts.
+        if self.auto_sync.periodic.allow(Instant::now()) {
+            self.auto_sync.launch_pending = true;
         }
         // One sync at a time; a change meanwhile shows up as a difference afterwards.
         if self

@@ -139,7 +139,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
         })
         .detach();
         shell.check_for_updates(cx);
-        shell.start_auto_sync(cx);
+        shell.start_auto_sync(window, cx);
     })?;
     // With no tab open nothing else holds focus, and gpui only dispatches key bindings along
     // the focused element's path, so the shell itself must be focused for ⌘K to work.
