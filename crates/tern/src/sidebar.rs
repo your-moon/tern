@@ -579,6 +579,7 @@ mod tests {
             group: group.map(Into::into),
             tags: tags.iter().map(|t| (*t).into()).collect(),
             proxy_command: None,
+            vault_key: None,
         }
     }
 

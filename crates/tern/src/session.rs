@@ -475,6 +475,7 @@ mod tests {
             identity_files: Vec::new(),
             proxy_command: None,
             known_hosts: None,
+            memory_keys: Vec::new(),
         };
         assert_eq!(forget_key_command(&spec), "ssh-keygen -R '[10.0.0.5]:2222'");
         spec.port = 22;
