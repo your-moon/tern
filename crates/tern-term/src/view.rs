@@ -297,6 +297,12 @@ impl TerminalView {
             }
             return;
         }
+        if event.button == MouseButton::Middle {
+            if self.options.middle_click_paste {
+                self.paste(cx);
+            }
+            return;
+        }
         if event.button != MouseButton::Left {
             return;
         }
@@ -414,6 +420,14 @@ impl TerminalView {
                     self.terminal.update(cx, |t, cx| t.write(bytes, cx));
                 }
             }
+        }
+        let selected = self.terminal.read(cx).has_selection();
+        let dragged = self.selection_drag.is_some_and(|drag| drag.armed);
+        if self
+            .options
+            .copies_on_release(event.button == MouseButton::Left, dragged, selected)
+        {
+            self.copy(cx);
         }
         self.selection_drag = None;
         self.selection_scroll_task = None;

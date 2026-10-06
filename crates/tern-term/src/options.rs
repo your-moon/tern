@@ -43,6 +43,11 @@ pub struct TerminalOptions {
     pub cursor_blink: bool,
     /// Lines of scrollback kept client-side.
     pub scrollback_lines: usize,
+    /// Finishing a mouse selection copies it to the clipboard.
+    pub copy_on_select: bool,
+    /// Middle-click pastes the clipboard (when the remote is not taking mouse
+    /// reports).
+    pub middle_click_paste: bool,
 }
 
 impl Default for TerminalOptions {
@@ -51,6 +56,46 @@ impl Default for TerminalOptions {
             cursor_style: CursorStyleSetting::Block,
             cursor_blink: false,
             scrollback_lines: SCROLLBACK_LINES,
+            copy_on_select: false,
+            middle_click_paste: false,
         }
+    }
+}
+
+impl TerminalOptions {
+    /// Whether releasing the mouse should copy: copy-on-select is on, it was
+    /// the left button, the press turned into a real selection gesture (a plain
+    /// click that only focused the view does not count), and a selection exists.
+    pub(crate) fn copies_on_release(&self, left: bool, dragged: bool, selected: bool) -> bool {
+        self.copy_on_select && left && dragged && selected
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn copy_on_select_needs_the_option_and_a_real_selection() {
+        let on = TerminalOptions {
+            copy_on_select: true,
+            ..TerminalOptions::default()
+        };
+        assert!(on.copies_on_release(true, true, true));
+        assert!(!TerminalOptions::default().copies_on_release(true, true, true));
+        assert!(
+            !on.copies_on_release(false, true, true),
+            "not the left button"
+        );
+        assert!(!on.copies_on_release(true, false, true), "focusing click");
+        assert!(!on.copies_on_release(true, true, false), "nothing selected");
+    }
+
+    #[test]
+    fn defaults_keep_todays_behaviour() {
+        let d = TerminalOptions::default();
+        assert!(!d.copy_on_select && !d.middle_click_paste && !d.cursor_blink);
+        assert_eq!(d.cursor_style, CursorStyleSetting::Block);
+        assert_eq!(d.scrollback_lines, 10_000);
     }
 }
