@@ -612,7 +612,8 @@ impl Render for Shell {
         self.sync_wallpaper(cx);
         let panel_bg = self.panel_background();
         let hero = self.empty_view_hero(panel_bg, window);
-        let status_line = self.render_status_line(panel_bg, cx);
+        let (fill, layers) = (self.window_fill(), self.fill_layers(window));
+        let status_line = self.render_status_line(panel_bg.opacity(fill.unwrap_or(1.0)), cx);
         let theme_picker = self.render_theme_picker(window, cx);
         let toast = self.render_toast(window, cx);
         let context_menu = self.render_menu(cx);
@@ -639,6 +640,7 @@ impl Render for Shell {
             .flex()
             .flex_col()
             .bg(t.surface())
+            .children(layers)
             .font_family(UI_FONT)
             .text_color(t.text)
             .on_action(cx.listener(|s, _: &CloseTab, w, cx| s.close_pane_or_tab(w, cx)))
@@ -719,6 +721,7 @@ impl Render for Shell {
                 window.is_fullscreen(),
                 !self.settings.sidebar_collapsed,
                 strip,
+                fill.map(|a| t.shell.opacity(a)),
                 cx,
             ))
             .child(match self.settings_page {
@@ -736,6 +739,7 @@ impl Render for Shell {
                             .h_full()
                             .w(px(sidebar_now))
                             .overflow_hidden()
+                            .when_some(fill, |el, a| el.bg(t.shell.opacity(a)))
                             .child(sidebar),
                     )
                     .child(
@@ -748,7 +752,7 @@ impl Render for Shell {
                             .rounded(px(PANEL_RADIUS))
                             .border_1()
                             .border_color(t.border)
-                            .bg(panel_bg)
+                            .when(fill.is_none(), |el| el.bg(panel_bg))
                             .relative()
                             .overflow_hidden()
                             .flex()

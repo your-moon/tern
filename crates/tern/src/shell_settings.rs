@@ -152,6 +152,7 @@ impl Shell {
             .flex_1()
             .min_h_0()
             .flex()
+            .when_some(self.window_fill(), |el, a| el.bg(t.shell.opacity(a)))
             .child(nav)
             .child(
                 div()

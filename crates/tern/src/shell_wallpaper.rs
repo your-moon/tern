@@ -18,8 +18,10 @@ use super::Shell;
 use super::toast::CubicBezier;
 use crate::settings_widgets as w;
 use crate::theme::Theme;
+use crate::theme_tint::{self, rgb_of};
 use crate::wallpaper::{self, Prepared};
 use crate::wallpaper_fx::Effect;
+use crate::wallpaper_panel::{self, Panel};
 
 /// zeron `WALLPAPER_CROSSFADE`: an immediate attack with a short, soft landing.
 pub const CROSSFADE: Duration = Duration::from_millis(180);
@@ -28,6 +30,37 @@ const CROSSFADE_CURVE: CubicBezier = CubicBezier::new(1.0 / 3.0, 1.0, 2.0 / 3.0,
 /// the hero is this share of the window's height, up to this many pixels.
 const HERO_VIEWPORT_RATIO: f32 = 0.72;
 const HERO_MAX_HEIGHT: f32 = 760.0;
+
+/// The empty view's panel while the picture fills the window: clear over the top `height` (the
+/// picture at full strength, fading into the panel) and the panel at `alpha` below it.
+fn fill_backdrop(height: f32, panel: gpui::Hsla, alpha: f32) -> AnyElement {
+    div()
+        .absolute()
+        .inset_0()
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .w_full()
+                .h(px(height))
+                .bg(gpui::linear_gradient(
+                    180.0,
+                    gpui::linear_color_stop(panel.opacity(0.0), 0.0),
+                    gpui::linear_color_stop(panel.opacity(alpha), 1.0),
+                )),
+        )
+        .child(
+            div()
+                .absolute()
+                .top(px(height))
+                .bottom_0()
+                .left_0()
+                .right_0()
+                .bg(panel.opacity(alpha)),
+        )
+        .into_any_element()
+}
 
 /// zeron `new_thread_background_height` (shell.rs:1322).
 pub(crate) fn hero_height(viewport_height: f32) -> f32 {
@@ -185,8 +218,47 @@ impl Shell {
             return None;
         }
         let height = hero_height(f32::from(window.viewport_size().height));
+        if let Some(alpha) = self.window_fill() {
+            return Some((fill_backdrop(height, panel, alpha), height));
+        }
         self.wallpaper_hero(height, panel, window)
             .map(|el| (el, height))
+    }
+
+    /// The panel opacity while the picture fills the whole window; `None` in hero-only mode and
+    /// without a picture. The smallest alpha at which text, muted and faint text (and the
+    /// terminal's own text) keep 4.5:1 over the picture's brightest and darkest regions.
+    pub(crate) fn window_fill(&self) -> Option<f32> {
+        if !self.settings.wallpaper_fills_window {
+            return None;
+        }
+        let shown = self.wp.shown.as_ref()?;
+        let t = &self.theme;
+        let term = t.terminal(self.settings.terminal_font_size, self.scheme_for(""));
+        let words = [t.text, t.muted, t.faint].map(rgb_of);
+        let terminal_words = [words[0], words[1], words[2], rgb_of(term.foreground)];
+        Some(wallpaper_panel::panel_alpha(
+            &shown.prepared.backdrop,
+            &[
+                Panel {
+                    surface: rgb_of(t.shell),
+                    texts: &words,
+                },
+                Panel {
+                    surface: rgb_of(term.background),
+                    texts: &terminal_words,
+                },
+            ],
+            theme_tint::TEXT_CONTRAST,
+        ))
+    }
+
+    /// The picture across the whole window, under everything; none in hero-only mode.
+    pub(super) fn fill_layers(&mut self, window: &mut Window) -> Vec<AnyElement> {
+        if self.window_fill().is_none() {
+            return Vec::new();
+        }
+        self.wallpaper_layers(window)
     }
 
     /// The hero: the picture across the top of the empty view, at full strength and fading into
@@ -377,6 +449,7 @@ impl Shell {
             }
         };
         let on = self.settings.wallpaper_theme_colors;
+        let fills = self.settings.wallpaper_fills_window;
         card.child(w::row(
             &t,
             false,
@@ -388,7 +461,7 @@ impl Shell {
             &t,
             false,
             "Visibility",
-            Some("Of the picture at the top of the empty view".into()),
+            Some("How strongly the picture shows".into()),
             div()
                 .flex()
                 .items_center()
@@ -396,6 +469,27 @@ impl Shell {
                 .child(minus.on_click(cx.listener(step(-0.1))))
                 .child(value)
                 .child(plus.on_click(cx.listener(step(0.1)))),
+        ))
+        .child(w::row(
+            &t,
+            false,
+            "Wallpaper fills the window",
+            Some(
+                "Panels carry the text, sized to the picture; off keeps it to the empty view"
+                    .into(),
+            ),
+            div()
+                .id("toggle-wallpaper-fills")
+                .switch("Wallpaper fills the window", fills)
+                .cursor_pointer()
+                .on_click(cx.listener(|s, _, _, cx| {
+                    s.update_settings(
+                        |st| st.wallpaper_fills_window = !st.wallpaper_fills_window,
+                        cx,
+                    );
+                    s.restyle_tabs(cx);
+                }))
+                .child(w::toggle(&t, fills, "wallpaper-fills")),
         ))
         .child(w::row(
             &t,

@@ -55,6 +55,10 @@ impl Shell {
         if let Some(family) = &self.settings.terminal_font_family {
             theme.font_family = family.clone().into();
         }
+        // Over a full-window wallpaper the terminal is a panel too: the picture shows through.
+        if let Some(alpha) = self.window_fill() {
+            theme.background_alpha = alpha;
+        }
         theme
     }
 

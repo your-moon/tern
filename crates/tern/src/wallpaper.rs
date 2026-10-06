@@ -11,6 +11,10 @@ use image::{ImageFormat, RgbaImage};
 
 use crate::wallpaper_colors;
 use crate::wallpaper_fx::{self, Effect};
+use crate::wallpaper_panel;
+
+/// Longest edge of the thumbnail the panel opacity is sized from.
+const BACKDROP_EDGE: u32 = 48;
 
 /// Recent wallpapers kept (zeron `HISTORY_LIMIT`).
 pub const HISTORY_LIMIT: usize = 8;
@@ -105,6 +109,8 @@ pub struct Prepared {
     pub image: PathBuf,
     /// The wallpaper's dominant colour.
     pub accent: Option<[u8; 3]>,
+    /// Colours across the rendered picture's brightness range, for sizing the panels over it.
+    pub backdrop: Vec<[u8; 3]>,
 }
 
 fn cache_name(source: &Path, len: u64, effect: Effect, light: bool) -> String {
@@ -150,9 +156,19 @@ pub fn prepare(
             .map_err(|e| format!("Cannot cache the wallpaper: {e}"))?;
         trim_cache(&dir, &path);
     }
+    let backdrop = image::open(&path)
+        .map(|img| {
+            wallpaper_panel::backdrop(
+                img.thumbnail(BACKDROP_EDGE, BACKDROP_EDGE)
+                    .to_rgba8()
+                    .as_raw(),
+            )
+        })
+        .unwrap_or_default();
     Ok(Prepared {
         image: path,
         accent,
+        backdrop,
     })
 }
 

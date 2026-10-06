@@ -85,6 +85,9 @@ pub struct Settings {
     pub wallpaper_history: Vec<String>,
     /// Take the window's surfaces, accent and washes from the wallpaper's dominant colour.
     pub wallpaper_theme_colors: bool,
+    /// The picture covers the whole window, with translucent panels carrying the text; off
+    /// keeps it to the top of the empty view.
+    pub wallpaper_fills_window: bool,
     /// A git remote to sync through (any host git can reach); `None` uses a GitHub gist.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sync_remote: Option<String>,
@@ -146,6 +149,7 @@ impl Default for Settings {
             wallpaper_effect: crate::wallpaper_fx::Effect::None,
             wallpaper_history: Vec::new(),
             wallpaper_theme_colors: true,
+            wallpaper_fills_window: true,
             sync_remote: None,
             cursor_style: CursorStyle::Block,
             cursor_blink: false,
@@ -355,6 +359,7 @@ mod tests {
             wallpaper_effect: crate::wallpaper_fx::Effect::Halftone,
             wallpaper_history: vec!["/tmp/w.png".into(), "/tmp/v.png".into()],
             wallpaper_theme_colors: false,
+            wallpaper_fills_window: false,
             sync_remote: Some("git@github.com:me/tern-sync.git".into()),
             cursor_style: CursorStyle::Bar,
             cursor_blink: true,

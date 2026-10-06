@@ -106,6 +106,10 @@ fn prepare_renders_once_then_reuses_the_cached_image() {
         "scanlines changed the pixels"
     );
     assert!(first.accent.is_some());
+    assert!(
+        !first.backdrop.is_empty(),
+        "the panel opacity is sized from it"
+    );
 
     // Swap the cached file for a solid one: a second call that reads it back proves the
     // effect was not rendered again.

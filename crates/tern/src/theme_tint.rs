@@ -25,7 +25,7 @@ fn pack(c: [u8; 3]) -> u32 {
     u32::from(c[0]) << 16 | u32::from(c[1]) << 8 | u32::from(c[2])
 }
 
-fn rgb_of(color: Hsla) -> [u8; 3] {
+pub(crate) fn rgb_of(color: Hsla) -> [u8; 3] {
     let c = gpui::Rgba::from(color);
     [c.r, c.g, c.b].map(|v| (v * 255.0).round().clamp(0.0, 255.0) as u8)
 }
