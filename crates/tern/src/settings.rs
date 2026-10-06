@@ -46,6 +46,8 @@ pub struct Settings {
     pub visual_bell: bool,
     /// Bounce the Dock icon on BEL while tern is in the background.
     pub bell_bounces_dock: bool,
+    /// Ask GitHub once a day whether a newer release exists; tern only says so, never installs.
+    pub check_for_updates: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -81,6 +83,7 @@ impl Default for Settings {
             middle_click_paste: false,
             visual_bell: false,
             bell_bounces_dock: true,
+            check_for_updates: true,
         }
     }
 }
@@ -233,6 +236,7 @@ mod tests {
             middle_click_paste: true,
             visual_bell: true,
             bell_bounces_dock: false,
+            check_for_updates: false,
         };
         saved.save(&dir).unwrap();
         assert_eq!(Settings::load(&dir), saved);

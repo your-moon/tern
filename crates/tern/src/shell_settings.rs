@@ -143,7 +143,7 @@ impl Shell {
             Section::Snippets => self.snippets_page(cx),
             Section::Vault => self.vault_page(cx),
             Section::Sync => self.sync_page(cx),
-            Section::About => about_page(&t),
+            Section::About => self.about_page(cx),
         };
         div()
             .flex_1()
@@ -478,26 +478,49 @@ impl Shell {
     }
 }
 
-fn about_page(t: &crate::theme::Theme) -> gpui::Div {
-    w::page_column()
-        .child(w::page_header(t, "About"))
-        .child(w::section(
-            t,
-            "tern",
-            w::card(t)
-                .child(w::row(
-                    t,
-                    true,
-                    "Version",
-                    Some(env!("CARGO_PKG_VERSION").into()),
-                    div(),
-                ))
-                .child(w::row(
-                    t,
-                    false,
-                    "Logs",
-                    Some("~/Library/Logs/tern".into()),
-                    div(),
-                )),
-        ))
+impl Shell {
+    fn about_page(&self, cx: &mut Context<Self>) -> gpui::Div {
+        let t = self.theme;
+        let on = self.settings.check_for_updates;
+        w::page_column()
+            .child(w::page_header(&t, "About"))
+            .child(w::section(
+                &t,
+                "tern",
+                w::card(&t)
+                    .child(w::row(
+                        &t,
+                        true,
+                        "Version",
+                        Some(env!("CARGO_PKG_VERSION").into()),
+                        div(),
+                    ))
+                    .child(w::row(
+                        &t,
+                        true,
+                        "Check for updates",
+                        Some(
+                            "Once a day, ask GitHub for a newer release; tern never installs one"
+                                .into(),
+                        ),
+                        div()
+                            .id("toggle-check-updates")
+                            .cursor_pointer()
+                            .on_click(cx.listener(|s, _, _, cx| {
+                                s.update_settings(
+                                    |st| st.check_for_updates = !st.check_for_updates,
+                                    cx,
+                                );
+                            }))
+                            .child(w::toggle(&t, on, "check-updates")),
+                    ))
+                    .child(w::row(
+                        &t,
+                        false,
+                        "Logs",
+                        Some("~/Library/Logs/tern".into()),
+                        div(),
+                    )),
+            ))
+    }
 }

@@ -10,6 +10,7 @@ rust-version = "1.99"
 repository = "https://github.com/your-moon/tern"
 
 [workspace.dependencies]
+ureq = { version = "3", default-features = false, features = ["native-tls", "json"] }
 tern-ssh = { path = "crates/tern-ssh", version = "0.1.0" }
 tern-sync = { path = "crates/tern-sync", version = "0.1.0" }
 tern-term = { path = "crates/tern-term", version = "0.1.0" }

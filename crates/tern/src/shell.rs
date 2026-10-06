@@ -44,6 +44,8 @@ mod tabs_ui;
 mod term_options;
 #[path = "shell_toast.rs"]
 mod toast;
+#[path = "shell_update.rs"]
+mod update_ui;
 
 pub(crate) use toast::{Kind as ToastKind, Toast};
 #[path = "shell_themes.rs"]
@@ -135,6 +137,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
             crate::motion::apply(shell.settings.reduce_motion, cx);
         })
         .detach();
+        shell.check_for_updates(cx);
     })?;
     // With no tab open nothing else holds focus, and gpui only dispatches key bindings along
     // the focused element's path, so the shell itself must be focused for ⌘K to work.
