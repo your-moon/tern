@@ -53,7 +53,11 @@ pub fn lag(rtt: Duration) -> Lag {
 
 /// `42 ms`, rounded to whole milliseconds.
 pub fn format_latency(rtt: Duration) -> String {
-    format!("{} ms", (rtt.as_micros() + 500) / 1000)
+    // Under half a millisecond rounds to 0, which reads like a broken meter.
+    match (rtt.as_micros() + 500) / 1000 {
+        0 => "<1 ms".to_owned(),
+        ms => format!("{ms} ms"),
+    }
 }
 
 fn state_label(status: &Status) -> &'static str {
@@ -145,7 +149,8 @@ mod tests {
         let ms = Duration::from_micros;
         assert_eq!(format_latency(ms(42_400)), "42 ms");
         assert_eq!(format_latency(ms(42_600)), "43 ms");
-        assert_eq!(format_latency(ms(300)), "0 ms");
+        assert_eq!(format_latency(ms(300)), "<1 ms");
+        assert_eq!(format_latency(ms(600)), "1 ms");
         assert_eq!(format_latency(Duration::from_secs(2)), "2000 ms");
     }
 
