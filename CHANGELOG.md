@@ -4,6 +4,21 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-06
+
+The first release: a daily-driver SSH client for macOS.
+
+### Highlights
+
+- Saved connections with groups, tags, search, a ⌘K picker and a one-time import from `~/.ssh/config`.
+- Logins from SSH keys, a per-connection password command (for example gopass), or the vault. ⌘\ fills `sudo` and other password prompts on request.
+- Vault (age, scrypt) for passwords and SSH keys, with PIN unlock, macOS Keychain unlock and an idle lock.
+- Terminal: tabs (rename, reorder, restore), split panes, find, links, snippets, broadcast input, session logs, a status line with latency, an SFTP browser and port forwards.
+- SSH: ProxyJump, agent forwarding, keep-alive per host, two-factor logins, automatic reconnect, and a hard stop on changed host keys.
+- Encrypted sync to your own Git repository, merged per file and per host.
+- zeron-style look: frosted panels over a wallpaper (seven public-domain artworks built in), light/dark/system, a sharper mode for 1× monitors, and the Arctic tern icon.
+- Signed with a Developer ID and notarised.
+
 ### Added
 
 - `tern`: vault PIN (Settings → Vault → Unlock with a PIN). A 4 to 8 digit PIN seals the vault passphrase (age scrypt) in the login Keychain item `tern vault pin`; every unlock prompt asks "Vault PIN" first, with Enter or "Use passphrase instead" for the passphrase. 5 wrong PINs in a row (counted in `vault-pin.json`, not synced) delete the item; changing the vault passphrase removes it.
@@ -68,4 +83,5 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 - Secrets are held as zeroizing `SecretString`s and never logged; session output is redacted from `Debug`.
 - RUSTSEC-2023-0071 in `rsa` (via russh) is accepted for now; see [SECURITY.md](SECURITY.md) and #16.
 
-[Unreleased]: https://github.com/your-moon/tern/commits/main
+[Unreleased]: https://github.com/your-moon/tern/compare/v0.1.0...main
+[0.1.0]: https://github.com/your-moon/tern/releases/tag/v0.1.0
