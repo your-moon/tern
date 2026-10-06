@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- tern app icon master: an Arctic tern in flight over a dusk sky, on the macOS 824 px squircle. Rendered to tern.icns by scripts/make-icon.sh. -->
+  <defs>
+    <clipPath id="tile"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#121a44"/>
+      <stop offset="0.38" stop-color="#2f3a86"/>
+      <stop offset="0.66" stop-color="#7b5aa6"/>
+      <stop offset="0.86" stop-color="#e48a8a"/>
+      <stop offset="1" stop-color="#f7bf86"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.70" cy="0.93" r="0.45">
+      <stop offset="0" stop-color="#fff1cc" stop-opacity="1"/>
+      <stop offset="0.25" stop-color="#ffd59c" stop-opacity="0.65"/>
+      <stop offset="1" stop-color="#ffb47a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.20"/>
+      <stop offset="0.42" stop-color="#ffffff" stop-opacity="0.02"/>
+      <stop offset="0.43" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="bird" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e9e6ff"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="14"/>
+      <feOffset dx="0" dy="18" result="b"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.35"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#sky)"/>
+    <rect x="100" y="100" width="824" height="824" fill="url(#sun)"/>
+    <g fill="#ffffff">
+      <circle cx="250" cy="215" r="5" opacity="0.7"/>
+      <circle cx="410" cy="170" r="3.5" opacity="0.55"/>
+      <circle cx="770" cy="230" r="4.5" opacity="0.6"/>
+      <circle cx="840" cy="320" r="3" opacity="0.45"/>
+      <circle cx="610" cy="200" r="3" opacity="0.5"/>
+    </g>
+    <rect x="100" y="100" width="824" height="824" fill="url(#gloss)"/>
+  </g>
+  <rect x="101" y="101" width="822" height="822" rx="184" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="2"/>
+  <!-- Arctic tern in flight toward the upper right. -->
+  <g filter="url(#shadow)">
+    <g transform="translate(535 520) rotate(-24) scale(0.93)" fill="url(#bird)">
+      <path d="M 44 -16 C 24 -70 -6 -112 -38 -144 C -82 -186 -152 -236 -258 -268
+               C -196 -214 -146 -172 -116 -132 C -86 -96 -56 -56 -28 -6 Z"/>
+      <path d="M 40 20 C 20 74 -6 122 -36 158 C -76 202 -142 256 -246 296
+               C -184 242 -136 196 -108 152 C -80 108 -52 64 -28 14 Z"/>
+      <path d="M 134 -12 C 104 -28 62 -30 20 -24 C -42 -15 -104 -6 -156 6
+               C -104 18 -42 25 20 25 C 62 25 104 18 134 8 Z"/>
+      <path d="M 128 -14 C 154 -19 175 -15 188 -5 L 246 -2 L 188 7 C 174 16 152 18 128 10 Z"/>
+      <path d="M -150 0 C -204 -22 -256 -46 -322 -78 C -268 -34 -220 -8 -172 10 Z"/>
+      <path d="M -150 12 C -204 30 -258 52 -326 78 C -270 38 -220 20 -172 6 Z"/>
+    </g>
+  </g>
+  <!-- black cap and eye -->
+  <g transform="translate(535 520) rotate(-24) scale(0.93)">
+    <path d="M 124 -14 C 150 -21 173 -17 188 -6 C 165 -7 144 -6 122 -2 Z" fill="#121a44"/>
+    <circle cx="168" cy="-4" r="3.6" fill="#121a44"/>
+  </g>
+</svg>

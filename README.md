@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="packaging/macos/icon.svg" width="128" alt="tern icon: an Arctic tern in flight over a dusk sky">
+  <img src="packaging/macos/icon.svg" width="128" alt="tern icon: a tern in flight shaped like a shell prompt, with an amber cursor">
 </p>
 
 <h1 align="center">tern</h1>
@@ -7,6 +7,8 @@
 <p align="center">
   A fast, native SSH client for macOS, written in Rust on <a href="https://github.com/zed-industries/zed/tree/main/crates/gpui">GPUI</a>.<br>
   Your servers one click away, passwords that fill themselves, and a window you'll enjoy looking at.
+<br>
+  <a href="https://tern.carrot-soft.tech">Website: https://tern.carrot-soft.tech</a>
 </p>
 
 <p align="center">

@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tern: a fast, native SSH client for macOS</title>
+<meta name="description" content="tern is a native SSH client for macOS written in Rust. One click to a shell, passwords that fill themselves, synced setup, and about 85 MB of memory.">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:title" content="tern: a fast, native SSH client for macOS">
+<meta property="og:description" content="Your servers one click away, passwords that fill themselves, and a window you'll enjoy looking at.">
+<meta property="og:url" content="https://tern.carrot-soft.tech/">
+<meta property="og:image" content="https://tern.carrot-soft.tech/assets/hero.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="bar">
+  <a class="brand" href="#top"><img class="logo" src="assets/icon.svg" alt="" width="28" height="28"><span>tern</span></a>
+  <nav>
+    <a href="#features">Features</a>
+    <a href="#memory">Memory</a>
+    <a href="#install">Install</a>
+    <a class="btn small" href="https://github.com/your-moon/tern">GitHub</a>
+  </nav>
+</header>
+
+<main id="top">
+<section class="hero">
+  <img class="logo hero-logo" src="assets/icon.svg" alt="tern icon: an Arctic tern in flight over a dusk sky" width="96" height="96">
+  <h1>A fast, native SSH client for macOS.</h1>
+  <p class="lead">Your servers one click away, passwords that fill themselves, and a window you'll enjoy looking at. Written in Rust on GPUI.</p>
+  <div class="cta">
+    <a class="btn primary" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.0-macos-arm64.dmg">Download for macOS</a>
+    <a class="btn" href="https://github.com/your-moon/tern">View on GitHub</a>
+  </div>
+  <p class="note">macOS 11+ on Apple silicon. Signed and notarised. Free, GPL-3.0.</p>
+  <figure class="shot big"><img src="assets/hero.jpg" width="1800" height="1125" alt="tern: hosts grouped in a frosted sidebar over Hokusai's Great Wave"></figure>
+</section>
+
+<section id="features" class="wrap">
+  <h2>Why tern</h2>
+  <div class="grid">
+    <div class="card"><h3>One click to a shell</h3><p>Saved connections in groups, ⌘K to jump to any of them, and a status line with latency and session time.</p></div>
+    <div class="card"><h3>Passwords stay out of the way</h3><p>Logins come from your SSH key, your password manager (<code>gopass show -o …</code>), or tern's encrypted vault. At a <code>sudo</code> prompt, ⌘\ types the password for you.</p></div>
+    <div class="card"><h3>Built for real work</h3><p>Split panes, find in scrollback, clickable links, snippets, SFTP browser, port forwards, ProxyJump, agent forwarding, broadcast input, session logs, and automatic reconnect.</p></div>
+    <div class="card"><h3>Your setup, backed up</h3><p>Hosts, snippets and settings sync to a private Git repository you own, encrypted end to end.</p></div>
+    <div class="card"><h3>Native and light</h3><p>About 85 MB in Activity Monitor with a wallpaper showing. Crisp on 1080p monitors, on frosted glass over a wallpaper of your choice.</p></div>
+    <div class="card"><h3>Light and dark</h3><p>The window takes its colours from the wallpaper, and every text colour stays at least 4.5:1.</p></div>
+  </div>
+  <figure class="shot"><img src="assets/terminal.jpg" width="1800" height="1125" alt="A session on web-01 running htop, with the status line showing Connected, 1 ms and session time"></figure>
+</section>
+
+<section class="wrap">
+  <h2>A closer look</h2>
+  <div class="looks">
+    <figure><img src="assets/docker.jpg" alt="sudo docker ps with the sudo password filled by ⌘\"><figcaption><b>⌘\ fills sudo.</b> The password comes from your password manager, typed only when you ask and only at a password prompt.</figcaption></figure>
+    <figure><img src="assets/snippets.jpg" alt="The snippets picker filtering docker commands"><figcaption><b>Snippets (⇧⌘S).</b> Saved commands. ↵ marks the ones that run when picked; the rest are typed for you to finish.</figcaption></figure>
+    <figure><img src="assets/split.jpg" alt="Two panes side by side with find in scrollback"><figcaption><b>Splits and find.</b> ⌘D and ⌘⇧D split a tab; ⌘F searches the scrollback.</figcaption></figure>
+    <figure><img src="assets/sftp.jpg" alt="The SFTP side panel listing a remote home folder"><figcaption><b>Files (⇧⌘O).</b> Browse the remote side over SFTP; download, or drop files to upload.</figcaption></figure>
+    <figure><img src="assets/settings.jpg" alt="Settings, Appearance, with the wallpaper gallery"><figcaption><b>Make it yours.</b> Seven public-domain artworks built in, or any image; light, dark or follow macOS; any monospace font.</figcaption></figure>
+    <figure><img src="assets/light.jpg" alt="tern in light appearance over Van Gogh's Wheat Field"><figcaption><b>Light and dark.</b> The window takes its colours from the wallpaper.</figcaption></figure>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>Everything in the box</h2>
+  <div class="cols">
+    <div><h3>Connections</h3><ul>
+      <li>Groups and tags, search (⇧⌘F), and a ⌘K picker ordered by what you used last.</li>
+      <li>One-time import from <code>~/.ssh/config</code>.</li>
+      <li>ProxyJump, local, remote and dynamic (SOCKS) forwards, agent forwarding, keep-alive.</li>
+      <li>Automatic reconnect with backoff; never after you type <code>exit</code>.</li>
+      <li>Two-factor logins, and a hard stop on changed host keys.</li></ul></div>
+    <div><h3>Terminal</h3><ul>
+      <li>Tabs you can rename, reorder and reopen on launch; split panes; broadcast input.</li>
+      <li>Find in scrollback, ⌘-click links (including OSC 8), cursor shape, copy on select.</li>
+      <li>SFTP browser, session logging, and a status line with latency.</li></ul></div>
+    <div><h3>Passwords and keys</h3><ul>
+      <li>Per-connection password command; tern runs it when asked and never stores the result.</li>
+      <li>An age-encrypted vault for passwords and SSH keys, unlocked by PIN or Keychain.</li>
+      <li>⌘\ fills a password prompt. It never types on its own.</li></ul></div>
+    <div><h3>Sync</h3><ul>
+      <li>To a private Git repository through your own <code>git</code> and SSH key, or a GitHub gist.</li>
+      <li>Encrypted with your vault passphrase before it leaves the Mac.</li>
+      <li>Merges per file and per host, and only asks about a real conflict.</li></ul></div>
+  </div>
+</section>
+
+<section id="memory" class="wrap">
+  <h2>Memory</h2>
+  <p class="sub">tern against the other two SSH clients, on the same Mac, the same day (2026-10-06), the same way. Each app was launched fresh and measured every 15 s for two minutes with macOS <code>footprint</code> (the number Activity Monitor shows), summed over all of its processes. The table gives the settled value at two minutes. "Connected" means one tab logged in to the same server.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>App</th><th>Idle</th><th>Connected</th><th>Processes</th></tr></thead>
+    <tbody>
+      <tr class="us"><th>tern</th><td><b>86 MB</b> (108 MB with a wallpaper)</td><td><b>76 MB</b> (125 MB with a wallpaper)</td><td>1</td></tr>
+      <tr><th>Tabby</th><td>471 MB</td><td>580 MB</td><td>5 (Electron)</td></tr>
+      <tr><th>Termius</th><td>583 MB</td><td>not measured</td><td>7 (Electron)</td></tr>
+    </tbody></table></div>
+  <p class="sub">Connected, tern needs between a quarter and an eighth of Tabby's memory; idle, between a fifth and a seventh of either app's. The method, raw samples and the plain terminals are in <a href="https://github.com/your-moon/tern/blob/main/docs/perf.md">docs/perf.md</a>.</p>
+</section>
+
+<section class="wrap">
+  <h2>Keyboard</h2>
+  <div class="keys">
+    <div><kbd>⌘K</kbd> Host picker</div><div><kbd>⌘D</kbd> / <kbd>⌘⇧D</kbd> Split right / down</div>
+    <div><kbd>⇧⌘F</kbd> Search hosts</div><div><kbd>⌥⌘</kbd> + arrows Move between panes</div>
+    <div><kbd>⌘N</kbd> New connection</div><div><kbd>⌘F</kbd> Find in scrollback</div>
+    <div><kbd>⇧⌘S</kbd> Snippets</div><div><kbd>⌘\</kbd> Fill password</div>
+    <div><kbd>⇧⌘O</kbd> Browse files</div><div><kbd>⌘W</kbd> Close pane / tab</div>
+    <div><kbd>⌘,</kbd> Settings</div><div><kbd>⇧⌘]</kbd> / <kbd>⇧⌘[</kbd> Next / previous tab</div>
+    <div><kbd>⌘B</kbd> Toggle sidebar</div><div><kbd>⌘=</kbd> <kbd>⌘−</kbd> <kbd>⌘0</kbd> Text size</div>
+  </div>
+  <p class="sub">Every shortcut can be rebound in Settings, Shortcuts.</p>
+</section>
+
+<section class="wrap">
+  <h2>Security</h2>
+  <ul class="plain">
+    <li>Host keys are checked against <code>~/.ssh/known_hosts</code>. A changed key refuses the connection.</li>
+    <li>Secrets live in the vault (age, scrypt) or in your password manager. They are never written to logs, and never typed into the terminal unless you press ⌘\.</li>
+    <li>Sync data is encrypted before it leaves your Mac. The repository only ever sees <code>.age</code> files.</li>
+    <li>Report vulnerabilities privately, as described in <a href="https://github.com/your-moon/tern/blob/main/SECURITY.md">SECURITY.md</a>.</li>
+  </ul>
+</section>
+
+<section id="install" class="wrap install">
+  <h2>Download tern.</h2>
+  <div class="cta">
+    <a class="btn primary" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.0-macos-arm64.dmg">Download for macOS</a>
+    <a class="btn" href="https://github.com/your-moon/tern/releases">All releases</a>
+  </div>
+  <p class="note">macOS 11+ on Apple silicon. Open the DMG and drag tern to Applications. Releases are signed with a Developer ID and notarised by Apple, so it opens without a warning.</p>
+  <p class="sub">Or build from source (Rust 1.99+):</p>
+  <pre><code>git clone https://github.com/your-moon/tern &amp;&amp; cd tern
+scripts/make-local-identity.sh   # once: a stable local signature
+scripts/bundle-app.sh            # builds target/release/bundle/tern.app
+cp -R target/release/bundle/tern.app /Applications/
+cargo install --locked --path crates/tern   # the `tern` command</code></pre>
+</section>
+</main>
+
+<footer>
+  <div class="foot">
+    <a class="brand" href="#top"><img class="logo" src="assets/icon.svg" alt="" width="24" height="24"><span>tern</span></a>
+    <p>Released under <a href="https://github.com/your-moon/tern/blob/main/LICENSE">GPL-3.0</a>. Code adapted from <a href="https://github.com/zeronsh/zeron">zeron</a>'s UI (MIT), <a href="https://github.com/Eugeny/russh">russh</a> and <a href="https://github.com/alacritty/alacritty">alacritty_terminal</a> (Apache-2.0), and Zed's GPUI. Icons from Solar by 480 Design (CC BY 4.0), Geist fonts (OFL). Built-in wallpapers from <a href="https://www.metmuseum.org/about-the-met/policies-and-documents/open-access">The Met Open Access</a> (CC0): Hokusai, Hiroshige, Church, Van Gogh and Rousseau. Full list in <a href="https://github.com/your-moon/tern/blob/main/NOTICE.md">NOTICE.md</a>.</p>
+    <p><a href="https://github.com/your-moon/tern">GitHub</a> · <a href="https://github.com/your-moon/tern/releases">Releases</a></p>
+  </div>
+</footer>
+</body>
+</html>
