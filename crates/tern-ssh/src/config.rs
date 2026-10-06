@@ -2,11 +2,14 @@
 // ssh2-config (`get_hosts().skip(1)`, concrete-alias filter, case-insensitive dedupe).
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use ssh2_config::{ParseRule, SshConfig};
 
 use crate::error::{Error, Result};
-use crate::{ConnectSpec, HostEntry};
+use crate::{
+    ConnectSpec, DEFAULT_SERVER_ALIVE_COUNT_MAX, DEFAULT_SERVER_ALIVE_INTERVAL, HostEntry,
+};
 
 const DEFAULT_IDENTITIES: [&str; 3] = ["id_ed25519", "id_ecdsa", "id_rsa"];
 
@@ -18,6 +21,8 @@ pub(crate) struct Resolved {
     pub user: Option<String>,
     pub identity_files: Vec<PathBuf>,
     pub proxy_command: Option<String>,
+    pub server_alive_interval: Option<Duration>,
+    pub server_alive_count_max: Option<u32>,
 }
 
 pub(crate) fn home_dir() -> Option<PathBuf> {
@@ -58,6 +63,12 @@ pub(crate) fn resolve(config: Option<&SshConfig>, alias: &str) -> Resolved {
         user: p.user,
         identity_files: p.identity_file.unwrap_or_default(),
         proxy_command,
+        server_alive_interval: p.server_alive_interval,
+        server_alive_count_max: p
+            .unsupported_fields
+            .get("serveralivecountmax")
+            .and_then(|a| a.first())
+            .and_then(|n| n.parse().ok()),
     }
 }
 
@@ -89,6 +100,8 @@ pub(crate) fn hosts_from(config: &SshConfig) -> Vec<HostEntry> {
                 user: r.user,
                 identity_files: r.identity_files,
                 proxy_command: r.proxy_command,
+                server_alive_interval: r.server_alive_interval,
+                server_alive_count_max: r.server_alive_count_max,
             });
         }
     }
@@ -180,6 +193,12 @@ pub(crate) fn parse_target(target: &str, config: Option<&SshConfig>) -> Result<C
         proxy_command: r.proxy_command,
         known_hosts: None,
         memory_keys: Vec::new(),
+        server_alive_interval: r
+            .server_alive_interval
+            .unwrap_or(DEFAULT_SERVER_ALIVE_INTERVAL),
+        server_alive_count_max: r
+            .server_alive_count_max
+            .unwrap_or(DEFAULT_SERVER_ALIVE_COUNT_MAX),
     })
 }
 
@@ -228,6 +247,12 @@ impl ConnectSpec {
             proxy_command: e.proxy_command.clone(),
             known_hosts: None,
             memory_keys: Vec::new(),
+            server_alive_interval: e
+                .server_alive_interval
+                .unwrap_or(DEFAULT_SERVER_ALIVE_INTERVAL),
+            server_alive_count_max: e
+                .server_alive_count_max
+                .unwrap_or(DEFAULT_SERVER_ALIVE_COUNT_MAX),
         })
     }
 

@@ -39,6 +39,10 @@ pub(crate) enum Failure {
     AuthCancelled,
     Proxy(String),
     ConnectTimeout,
+    /// The server could not be reached; the text already names where tern tried to go.
+    Unreachable(String),
+    /// The server stopped answering keep-alives.
+    KeepaliveTimeout,
     Transport(String),
     /// A socket error, kept whole so the caller can word it with the host it was reaching.
     Io(std::io::Error),
@@ -63,7 +67,10 @@ impl fmt::Display for Failure {
             Failure::AuthCancelled => write!(f, "authentication cancelled"),
             Failure::Proxy(e) => write!(f, "ProxyCommand failed: {e}"),
             Failure::ConnectTimeout => write!(f, "no answer within 15 seconds"),
-            Failure::Transport(e) => write!(f, "{e}"),
+            Failure::Unreachable(e) | Failure::Transport(e) => write!(f, "{e}"),
+            Failure::KeepaliveTimeout => {
+                write!(f, "the server stopped answering; connection timed out")
+            }
             Failure::Io(e) => write!(f, "{e}"),
             Failure::UiGone => write!(f, "event receiver dropped"),
         }
@@ -74,6 +81,9 @@ impl From<russh::Error> for Failure {
     fn from(e: russh::Error) -> Self {
         match e {
             russh::Error::IO(io) => Failure::Io(io),
+            russh::Error::KeepaliveTimeout | russh::Error::InactivityTimeout => {
+                Failure::KeepaliveTimeout
+            }
             other => Failure::Transport(other.to_string()),
         }
     }

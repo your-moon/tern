@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use russh::client::{self, Handle};
-use russh::{ChannelMsg, Disconnect, Preferred};
+use russh::{ChannelMsg, Disconnect as SshDisconnect, Preferred};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::sync::mpsc;
@@ -14,13 +14,15 @@ use tokio::time::Instant;
 
 use crate::authn::Authenticator;
 use crate::config;
+use crate::disconnect::{Cause, classify};
 use crate::error::Failure;
 use crate::hostkey::{Handler, known_algorithms};
 use crate::outbox::Outbox;
-use crate::{ConnectSpec, SessionEvent, TermSize};
+use crate::{ConnectSpec, Disconnect, SessionEvent, TermSize};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
-const KEEPALIVE: Duration = Duration::from_secs(30);
+/// How long to wait for russh to say why a connection that went quiet has died.
+const CAUSE_GRACE: Duration = Duration::from_millis(500);
 /// After exit-status, how long to wait for the server to close the channel.
 const EXIT_GRACE: Duration = Duration::from_secs(2);
 const TERM: &str = "xterm-256color";
@@ -38,6 +40,7 @@ pub(crate) enum Command {
 struct Outcome {
     exit_status: Option<u32>,
     error: Option<String>,
+    reason: Disconnect,
 }
 
 pub(crate) async fn run(
@@ -46,21 +49,33 @@ pub(crate) async fn run(
     mut cmds: mpsc::Receiver<Command>,
     events: async_channel::Sender<SessionEvent>,
 ) {
-    let outcome = match run_inner(&spec, size, &mut cmds, &events).await {
+    let cause = Cause::default();
+    let mut connected = false;
+    let outcome = match run_inner(&spec, size, &mut cmds, &events, &cause, &mut connected).await {
         Ok(o) => o,
         Err(f) => {
             tracing::warn!(host = %spec.host, port = spec.port, error = %f, "ssh_session_failed");
+            // What russh saw on the dead link is more exact than the error it surfaced as.
+            let reason = match connected {
+                true => match cause.wait(CAUSE_GRACE).await {
+                    Some(c) => c,
+                    None => classify(&f, true),
+                },
+                false => classify(&f, false),
+            };
             Outcome {
                 exit_status: None,
                 error: Some(f.to_string()),
+                reason,
             }
         }
     };
-    tracing::info!(host = %spec.host, port = spec.port, exit_status = ?outcome.exit_status, "ssh_closed");
+    tracing::info!(host = %spec.host, port = spec.port, exit_status = ?outcome.exit_status, reason = ?outcome.reason, "ssh_closed");
     let _ = events
         .send(SessionEvent::Closed {
             exit_status: outcome.exit_status,
             error: outcome.error,
+            reason: outcome.reason,
         })
         .await;
 }
@@ -123,6 +138,8 @@ async fn run_inner(
     size: TermSize,
     cmds: &mut mpsc::Receiver<Command>,
     events: &async_channel::Sender<SessionEvent>,
+    cause: &Cause,
+    handshaken: &mut bool,
 ) -> Result<Outcome, Failure> {
     let known_hosts = spec.known_hosts.clone();
     let handler = Handler {
@@ -130,6 +147,7 @@ async fn run_inner(
         port: spec.port,
         known_hosts: known_hosts.clone(),
         events: events.clone(),
+        cause: cause.clone(),
     };
 
     let mut preferred = Preferred::default();
@@ -146,7 +164,10 @@ async fn run_inner(
         preferred.key = Cow::Owned(keys);
     }
     let cfg = Arc::new(client::Config {
-        keepalive_interval: Some(KEEPALIVE),
+        // OpenSSH: an interval of 0 turns keep-alives off; a count of 0 never gives up (russh
+        // reads 0 the same way).
+        keepalive_interval: Some(spec.server_alive_interval).filter(|d| !d.is_zero()),
+        keepalive_max: spec.server_alive_count_max as usize,
         nodelay: true,
         channel_buffer_size: CHANNEL_BUFFER,
         preferred,
@@ -190,6 +211,7 @@ async fn run_inner(
         .run()
         .await?;
 
+    *handshaken = true;
     let mut channel = session.channel_open_session().await?;
     channel
         .request_pty(
@@ -211,6 +233,7 @@ async fn run_inner(
 
     let mut exit_status = None;
     let mut error = None;
+    let mut signal = None;
     let mut deadline: Option<Instant> = None;
     let mut closing = false;
     let mut outbox = Outbox::new(events.clone());
@@ -241,6 +264,7 @@ async fn run_inner(
                 }
                 Some(ChannelMsg::ExitSignal { signal_name, .. }) => {
                     error = Some(format!("terminated by signal {signal_name:?}"));
+                    signal = Some(format!("{signal_name:?}"));
                     deadline.get_or_insert_with(|| Instant::now() + EXIT_GRACE);
                 }
                 Some(ChannelMsg::Failure) => {
@@ -255,8 +279,22 @@ async fn run_inner(
     }
     // Output that arrived just before exit (a final prompt, an error message) still reaches the UI.
     outbox.flush().await;
+    let reason = match (exit_status, signal) {
+        (Some(code), _) => Disconnect::Exited(code),
+        (None, Some(name)) => Disconnect::Signaled(name),
+        (None, None) if closing => Disconnect::Local,
+        // The shell channel ended with no exit status: the link died or the server hung up.
+        (None, None) => cause
+            .wait(CAUSE_GRACE)
+            .await
+            .unwrap_or(Disconnect::ServerClosed),
+    };
     disconnect(&session).await;
-    Ok(Outcome { exit_status, error })
+    Ok(Outcome {
+        exit_status,
+        error,
+        reason,
+    })
 }
 
 /// A proxy that died during the handshake explains the failure better than russh's
@@ -273,7 +311,7 @@ fn proxy_exit(child: &mut Option<Child>, reason: Option<&ProxyReason>) -> Option
 /// A connect error in words a person can act on, naming where tern tried to go.
 fn connect_failure(e: Failure, host: &str, port: u16) -> Failure {
     match e {
-        Failure::Io(io) => Failure::Transport(describe_io(&io, host, port)),
+        Failure::Io(io) => Failure::Unreachable(describe_io(&io, host, port)),
         other => other,
     }
 }
@@ -297,7 +335,7 @@ pub(crate) fn describe_io(e: &std::io::Error, host: &str, port: u16) -> String {
 
 async fn disconnect(session: &Handle<Handler>) {
     let _ = session
-        .disconnect(Disconnect::ByApplication, "", "en")
+        .disconnect(SshDisconnect::ByApplication, "", "en")
         .await;
 }
 

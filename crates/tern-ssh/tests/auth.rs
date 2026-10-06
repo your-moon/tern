@@ -139,6 +139,7 @@ async fn login_with(
         proxy_command: None,
         known_hosts: Some(dir.path().join("known_hosts")),
         memory_keys,
+        ..Default::default()
     };
     let size = TermSize {
         cols: 80,

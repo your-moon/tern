@@ -6,6 +6,7 @@ use futures::channel::oneshot;
 use russh::client;
 use russh::keys::{Algorithm, HashAlg, PublicKey, PublicKeyOrCertificate, known_hosts};
 
+use crate::disconnect::{Cause, Disconnect, classify};
 use crate::error::Failure;
 use crate::{Prompt, SessionEvent};
 
@@ -60,6 +61,8 @@ pub(crate) struct Handler {
     pub port: u16,
     pub known_hosts: Option<PathBuf>,
     pub events: async_channel::Sender<SessionEvent>,
+    /// Filled when russh reports the connection dead; read by the session loop.
+    pub cause: Cause,
 }
 
 impl client::Handler for Handler {
@@ -117,6 +120,24 @@ impl client::Handler for Handler {
                     tracing::warn!(host = %self.host, port = self.port, error = %e, "ssh_known_hosts_write_failed");
                 }
                 Ok(true)
+            }
+        }
+    }
+
+    /// russh calls this once the handshake is done and the link dies; the channel alone only
+    /// goes quiet, so this is where a keep-alive timeout or reset becomes visible.
+    async fn disconnected(
+        &mut self,
+        reason: client::DisconnectReason<Self::Error>,
+    ) -> Result<(), Self::Error> {
+        match reason {
+            client::DisconnectReason::ReceivedDisconnect(_) => {
+                self.cause.set(Disconnect::ServerClosed);
+                Ok(())
+            }
+            client::DisconnectReason::Error(e) => {
+                self.cause.set(classify(&e, true));
+                Err(e)
             }
         }
     }

@@ -179,7 +179,9 @@ async fn main() -> ExitCode {
                 let _ = stdout.flush();
             }
             SessionEvent::Prompt(p) => answer(p).await,
-            SessionEvent::Closed { exit_status, error } => {
+            SessionEvent::Closed {
+                exit_status, error, ..
+            } => {
                 drop(raw.take());
                 if let Some(e) = error {
                     eprintln!("\nconnect: {e}");

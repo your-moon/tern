@@ -9,21 +9,30 @@
 
 mod authn;
 mod config;
+mod disconnect;
 mod error;
 mod hostkey;
 mod outbox;
 mod session;
 
 use std::path::PathBuf;
+use std::time::Duration;
 
 use tokio::sync::mpsc;
 
 pub use config::load_ssh_config_hosts;
+pub use disconnect::Disconnect;
 pub use error::{Error, InputError, Result};
 pub use futures::channel::oneshot;
 pub use secrecy::{self, ExposeSecret, SecretString};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Keep-alive probe interval when the host sets no `ServerAliveInterval`.
+pub const DEFAULT_SERVER_ALIVE_INTERVAL: Duration = Duration::from_secs(30);
+/// Unanswered keep-alives before the connection is dropped, when the host sets no
+/// `ServerAliveCountMax` (OpenSSH's default too).
+pub const DEFAULT_SERVER_ALIVE_COUNT_MAX: u32 = 3;
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct HostEntry {
     pub alias: String,
     pub host_name: String,
@@ -31,6 +40,11 @@ pub struct HostEntry {
     pub user: Option<String>,
     pub identity_files: Vec<PathBuf>,
     pub proxy_command: Option<String>,
+    /// `ServerAliveInterval`; `None` when the host does not set it, `Some(ZERO)` when it
+    /// turns keep-alives off.
+    pub server_alive_interval: Option<Duration>,
+    /// `ServerAliveCountMax`; `None` when the host does not set it.
+    pub server_alive_count_max: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,6 +60,29 @@ pub struct ConnectSpec {
     /// Private keys held in memory (tern's vault), offered after the agent and before the key
     /// files. Never written to disk or logged.
     pub memory_keys: Vec<MemoryKey>,
+    /// Silence before a keep-alive is sent; `Duration::ZERO` turns keep-alives off, as
+    /// `ServerAliveInterval 0` does in OpenSSH.
+    pub server_alive_interval: Duration,
+    /// Keep-alives that may go unanswered before the session ends as [`Disconnect::Timeout`];
+    /// `0` never gives up.
+    pub server_alive_count_max: u32,
+}
+
+impl Default for ConnectSpec {
+    /// An empty target with today's keep-alive settings; fill in the host, port and user.
+    fn default() -> Self {
+        ConnectSpec {
+            host: String::new(),
+            port: 22,
+            user: String::new(),
+            identity_files: Vec::new(),
+            proxy_command: None,
+            known_hosts: None,
+            memory_keys: Vec::new(),
+            server_alive_interval: DEFAULT_SERVER_ALIVE_INTERVAL,
+            server_alive_count_max: DEFAULT_SERVER_ALIVE_COUNT_MAX,
+        }
+    }
 }
 
 /// An unencrypted OpenSSH private key held in memory, with a label for logs.
@@ -117,6 +154,8 @@ pub enum SessionEvent {
     Closed {
         exit_status: Option<u32>,
         error: Option<String>,
+        /// Why it ended; reconnect only when [`Disconnect::is_network`] is true.
+        reason: Disconnect,
     },
 }
 
