@@ -7400,7 +7400,7 @@ dependencies = [
 
 [[package]]
 name = "tern"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -7432,7 +7432,7 @@ dependencies = [
 
 [[package]]
 name = "tern-ssh"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-channel",
  "crossterm",
@@ -7452,7 +7452,7 @@ dependencies = [
 
 [[package]]
 name = "tern-sync"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "keyring",
@@ -7467,7 +7467,7 @@ dependencies = [
 
 [[package]]
 name = "tern-term"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "alacritty_terminal",
  "async-channel",
@@ -7478,7 +7478,7 @@ dependencies = [
 
 [[package]]
 name = "tern-vault"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "age",
  "rand 0.10.3",

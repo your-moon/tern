@@ -4,6 +4,17 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-06
+
+### Added
+
+- Windows (x86_64) and Linux (x86_64, aarch64) builds, as a **preview**: they build and pass the test suite in CI, but have not yet been run on a real Windows or Linux desktop. On those systems saved secrets go to Windows Credential Manager or the Linux Secret Service, config lives in `%APPDATA%\tern` or `~/.config/tern`, password commands run through `cmd /C` on Windows, the Windows OpenSSH agent pipe is used, and shortcuts use Ctrl+Shift / Ctrl+Alt so plain Ctrl keys still reach the shell (table in `crates/tern/src/keymap.rs`).
+
+### Fixed
+
+- Skipping "Vault passphrase (Enter to skip)" holds for the tab. It was asked again at the server's password prompt, after each refused password, and by every automatic reconnect, which then waited on the question instead of reconnecting.
+- Sync's `git` ignores `GIT_DIR` and related variables, so a sync started from inside a git hook cannot act on the wrong repository.
+
 ## [0.1.1] - 2026-10-06
 
 ### Changed
@@ -89,6 +100,7 @@ The first release: a daily-driver SSH client for macOS.
 - Secrets are held as zeroizing `SecretString`s and never logged; session output is redacted from `Debug`.
 - RUSTSEC-2023-0071 in `rsa` (via russh) is accepted for now; see [SECURITY.md](SECURITY.md) and #16.
 
-[Unreleased]: https://github.com/your-moon/tern/compare/v0.1.1...main
+[Unreleased]: https://github.com/your-moon/tern/compare/v0.1.2...main
+[0.1.2]: https://github.com/your-moon/tern/releases/tag/v0.1.2
 [0.1.1]: https://github.com/your-moon/tern/releases/tag/v0.1.1
 [0.1.0]: https://github.com/your-moon/tern/releases/tag/v0.1.0
