@@ -44,11 +44,44 @@ mod wallpaper_fx_tests;
 use gpui::App;
 use tracing_subscriber::EnvFilter;
 
+/// What the command line asks for. Flags are answered before any window opens, and nothing
+/// starting with `-` is ever taken as a host to dial.
+#[derive(Debug, PartialEq, Eq)]
+enum Cli {
+    Open(Option<String>),
+    Print(String),
+    Refuse(String),
+}
+
+fn parse_cli(arg: Option<String>) -> Cli {
+    let usage = "usage: tern [alias | user@host[:port]]";
+    match arg.as_deref() {
+        None => Cli::Open(None),
+        Some("-V" | "--version") => Cli::Print(format!("tern {}", env!("CARGO_PKG_VERSION"))),
+        Some("-h" | "--help") => Cli::Print(usage.to_owned()),
+        Some(flag) if flag.starts_with('-') => {
+            Cli::Refuse(format!("unknown option {flag}\n{usage}"))
+        }
+        Some(_) => Cli::Open(arg),
+    }
+}
+
+#[allow(clippy::print_stdout, clippy::print_stderr)]
 fn main() {
+    let target = match parse_cli(std::env::args().nth(1)) {
+        Cli::Open(target) => target,
+        Cli::Print(text) => {
+            println!("{text}");
+            return;
+        }
+        Cli::Refuse(text) => {
+            eprintln!("{text}");
+            std::process::exit(2);
+        }
+    };
     let _log_guard = init_logging();
     log_panics();
     let _app = tracing::info_span!("app", service = "tern", env = env()).entered();
-    let target = std::env::args().nth(1);
     gpui_platform::application()
         .with_assets(icons::Assets)
         .run(move |cx: &mut App| {
@@ -178,5 +211,23 @@ fn env() -> &'static str {
         "dev"
     } else {
         "production"
+    }
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::{Cli, parse_cli};
+
+    #[test]
+    fn flags_never_become_hosts() {
+        let arg = |s: &str| Some(s.to_owned());
+        assert!(matches!(parse_cli(arg("--version")), Cli::Print(v) if v.starts_with("tern ")));
+        assert!(matches!(parse_cli(arg("-h")), Cli::Print(_)));
+        assert!(matches!(parse_cli(arg("--verbose")), Cli::Refuse(_)));
+        assert_eq!(
+            parse_cli(arg("deploy@10.0.0.5:2222")),
+            Cli::Open(arg("deploy@10.0.0.5:2222"))
+        );
+        assert_eq!(parse_cli(None), Cli::Open(None));
     }
 }
