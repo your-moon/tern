@@ -29,7 +29,8 @@ pub(super) const GROUPS: [(&str, &[Section]); 4] = [
     ),
     ("Connections", &[Section::Connections, Section::Snippets]),
     ("Security & sync", &[Section::Vault, Section::Sync]),
-    ("About", &[Section::About]),
+    // A lone section needs no label repeating its own name; spacing sets it apart.
+    ("", &[Section::About]),
 ];
 
 /// Where a navigation key lands from `current`. Up/down wrap, as zeron's do; Home and End jump.
@@ -182,17 +183,21 @@ pub(super) fn render(
         .flex_col()
         .gap(px(2.));
     for (n, (label, members)) in GROUPS.iter().enumerate() {
-        list = list.child(
-            div()
-                .when(n > 0, |el| el.mt(px(SPACE_LG - 2.)))
-                .px(px(SPACE_SM))
-                .h(px(28.))
-                .flex()
-                .items_center()
-                .text_size(px(12.))
-                .text_color(faint)
-                .child(*label),
-        );
+        if label.is_empty() {
+            list = list.child(div().h(px(SPACE_LG)));
+        } else {
+            list = list.child(
+                div()
+                    .when(n > 0, |el| el.mt(px(SPACE_LG - 2.)))
+                    .px(px(SPACE_SM))
+                    .h(px(28.))
+                    .flex()
+                    .items_center()
+                    .text_size(px(12.))
+                    .text_color(faint)
+                    .child(*label),
+            );
+        }
         for &item in *members {
             let index = Section::ALL.iter().position(|s| *s == item).unwrap_or(0);
             let selected = item == section;
