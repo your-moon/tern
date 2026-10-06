@@ -6,9 +6,7 @@ use futures::channel::oneshot;
 use russh::client;
 use russh::keys::{Algorithm, HashAlg, PublicKey, PublicKeyOrCertificate, known_hosts};
 
-use crate::agent;
-use crate::disconnect::{Cause, Disconnect, classify};
-use crate::error::Failure;
+use crate::error::{Cause, Disconnect, Failure, classify};
 use crate::forward::{self, RemoteTargets};
 use crate::{Prompt, SessionEvent};
 
@@ -140,7 +138,7 @@ impl client::Handler for Handler {
         match self.agent_socket.clone() {
             Some(socket) => {
                 reply.accept().await;
-                tokio::spawn(agent::bridge(channel, socket));
+                tokio::spawn(crate::authn::bridge(channel, socket));
             }
             None => reply.reject(forward::NOT_FORWARDED).await,
         }

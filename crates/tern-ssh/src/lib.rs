@@ -7,16 +7,11 @@
 //! A host with a `ProxyCommand` in `~/.ssh/config` is reached through that command, as
 //! OpenSSH does; it is resolved once, with the rest of the alias, into [`ConnectSpec`].
 
-mod agent;
 mod authn;
 mod config;
-mod disconnect;
 mod error;
 mod forward;
 mod hostkey;
-mod jump;
-mod latency;
-mod outbox;
 mod session;
 mod sftp;
 mod socks;
@@ -29,8 +24,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 pub use config::load_ssh_config_hosts;
-pub use disconnect::Disconnect;
-pub use error::{Error, ForwardError, InputError, Result};
+pub use error::{Disconnect, Error, ForwardError, InputError, Result};
 pub use forward::{Forward, ForwardHandle, ForwardInfo};
 pub use futures::channel::oneshot;
 pub use secrecy::{self, ExposeSecret, SecretString};
@@ -301,7 +295,7 @@ impl SessionHandle {
 /// Starts a session on `rt`. The first event is a [`Prompt`] or [`SessionEvent::Connected`];
 /// the last is always [`SessionEvent::Closed`].
 ///
-/// Memory per session is bounded: see `outbox.rs` and `docs/perf.md`.
+/// Memory per session is bounded: see `session.rs` and `docs/perf.md`.
 #[must_use = "the session runs only while its events are received"]
 pub fn connect(
     spec: ConnectSpec,
@@ -310,7 +304,7 @@ pub fn connect(
 ) -> (SessionHandle, async_channel::Receiver<SessionEvent>) {
     let (tx, rx) = mpsc::channel(COMMAND_QUEUE);
     let forwards = Arc::new(forward::Registry::default());
-    let (etx, erx) = async_channel::bounded(outbox::EVENT_QUEUE);
+    let (etx, erx) = async_channel::bounded(session::EVENT_QUEUE);
     rt.spawn(session::run(spec, size, rx, etx, forwards.clone()));
     (SessionHandle { tx, forwards }, erx)
 }

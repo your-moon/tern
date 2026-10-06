@@ -1,6 +1,12 @@
 // Adapted from russh russh/examples/client_exec_interactive.rs (Apache-2.0) for the
 // PTY/shell/event loop, and from CrabPort crabport-ssh/src/backend.rs (Apache-2.0)
 // for window_change handling and protocol-level keepalive.
+//! Remote output on its way to the UI, coalesced and bounded. While the outbox is full the
+//! session stops reading the channel, so russh stops reading the socket (backpressure).
+//!
+//! Round-trip time of the live connection, probed with our own `keepalive@openssh.com`
+//! global request so it does not depend on the user's ServerAliveInterval (often off).
+
 use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,21 +19,20 @@ use tokio::process::Child;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
-use crate::agent;
-use crate::authn::Authenticator;
+use crate::authn::{self, Authenticator};
 use crate::config;
-use crate::disconnect::{Cause, classify};
-use crate::error::Failure;
+use crate::error::{Cause, Failure, classify};
 use crate::forward::{self, Registry};
 use crate::hostkey::{Handler, known_algorithms};
-use crate::jump;
-use crate::latency;
-use crate::outbox::Outbox;
 use crate::sftp;
 use crate::{
     ConnectSpec, Disconnect, Forward, ForwardError, ForwardInfo, SessionEvent, Sftp, SftpError,
     TermSize,
 };
+use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
+use tokio::task::JoinHandle;
 
 pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long to wait for russh to say why a connection that went quiet has died.
@@ -223,7 +228,7 @@ async fn run_inner(
     handshaken: &mut bool,
     forwards: &Arc<Registry>,
 ) -> Result<Outcome, Failure> {
-    let agent_socket = agent::socket_for(spec.forward_agent, spec.agent_socket.as_deref());
+    let agent_socket = authn::socket_for(spec.forward_agent, spec.agent_socket.as_deref());
     let handler = Handler {
         host: spec.host.clone(),
         port: spec.port,
@@ -241,7 +246,7 @@ async fn run_inner(
     let mut _hops = Vec::new();
     let mut jump_stream = None;
     if !spec.proxy_jump.is_empty() {
-        let chain = jump::open(spec, events).await?;
+        let chain = authn::open_jump_chain(spec, events).await?;
         _hops = chain.hops;
         jump_stream = Some(chain.stream);
     }
@@ -309,7 +314,7 @@ async fn run_inner(
         .map_err(|_| Failure::UiGone)?;
     tracing::info!(host = %spec.host, port = spec.port, "ssh_connected");
     // Started after auth, so a prompt never waits behind a probe; dropped with the session.
-    let _latency = latency::start(session.clone(), events.clone());
+    let _latency = start_latency_probe(session.clone(), events.clone());
 
     let mut exit_status = None;
     let mut error = None;
@@ -351,7 +356,7 @@ async fn run_inner(
             delivered = outbox.progress(), if outbox.has_work() => {
                 if !delivered { break; }
             }
-            // Not reading while the outbox is full is the backpressure: see outbox.rs.
+            // Not reading while the outbox is full is the backpressure: see `Outbox`.
             msg = channel.wait(), if outbox.wants_input() => match msg {
                 Some(ChannelMsg::Data { data }) | Some(ChannelMsg::ExtendedData { data, .. }) => {
                     outbox.push(&data);
@@ -457,5 +462,213 @@ mod describe_tests {
         );
         let odd = Error::other("something else");
         assert_eq!(describe_io(&odd, "h", 22), "something else");
+    }
+}
+
+/// Largest coalesced chunk handed to the UI in one [`SessionEvent::Data`].
+pub(crate) const MAX_CHUNK: usize = 64 * 1024;
+
+/// Capacity of the event channel to the UI. Chunks are coalesced, so a short queue suffices.
+pub(crate) const EVENT_QUEUE: usize = 8;
+
+type InFlight = Pin<Box<dyn Future<Output = bool> + Send>>;
+
+pub(crate) struct Outbox {
+    tx: async_channel::Sender<SessionEvent>,
+    buf: Vec<u8>,
+    in_flight: Option<InFlight>,
+}
+
+impl fmt::Debug for Outbox {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Outbox")
+            .field("buffered", &self.buf.len())
+            .field("sending", &self.in_flight.is_some())
+            .finish()
+    }
+}
+
+impl Outbox {
+    pub(crate) fn new(tx: async_channel::Sender<SessionEvent>) -> Self {
+        Self {
+            tx,
+            buf: Vec::new(),
+            in_flight: None,
+        }
+    }
+
+    /// Whether the session may read more from the SSH channel.
+    pub(crate) fn wants_input(&self) -> bool {
+        self.buf.len() < MAX_CHUNK
+    }
+
+    pub(crate) fn push(&mut self, data: &[u8]) {
+        self.buf.extend_from_slice(data);
+    }
+
+    /// Whether [`Self::progress`] has anything to do.
+    pub(crate) fn has_work(&self) -> bool {
+        self.in_flight.is_some() || !self.buf.is_empty()
+    }
+
+    /// Delivers one chunk; `false` once the receiver is gone. Cancel-safe: the in-flight send
+    /// lives in `self`, so the next call resumes it.
+    pub(crate) async fn progress(&mut self) -> bool {
+        if self.in_flight.is_none() {
+            if self.buf.is_empty() {
+                return true;
+            }
+            let chunk = std::mem::take(&mut self.buf);
+            let tx = self.tx.clone();
+            self.in_flight = Some(Box::pin(async move {
+                tx.send(SessionEvent::Data(chunk)).await.is_ok()
+            }));
+        }
+        let delivered = match self.in_flight.as_mut() {
+            Some(send) => send.await,
+            None => true,
+        };
+        self.in_flight = None;
+        delivered
+    }
+
+    pub(crate) async fn flush(&mut self) -> bool {
+        while self.has_work() {
+            if !self.progress().await {
+                return false;
+            }
+        }
+        true
+    }
+
+    #[cfg(test)]
+    fn buffered(&self) -> usize {
+        self.buf.len()
+    }
+}
+
+/// Gap between probes while the session is open.
+const PROBE_EVERY: Duration = Duration::from_secs(5);
+/// Weight of the newest sample: a spike shows within a probe or two without the figure jittering.
+const ALPHA: f64 = 0.3;
+
+/// Folds `sample` into the running figure (`None` before the first sample).
+pub(crate) fn smooth(prev: Option<Duration>, sample: Duration) -> Duration {
+    match prev {
+        None => sample,
+        Some(p) => {
+            Duration::from_secs_f64(ALPHA * sample.as_secs_f64() + (1.0 - ALPHA) * p.as_secs_f64())
+        }
+    }
+}
+
+/// Aborts the probe task when the session ends.
+pub(crate) struct Probe(JoinHandle<()>);
+
+impl Drop for Probe {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+/// Starts probing a logged-in session; each reply sends a [`SessionEvent::Latency`].
+pub(crate) fn start_latency_probe<H: client::Handler + 'static>(
+    session: Arc<Handle<H>>,
+    events: async_channel::Sender<SessionEvent>,
+) -> Probe {
+    Probe(tokio::spawn(async move {
+        let mut smoothed = None;
+        loop {
+            let sent = std::time::Instant::now();
+            match session
+                .send_global_request("keepalive@openssh.com", &[], true)
+                .await
+            {
+                // Servers that do not know the request refuse it; the refusal is still a round trip.
+                Ok(_) | Err(russh::Error::RequestDenied) => {}
+                Err(_) => return,
+            }
+            let now = smooth(smoothed, sent.elapsed());
+            smoothed = Some(now);
+            if events.send(SessionEvent::Latency(now)).await.is_err() {
+                return;
+            }
+            tokio::time::sleep(PROBE_EVERY).await;
+        }
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::panic)]
+
+    use std::time::Duration;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn slow_consumer_keeps_buffer_bounded_and_preserves_order() {
+        const READ: usize = 4 * 1024;
+        const TOTAL_READS: usize = 400; // 1.6 MiB, 25x MAX_CHUNK
+
+        let (tx, rx) = async_channel::bounded(EVENT_QUEUE);
+        let consumer = tokio::spawn(async move {
+            let mut got = Vec::new();
+            while let Ok(ev) = rx.recv().await {
+                if let SessionEvent::Data(d) = ev {
+                    got.extend_from_slice(&d);
+                }
+                tokio::time::sleep(Duration::from_millis(1)).await;
+            }
+            got
+        });
+
+        let mut outbox = Outbox::new(tx);
+        let mut sent = Vec::new();
+        let mut peak = 0;
+        let mut reads = 0;
+        while reads < TOTAL_READS || outbox.has_work() {
+            tokio::select! {
+                () = std::future::ready(()), if reads < TOTAL_READS && outbox.wants_input() => {
+                    let read: Vec<u8> = (0..READ).map(|i| ((reads * READ + i) % 251) as u8).collect();
+                    outbox.push(&read);
+                    sent.extend_from_slice(&read);
+                    reads += 1;
+                }
+                ok = outbox.progress(), if outbox.has_work() => assert!(ok),
+            }
+            peak = peak.max(outbox.buffered());
+        }
+        drop(outbox);
+
+        let got = consumer.await.unwrap();
+        assert!(peak < MAX_CHUNK + READ, "buffer peaked at {peak} bytes");
+        assert_eq!(got.len(), sent.len());
+        assert!(got == sent, "bytes reordered or corrupted");
+    }
+
+    #[tokio::test]
+    async fn progress_reports_a_dropped_receiver() {
+        let (tx, rx) = async_channel::bounded(1);
+        drop(rx);
+        let mut outbox = Outbox::new(tx);
+        outbox.push(b"x");
+        assert!(!outbox.progress().await);
+    }
+
+    #[test]
+    fn the_first_sample_is_taken_as_is() {
+        assert_eq!(
+            smooth(None, Duration::from_millis(40)),
+            Duration::from_millis(40)
+        );
+    }
+
+    #[test]
+    fn a_new_sample_moves_the_figure_three_tenths_of_the_way() {
+        let up = smooth(Some(Duration::from_millis(100)), Duration::from_millis(200));
+        assert_eq!(up.as_micros(), 130_000);
+        let down = smooth(Some(Duration::from_millis(200)), Duration::from_millis(100));
+        assert_eq!(down.as_micros(), 170_000);
     }
 }

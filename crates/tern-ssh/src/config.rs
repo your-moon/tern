@@ -115,7 +115,7 @@ pub(crate) fn resolve(config: Option<&Loaded>, alias: &str) -> Resolved {
         })
         .collect();
     if let Some(v) = sshconf::first(&d, "forwardagent") {
-        (r.forward_agent, r.agent_socket) = crate::agent::parse_forward_agent(v);
+        (r.forward_agent, r.agent_socket) = crate::authn::parse_forward_agent(v);
     }
     let claimed = d
         .iter()

@@ -14,8 +14,8 @@
 | Buffer | Bound | Source |
 | --- | --- | --- |
 | russh per-channel queue | 16 messages (russh default 100) | `session.rs` `CHANNEL_BUFFER` |
-| Chunk being coalesced | < 64 KiB + one packet | `outbox.rs` `MAX_CHUNK` |
-| Event queue to the UI | 8 chunks | `outbox.rs` `EVENT_QUEUE` |
+| Chunk being coalesced | < 64 KiB + one packet | `session.rs` `MAX_CHUNK` |
+| Event queue to the UI | 8 chunks | `session.rs` `EVENT_QUEUE` |
 | Input queue from the UI | 64 commands, full → `InputError::Busy` | `lib.rs` `COMMAND_QUEUE` |
 
 When the UI falls behind, tern stops reading the channel, russh's queue fills, and russh stops
