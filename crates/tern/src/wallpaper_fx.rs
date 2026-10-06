@@ -202,6 +202,11 @@ fn rel_luminance(rgb: u32) -> f32 {
     0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
 }
 
+/// WCAG contrast ratio between two `0xRRGGBB` colours.
+pub fn contrast_ratio(a_rgb: u32, b_rgb: u32) -> f32 {
+    contrast(rel_luminance(a_rgb), rel_luminance(b_rgb))
+}
+
 fn contrast(a: f32, b: f32) -> f32 {
     let (hi, lo) = if a > b { (a, b) } else { (b, a) };
     (hi + 0.05) / (lo + 0.05)

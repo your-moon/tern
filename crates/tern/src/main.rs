@@ -25,6 +25,7 @@ mod text_input;
 mod theme;
 mod themes;
 mod titlebar;
+mod wallpaper_colors;
 mod wallpaper_fx;
 #[cfg(test)]
 mod wallpaper_fx_tests;
