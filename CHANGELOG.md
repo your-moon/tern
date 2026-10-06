@@ -33,6 +33,8 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 - `tern`: 725 terminal colour schemes (iTerm2-Color-Schemes), a searchable picker with a colour strip per row and live preview (Enter keeps, Escape reverts), a default theme in Settings → Appearance, and a theme per host from the sidebar (◐). The panel around the terminal takes the scheme's background.
 - `tern`: the offer to save a typed password waits for the login banner to finish and starts on its own line.
 - `tern`: Settings → Shortcuts lists every app shortcut; click one and press the new keys (Esc cancels, ⌫ unbinds, Reset restores). A chord already in use is refused with the name of the action that has it. Overrides live in `keymap.json` and apply at once; keys without ⌘, ⌃ or ⌥ always reach the remote shell.
+- `tern`: Settings → Sync keeps connections, settings, shortcuts and the vault the same on every Mac through one private GitHub gist. The token comes from `gh` or is pasted once into the macOS Keychain. Everything but the already-encrypted vault is sealed with the vault passphrase before upload. Sync now uploads or downloads, a new Mac just downloads, and when both sides changed it asks which one to keep.
+- `tern`: keys keep working after the focused field disappears (for example the passphrase field after a sync).
 - `tern`: a macOS menu bar (Hide, Hide Others, Show All, Quit, Minimize, Zoom) with ⌘Q, ⌘H, ⌥⌘H and ⌘M.
 - `tern-term`: `local_demo <command>` for visual checks; scripted runs never take keyboard focus.
 - Project: craft gates (`clippy -D warnings`, file-size and attribution checks, `cargo deny`), CI, architecture diagram, UI spec and measured performance notes.

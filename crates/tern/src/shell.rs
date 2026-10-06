@@ -34,6 +34,8 @@ actions!(
 
 #[path = "shell_settings.rs"]
 mod settings_ui;
+#[path = "shell_sync.rs"]
+mod sync_ui;
 #[path = "shell_themes.rs"]
 mod themes_ui;
 
@@ -88,6 +90,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
             recording: None,
             record_notice: None,
             record_interceptor: None,
+            sync_ui: None,
         };
         shell.refresh_hosts();
         cx.new(|_| shell)
@@ -125,6 +128,7 @@ pub struct Shell {
     recording: Option<crate::keymap::ShortcutId>,
     record_notice: Option<String>,
     record_interceptor: Option<Subscription>,
+    sync_ui: Option<sync_ui::SyncUi>,
 }
 
 struct Tab {
@@ -432,6 +436,11 @@ impl Shell {
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Whatever held focus can disappear (a field hidden after sync, a closed form or tab);
+        // with nothing focused gpui dispatches no keys at all, so the window takes it back.
+        if window.focused(cx).is_none() {
+            window.focus(&self.focus, cx);
+        }
         let t = self.theme;
         let infos = self.tab_infos(cx);
         let active_alias = infos.get(self.active).map(|i| i.alias.clone());

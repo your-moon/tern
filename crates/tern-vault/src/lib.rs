@@ -13,7 +13,8 @@ use std::path::Path;
 
 pub use age::secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+pub use zeroize::Zeroizing;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// What a secret unlocks.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -90,10 +91,17 @@ impl Vault {
     /// altered; [`VaultError::Corrupt`] when it is not an age file or holds unexpected data;
     /// [`VaultError::Io`] when it cannot be read.
     pub fn unlock(path: &Path, passphrase: SecretString) -> Result<Self, VaultError> {
-        let ciphertext = std::fs::read(path)?;
+        Self::unlock_bytes(&std::fs::read(path)?, passphrase)
+    }
+
+    /// [`Vault::unlock`] for bytes already in memory, such as a vault downloaded by sync.
+    ///
+    /// # Errors
+    /// As [`Vault::unlock`], without the I/O case.
+    pub fn unlock_bytes(ciphertext: &[u8], passphrase: SecretString) -> Result<Self, VaultError> {
         let identity = age::scrypt::Identity::new(passphrase.clone());
         let plaintext =
-            Zeroizing::new(age::decrypt(&identity, &ciphertext).map_err(|e| match e {
+            Zeroizing::new(age::decrypt(&identity, ciphertext).map_err(|e| match e {
                 age::DecryptError::DecryptionFailed
                 | age::DecryptError::KeyDecryptionFailed
                 | age::DecryptError::NoMatchingKeys
@@ -130,6 +138,21 @@ impl Vault {
     /// [`VaultError::Io`] when the file cannot be written; [`VaultError::Corrupt`] if encoding
     /// fails, which would be a bug.
     pub fn save(&self, path: &Path) -> Result<(), VaultError> {
+        let ciphertext = self.to_bytes()?;
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        let tmp = path.with_extension("age.tmp");
+        std::fs::write(&tmp, ciphertext)?;
+        std::fs::rename(&tmp, path)?;
+        Ok(())
+    }
+
+    /// The encrypted vault file, as [`Vault::save`] writes it.
+    ///
+    /// # Errors
+    /// [`VaultError::Corrupt`] if encoding fails, which would be a bug.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, VaultError> {
         let contents = Contents {
             version: VERSION,
             entries: self
@@ -144,17 +167,37 @@ impl Vault {
         let plaintext = Zeroizing::new(
             serde_json::to_vec(&contents).map_err(|e| VaultError::Corrupt(e.to_string()))?,
         );
+        self.seal(&plaintext)
+    }
+
+    /// Opens another vault file sealed with the same passphrase (a synced copy).
+    ///
+    /// # Errors
+    /// As [`Vault::unlock_bytes`].
+    pub fn reopen(&self, ciphertext: &[u8]) -> Result<Vault, VaultError> {
+        Self::unlock_bytes(ciphertext, self.passphrase.clone())
+    }
+
+    /// Encrypts any bytes with this vault's passphrase, for data that travels with the vault
+    /// (sync uploads hosts and settings this way, so nothing readable leaves the machine).
+    ///
+    /// # Errors
+    /// [`VaultError::Corrupt`] if encryption fails, which would be a bug.
+    pub fn seal(&self, plaintext: &[u8]) -> Result<Vec<u8>, VaultError> {
         let mut recipient = age::scrypt::Recipient::new(self.passphrase.clone());
         recipient.set_work_factor(self.work_factor);
-        let ciphertext =
-            age::encrypt(&recipient, &plaintext).map_err(|e| VaultError::Corrupt(e.to_string()))?;
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir)?;
-        }
-        let tmp = path.with_extension("age.tmp");
-        std::fs::write(&tmp, ciphertext)?;
-        std::fs::rename(&tmp, path)?;
-        Ok(())
+        age::encrypt(&recipient, plaintext).map_err(|e| VaultError::Corrupt(e.to_string()))
+    }
+
+    /// Reverses [`Vault::seal`].
+    ///
+    /// # Errors
+    /// [`VaultError::WrongPassphrase`] when sealed under another passphrase or altered.
+    pub fn open(&self, ciphertext: &[u8]) -> Result<Zeroizing<Vec<u8>>, VaultError> {
+        let identity = age::scrypt::Identity::new(self.passphrase.clone());
+        age::decrypt(&identity, ciphertext)
+            .map(Zeroizing::new)
+            .map_err(|_| VaultError::WrongPassphrase)
     }
 
     pub fn get(&self, key: &Key) -> Option<&SecretString> {

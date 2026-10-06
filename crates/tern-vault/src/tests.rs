@@ -96,3 +96,16 @@ fn debug_never_shows_secrets() {
     let shown = format!("{v:?}");
     assert!(!shown.contains("hunter2") && !shown.contains("master"));
 }
+
+#[test]
+fn sealed_data_opens_only_with_the_same_passphrase() {
+    let v = Vault::new(pass("correct horse")).with_work_factor(4);
+    let sealed = v.seal(b"hosts.json").unwrap();
+    assert!(!String::from_utf8_lossy(&sealed).contains("hosts.json"));
+    assert_eq!(&*v.open(&sealed).unwrap(), b"hosts.json");
+    let other = Vault::new(pass("battery staple")).with_work_factor(4);
+    assert!(matches!(
+        other.open(&sealed),
+        Err(VaultError::WrongPassphrase)
+    ));
+}

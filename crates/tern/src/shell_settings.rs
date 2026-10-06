@@ -22,16 +22,18 @@ pub(crate) enum Section {
     Shortcuts,
     Connections,
     Vault,
+    Sync,
     About,
 }
 
 impl Section {
-    const ALL: [Section; 6] = [
+    const ALL: [Section; 7] = [
         Section::Appearance,
         Section::Terminal,
         Section::Shortcuts,
         Section::Connections,
         Section::Vault,
+        Section::Sync,
         Section::About,
     ];
 
@@ -42,6 +44,7 @@ impl Section {
             Section::Shortcuts => "Shortcuts",
             Section::Connections => "Connections",
             Section::Vault => "Vault",
+            Section::Sync => "Sync",
             Section::About => "About",
         }
     }
@@ -53,6 +56,7 @@ impl Section {
             Section::Shortcuts => "nav-shortcuts",
             Section::Connections => "nav-connections",
             Section::Vault => "nav-vault",
+            Section::Sync => "nav-sync",
             Section::About => "nav-about",
         }
     }
@@ -92,6 +96,9 @@ impl Shell {
                 w::nav_tab(&t, s == section, s.id(), s.label()).on_click(cx.listener(
                     move |shell, _, _, cx| {
                         shell.settings_page = Some(s);
+                        if s == Section::Sync {
+                            shell.ensure_sync_ui(cx);
+                        }
                         cx.notify();
                     },
                 )),
@@ -103,6 +110,7 @@ impl Shell {
             Section::Shortcuts => self.shortcuts_page(cx),
             Section::Connections => self.connections_page(cx),
             Section::Vault => self.vault_page(cx),
+            Section::Sync => self.sync_page(cx),
             Section::About => about_page(&t),
         };
         div()
