@@ -5,6 +5,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
 
+use futures::channel::oneshot;
 use russh::client::{self, Handle};
 use russh::{ChannelMsg, Disconnect as SshDisconnect, Preferred};
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -16,10 +17,11 @@ use crate::authn::Authenticator;
 use crate::config;
 use crate::disconnect::{Cause, classify};
 use crate::error::Failure;
+use crate::forward::{self, Registry};
 use crate::hostkey::{Handler, known_algorithms};
 use crate::jump;
 use crate::outbox::Outbox;
-use crate::{ConnectSpec, Disconnect, SessionEvent, TermSize};
+use crate::{ConnectSpec, Disconnect, Forward, ForwardError, ForwardInfo, SessionEvent, TermSize};
 
 pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long to wait for russh to say why a connection that went quiet has died.
@@ -35,6 +37,16 @@ const CHANNEL_BUFFER: usize = 16;
 pub(crate) enum Command {
     Write(Vec<u8>),
     Resize(TermSize),
+    /// Start a forward; the session answers on `reply`.
+    Forward {
+        forward: Forward,
+        reply: oneshot::Sender<Result<ForwardInfo, ForwardError>>,
+    },
+    /// Tell the server to stop a remote forward.
+    CancelRemote {
+        host: String,
+        port: u16,
+    },
     Close,
 }
 
@@ -49,10 +61,21 @@ pub(crate) async fn run(
     size: TermSize,
     mut cmds: mpsc::Receiver<Command>,
     events: async_channel::Sender<SessionEvent>,
+    forwards: Arc<Registry>,
 ) {
     let cause = Cause::default();
     let mut connected = false;
-    let outcome = match run_inner(&spec, size, &mut cmds, &events, &cause, &mut connected).await {
+    let outcome = match run_inner(
+        &spec,
+        size,
+        &mut cmds,
+        &events,
+        &cause,
+        &mut connected,
+        &forwards,
+    )
+    .await
+    {
         Ok(o) => o,
         Err(f) => {
             tracing::warn!(host = %spec.host, port = spec.port, error = %f, "ssh_session_failed");
@@ -71,6 +94,7 @@ pub(crate) async fn run(
             }
         }
     };
+    forwards.clear();
     tracing::info!(host = %spec.host, port = spec.port, exit_status = ?outcome.exit_status, reason = ?outcome.reason, "ssh_closed");
     let _ = events
         .send(SessionEvent::Closed {
@@ -169,6 +193,7 @@ async fn run_inner(
     events: &async_channel::Sender<SessionEvent>,
     cause: &Cause,
     handshaken: &mut bool,
+    forwards: &Arc<Registry>,
 ) -> Result<Outcome, Failure> {
     let handler = Handler {
         host: spec.host.clone(),
@@ -176,6 +201,7 @@ async fn run_inner(
         known_hosts: spec.known_hosts.clone(),
         events: events.clone(),
         cause: cause.clone(),
+        remote: forwards.remote_targets.clone(),
     };
 
     let cfg = client_config(spec, &spec.host, spec.port);
@@ -229,6 +255,7 @@ async fn run_inner(
         .await?;
 
     *handshaken = true;
+    let session = Arc::new(session);
     let mut channel = session.channel_open_session().await?;
     channel
         .request_pty(
@@ -260,6 +287,18 @@ async fn run_inner(
                 Some(Command::Write(bytes)) => channel.data_bytes(bytes).await?,
                 Some(Command::Resize(s)) => {
                     channel.window_change(s.cols.into(), s.rows.into(), s.pixel_width.into(), s.pixel_height.into()).await?
+                }
+                Some(Command::Forward { forward, reply }) => {
+                    let (session, forwards) = (session.clone(), forwards.clone());
+                    tokio::spawn(async move {
+                        let _ = reply.send(forward::start(&session, &forwards, forward).await);
+                    });
+                }
+                Some(Command::CancelRemote { host, port }) => {
+                    let session = session.clone();
+                    tokio::spawn(async move {
+                        let _ = session.cancel_tcpip_forward(host, u32::from(port)).await;
+                    });
                 }
                 Some(Command::Close) | None => {
                     closing = true;

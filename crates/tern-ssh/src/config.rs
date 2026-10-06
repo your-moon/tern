@@ -9,7 +9,8 @@ use ssh2_config::{ParseRule, SshConfig};
 use crate::error::{Error, Result};
 use crate::sshconf;
 use crate::{
-    ConnectSpec, DEFAULT_SERVER_ALIVE_COUNT_MAX, DEFAULT_SERVER_ALIVE_INTERVAL, HostEntry, JumpHop,
+    ConnectSpec, DEFAULT_SERVER_ALIVE_COUNT_MAX, DEFAULT_SERVER_ALIVE_INTERVAL, Forward, HostEntry,
+    JumpHop,
 };
 
 const DEFAULT_IDENTITIES: [&str; 3] = ["id_ed25519", "id_ecdsa", "id_rsa"];
@@ -23,6 +24,7 @@ pub(crate) struct Resolved {
     pub identity_files: Vec<PathBuf>,
     pub proxy_command: Option<String>,
     pub proxy_jump: Vec<JumpHop>,
+    pub forwards: Vec<Forward>,
     pub server_alive_interval: Option<Duration>,
     pub server_alive_count_max: Option<u32>,
 }
@@ -75,6 +77,7 @@ fn resolve_base(config: Option<&Loaded>, alias: &str) -> Resolved {
         identity_files: p.identity_file.unwrap_or_default(),
         proxy_command: None,
         proxy_jump: Vec::new(),
+        forwards: Vec::new(),
         server_alive_interval: p.server_alive_interval,
         server_alive_count_max: p
             .unsupported_fields
@@ -92,6 +95,21 @@ pub(crate) fn resolve(config: Option<&Loaded>, alias: &str) -> Resolved {
     // man ssh_config, ProxyJump: it "will compete with the ProxyCommand option - whichever is
     // specified first will prevent later instances of the other from taking effect".
     let d = sshconf::directives(&config.text, alias);
+    // Forwards accumulate, in file order (man ssh_config: LocalForward, RemoteForward).
+    r.forwards = d
+        .iter()
+        .filter_map(|x| {
+            let parsed = match x.keyword.as_str() {
+                "localforward" => Forward::parse_local(&x.args),
+                "remoteforward" => Forward::parse_remote(&x.args),
+                "dynamicforward" => Forward::parse_dynamic(&x.args),
+                _ => return None,
+            };
+            parsed
+                .map_err(|e| tracing::warn!(error = %e, keyword = %x.keyword, "ssh_config_forward_skipped"))
+                .ok()
+        })
+        .collect();
     let claimed = d
         .iter()
         .find(|x| matches!(x.keyword.as_str(), "proxyjump" | "proxycommand"));
@@ -167,6 +185,7 @@ pub(crate) fn hosts_from(config: &Loaded) -> Vec<HostEntry> {
                 identity_files: r.identity_files,
                 proxy_command: r.proxy_command,
                 proxy_jump: r.proxy_jump,
+                forwards: r.forwards,
                 server_alive_interval: r.server_alive_interval,
                 server_alive_count_max: r.server_alive_count_max,
             });
@@ -259,6 +278,7 @@ pub(crate) fn parse_target(target: &str, config: Option<&Loaded>) -> Result<Conn
         identity_files: r.identity_files,
         proxy_command: r.proxy_command,
         proxy_jump: r.proxy_jump,
+        forwards: r.forwards,
         known_hosts: None,
         memory_keys: Vec::new(),
         server_alive_interval: r
@@ -314,6 +334,7 @@ impl ConnectSpec {
             identity_files: e.identity_files.clone(),
             proxy_command: e.proxy_command.clone(),
             proxy_jump: e.proxy_jump.clone(),
+            forwards: e.forwards.clone(),
             known_hosts: None,
             memory_keys: Vec::new(),
             server_alive_interval: e
@@ -463,5 +484,40 @@ mod tests {
         let cmd = r.proxy_command.unwrap();
         assert_eq!(expand_proxy_command(&cmd, "h", 22, "u"), "nc h 22");
         assert_eq!(expand_proxy_command("a%%b%x", "h", 1, "u"), "a%b%x");
+    }
+
+    #[test]
+    fn forwards_accumulate_across_lines_and_blocks_in_file_order() {
+        let c = cfg(
+            "Host db\n  LocalForward 8080 localhost:80\n  LocalForward 127.0.0.1:8081 db:5432\n  \
+                     LocalForward [::1]:8082 [::1]:80\n  RemoteForward 9000 localhost:3000\n  DynamicForward 1080\n\
+                     Host *\n  LocalForward 7000 shared:7000\n",
+        );
+        let s = parse_target("u@db", Some(&c)).unwrap();
+        let shown: Vec<_> = s.forwards.iter().map(ToString::to_string).collect();
+        assert_eq!(
+            shown,
+            [
+                "-L 127.0.0.1:8080:localhost:80",
+                "-L 127.0.0.1:8081:db:5432",
+                "-L [::1]:8082:[::1]:80",
+                "-R localhost:9000:localhost:3000",
+                "-D 127.0.0.1:1080",
+                "-L 127.0.0.1:7000:shared:7000",
+            ]
+        );
+        let other = parse_target("u@other", Some(&c)).unwrap();
+        assert_eq!(other.forwards.len(), 1);
+    }
+
+    #[test]
+    fn bad_forward_lines_are_skipped_not_fatal() {
+        let c = cfg("Host a\n  LocalForward 8080\n  LocalForward x db:80\n  DynamicForward 1080\n");
+        let entry = hosts_from(&c).remove(0);
+        assert_eq!(entry.forwards, [Forward::parse_dynamic("1080").unwrap()]);
+        assert_eq!(
+            ConnectSpec::from_host_entry(&entry).unwrap().forwards,
+            entry.forwards
+        );
     }
 }

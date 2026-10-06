@@ -10,6 +10,22 @@ pub enum Error {
     InvalidPort(String),
     #[error("cannot determine local user name; use user@host")]
     NoLocalUser,
+    #[error("invalid port forward: {0:?}")]
+    InvalidForward(String),
+}
+
+/// Why a port forward could not be started.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ForwardError {
+    /// The session has ended.
+    #[error("session closed")]
+    Closed,
+    /// This machine could not listen on the address.
+    #[error("cannot listen on {addr}: {reason}")]
+    Listen { addr: String, reason: String },
+    /// The server would not listen on the address (remote forwards).
+    #[error("the server refused to listen on {0}")]
+    Refused(String),
 }
 
 /// Why input could not be queued for a session.

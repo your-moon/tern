@@ -11,20 +11,24 @@ mod authn;
 mod config;
 mod disconnect;
 mod error;
+mod forward;
 mod hostkey;
 mod jump;
 mod outbox;
 mod session;
+mod socks;
 mod sshconf;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::mpsc;
 
 pub use config::load_ssh_config_hosts;
 pub use disconnect::Disconnect;
-pub use error::{Error, InputError, Result};
+pub use error::{Error, ForwardError, InputError, Result};
+pub use forward::{Forward, ForwardHandle, ForwardInfo};
 pub use futures::channel::oneshot;
 pub use secrecy::{self, ExposeSecret, SecretString};
 
@@ -55,6 +59,9 @@ pub struct HostEntry {
     pub proxy_command: Option<String>,
     /// `ProxyJump` hops in connection order; empty when none, or when `ProxyCommand` came first.
     pub proxy_jump: Vec<JumpHop>,
+    /// `LocalForward`, `RemoteForward` and `DynamicForward` lines, in file order. Start each
+    /// with [`SessionHandle::start_forward`] once the session is connected.
+    pub forwards: Vec<Forward>,
     /// `ServerAliveInterval`; `None` when the host does not set it, `Some(ZERO)` when it
     /// turns keep-alives off.
     pub server_alive_interval: Option<Duration>,
@@ -74,6 +81,8 @@ pub struct ConnectSpec {
     /// Used instead of `proxy_command` when both are set. A hop's own `ProxyJump` is not
     /// followed; list every hop here.
     pub proxy_jump: Vec<JumpHop>,
+    /// Forwards the host's config asks for; the session does not start them by itself.
+    pub forwards: Vec<Forward>,
     /// known_hosts file to check and learn host keys in; `None` means `~/.ssh/known_hosts`.
     pub known_hosts: Option<PathBuf>,
     /// Private keys held in memory (tern's vault), offered after the agent and before the key
@@ -97,6 +106,7 @@ impl Default for ConnectSpec {
             identity_files: Vec::new(),
             proxy_command: None,
             proxy_jump: Vec::new(),
+            forwards: Vec::new(),
             known_hosts: None,
             memory_keys: Vec::new(),
             server_alive_interval: DEFAULT_SERVER_ALIVE_INTERVAL,
@@ -188,6 +198,7 @@ const COMMAND_QUEUE: usize = 64;
 #[must_use = "dropping every SessionHandle closes the session"]
 pub struct SessionHandle {
     tx: mpsc::Sender<session::Command>,
+    forwards: Arc<forward::Registry>,
 }
 
 impl SessionHandle {
@@ -208,6 +219,37 @@ impl SessionHandle {
     /// Same as [`Self::write`].
     pub fn resize(&self, size: TermSize) -> std::result::Result<(), InputError> {
         self.send(session::Command::Resize(size))
+    }
+
+    /// Starts a port forward on this session. Local and dynamic forwards listen on loopback
+    /// unless the [`Forward`] names another address.
+    ///
+    /// # Errors
+    ///
+    /// [`ForwardError::Listen`] when this machine cannot listen there, [`ForwardError::Refused`]
+    /// when the server will not (remote forwards), [`ForwardError::Closed`] once the session
+    /// has ended.
+    pub async fn start_forward(
+        &self,
+        forward: Forward,
+    ) -> std::result::Result<ForwardHandle, ForwardError> {
+        let (reply, answer) = oneshot::channel();
+        self.tx
+            .send(session::Command::Forward { forward, reply })
+            .await
+            .map_err(|_| ForwardError::Closed)?;
+        let info = answer.await.map_err(|_| ForwardError::Closed)??;
+        Ok(ForwardHandle {
+            info,
+            registry: self.forwards.clone(),
+            cmds: self.tx.clone(),
+        })
+    }
+
+    /// The forwards running on this session.
+    #[must_use]
+    pub fn forwards(&self) -> Vec<ForwardInfo> {
+        self.forwards.list()
     }
 
     /// Asks the session to end; a [`SessionEvent::Closed`] follows.
@@ -235,7 +277,8 @@ pub fn connect(
     rt: &tokio::runtime::Handle,
 ) -> (SessionHandle, async_channel::Receiver<SessionEvent>) {
     let (tx, rx) = mpsc::channel(COMMAND_QUEUE);
+    let forwards = Arc::new(forward::Registry::default());
     let (etx, erx) = async_channel::bounded(outbox::EVENT_QUEUE);
-    rt.spawn(session::run(spec, size, rx, etx));
-    (SessionHandle { tx }, erx)
+    rt.spawn(session::run(spec, size, rx, etx, forwards.clone()));
+    (SessionHandle { tx, forwards }, erx)
 }

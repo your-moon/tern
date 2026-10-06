@@ -11,6 +11,7 @@ use crate::authn::Authenticator;
 use crate::config;
 use crate::disconnect::Cause;
 use crate::error::{Error, Failure};
+use crate::forward::RemoteTargets;
 use crate::hostkey::Handler;
 use crate::session::{CONNECT_TIMEOUT, client_config, connect_failure};
 use crate::{ConnectSpec, SessionEvent};
@@ -44,6 +45,7 @@ pub(crate) async fn open(
             known_hosts: spec.known_hosts.clone(),
             events: events.clone(),
             cause: Cause::default(),
+            remote: RemoteTargets::default(),
         };
         let cfg = client_config(spec, &hop.host, hop.port);
         let connecting = async {

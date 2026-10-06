@@ -8,6 +8,7 @@ use russh::keys::{Algorithm, HashAlg, PublicKey, PublicKeyOrCertificate, known_h
 
 use crate::disconnect::{Cause, Disconnect, classify};
 use crate::error::Failure;
+use crate::forward::{self, RemoteTargets};
 use crate::{Prompt, SessionEvent};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -63,6 +64,8 @@ pub(crate) struct Handler {
     pub events: async_channel::Sender<SessionEvent>,
     /// Filled when russh reports the connection dead; read by the session loop.
     pub cause: Cause,
+    /// Where the server's forwarded-tcpip channels go.
+    pub remote: RemoteTargets,
 }
 
 impl client::Handler for Handler {
@@ -122,6 +125,27 @@ impl client::Handler for Handler {
                 Ok(true)
             }
         }
+    }
+
+    /// A connection to a port the server is listening on for a `-R` forward.
+    async fn server_channel_open_forwarded_tcpip(
+        &mut self,
+        channel: russh::Channel<client::Msg>,
+        connected_address: &str,
+        connected_port: u32,
+        _originator_address: &str,
+        _originator_port: u32,
+        reply: client::ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        match self.remote.lookup(connected_address, connected_port) {
+            Some((host, port)) => {
+                reply.accept().await;
+                tokio::spawn(forward::bridge_remote(channel, host, port));
+            }
+            None => reply.reject(forward::NOT_FORWARDED).await,
+        }
+        Ok(())
     }
 
     /// russh calls this once the handshake is done and the link dies; the channel alone only
