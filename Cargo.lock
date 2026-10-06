@@ -7115,6 +7115,7 @@ dependencies = [
  "image",
  "nucleo-matcher",
  "objc2-app-kit 0.3.2",
+ "security-framework 3.7.0",
  "serde",
  "serde_json",
  "strip-ansi-escapes",
@@ -7182,8 +7183,10 @@ name = "tern-vault"
 version = "0.1.0"
 dependencies = [
  "age",
+ "rand 0.10.3",
  "serde",
  "serde_json",
+ "ssh-key",
  "tempfile",
  "thiserror 2.0.21",
  "zeroize",
