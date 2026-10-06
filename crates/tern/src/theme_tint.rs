@@ -9,7 +9,7 @@ use gpui::{Hsla, hsla};
 use tern_term::TerminalTheme;
 
 use crate::theme::{Theme, hex};
-use crate::wallpaper_colors::accent_for;
+use crate::wallpaper_fx::accent_for;
 use crate::wallpaper_fx::contrast_ratio;
 
 /// How far the dominant colour is pre-mixed toward black in dark mode (zeron `tint_variant`).

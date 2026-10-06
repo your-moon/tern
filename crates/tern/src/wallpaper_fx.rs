@@ -1,5 +1,7 @@
 // Adapted from zeron crates/mobile/src/wallpaper.rs (artwork effects) (MIT).
-//! Wallpaper artwork effects, and the WCAG contrast the theme hardening measures with.
+// Adapted from zeron crates/ui/src/settings/wallpaper_colors.rs (extract) (MIT).
+//! Wallpaper pixel work: artwork effects, the dominant colour of a picture, an accent derived
+//! from it, and the WCAG contrast the theme hardening measures with.
 //!
 //! Pixels are straight RGBA8, row-major. An effect runs once per (image, effect, appearance)
 //! off the UI thread and the result is cached as an image file.
@@ -211,6 +213,53 @@ fn contrast(a: f32, b: f32) -> f32 {
     (hi + 0.05) / (lo + 0.05)
 }
 
+/// Contrast an accent keeps against the surface it sits on (WCAG non-text minimum).
+pub const ACCENT_CONTRAST: f32 = 3.0;
+
+/// Quantized dominant colour, favouring chromatic regions over neutral pixels. Sampling is
+/// bounded by the caller; transparent pixels do not influence it.
+pub fn extract(pixels: impl IntoIterator<Item = [u8; 4]>) -> Option<[u8; 3]> {
+    let mut bins = vec![(0.0_f64, [0.0_f64; 3]); 4096];
+    for [r, g, b, a] in pixels {
+        if a < 128 {
+            continue;
+        }
+        let high = f64::from(r.max(g).max(b));
+        let low = f64::from(r.min(g).min(b));
+        let saturation = (high - low) / high.max(1.0);
+        let weight = (0.2 + saturation * saturation) * f64::from(a) / 255.0;
+        let index =
+            ((usize::from(r) >> 4) << 8) | ((usize::from(g) >> 4) << 4) | (usize::from(b) >> 4);
+        let (count, channels) = &mut bins[index];
+        *count += weight;
+        for (sum, channel) in channels.iter_mut().zip([r, g, b]) {
+            *sum += f64::from(channel) * weight;
+        }
+    }
+    let (count, channels) = bins.into_iter().max_by(|a, b| a.0.total_cmp(&b.0))?;
+    (count > 0.0).then(|| channels.map(|c| (c / count).round() as u8))
+}
+
+fn pack(c: [u8; 3]) -> u32 {
+    u32::from(c[0]) << 16 | u32::from(c[1]) << 8 | u32::from(c[2])
+}
+
+/// `color` moved toward white (on a dark surface) or black (on a light one), in 5% steps, until
+/// it keeps [`ACCENT_CONTRAST`] against `surface`. A colour that already does is returned as is.
+pub fn accent_for(color: [u8; 3], surface: [u8; 3]) -> [u8; 3] {
+    let surface_rgb = pack(surface);
+    let dark_surface = contrast_ratio(surface_rgb, 0) < contrast_ratio(surface_rgb, 0xFF_FFFF);
+    let target = if dark_surface { 255.0 } else { 0.0 };
+    for step in 0..=20u8 {
+        let t = f32::from(step) * 0.05;
+        let mixed = color.map(|c| (f32::from(c) * (1.0 - t) + target * t).round() as u8);
+        if contrast_ratio(pack(mixed), surface_rgb) >= ACCENT_CONTRAST {
+            return mixed;
+        }
+    }
+    [target as u8; 3]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -246,5 +295,161 @@ mod tests {
         let out = render(solid(3, 3, [200, 100, 50]), 3, 3, Effect::Scanlines, false);
         assert_eq!(&out[0..3], &[104, 52, 26]); // row 0: × 0.52
         assert_eq!(&out[12..15], &[200, 100, 50]); // row 1 untouched
+    }
+
+    #[test]
+    fn extraction_ignores_transparency_and_favours_prominent_colour() {
+        let mut pixels = vec![[90, 90, 90, 255]; 100];
+        pixels.extend(vec![[30, 130, 220, 255]; 80]);
+        pixels.extend(vec![[255, 0, 0, 0]; 1000]);
+        assert_eq!(extract(pixels), Some([30, 130, 220]));
+        assert_eq!(extract([[100, 100, 100, 255]; 10]), Some([100, 100, 100]));
+        assert_eq!(extract([[255, 0, 0, 0]; 10]), None);
+    }
+
+    #[test]
+    fn mostly_transparent_pixels_do_not_vote() {
+        let mut pixels = vec![[255, 0, 0, 100]; 1000];
+        pixels.extend(vec![[90, 90, 90, 255]; 10]);
+        assert_eq!(extract(pixels), Some([90, 90, 90]));
+    }
+
+    #[test]
+    fn a_smaller_saturated_area_beats_a_larger_grey_one() {
+        // Weight is 0.2 for grey and 1.2 for pure blue: 30 blue pixels outweigh 100 grey.
+        let mut pixels = vec![[128, 128, 128, 255]; 100];
+        pixels.extend(vec![[0, 0, 255, 255]; 30]);
+        assert_eq!(extract(pixels), Some([0, 0, 255]));
+    }
+
+    #[test]
+    fn accent_keeps_contrast_on_dark_and_light_surfaces() {
+        let colors = [
+            [0, 0, 0],
+            [255, 255, 255],
+            [250, 220, 30],
+            [20, 70, 200],
+            [10, 10, 40],
+            [200, 30, 30],
+        ];
+        for surface in [[9, 9, 9], [22, 24, 26], [243, 243, 245], [255, 255, 255]] {
+            for color in colors {
+                let accent = accent_for(color, surface);
+                let ratio = contrast_ratio(pack(accent), pack(surface));
+                assert!(ratio >= 3.0, "{color:?} on {surface:?}: {ratio}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_colour_that_is_already_readable_is_left_alone() {
+        assert_eq!(accent_for([250, 220, 30], [9, 9, 9]), [250, 220, 30]);
+    }
+
+    #[test]
+    fn a_dark_colour_is_lightened_on_a_dark_surface_and_darkened_on_a_light_one() {
+        let on_dark = accent_for([10, 10, 40], [9, 9, 9]);
+        assert!(on_dark.iter().map(|&c| u32::from(c)).sum::<u32>() > 60);
+        let on_light = accent_for([250, 250, 220], [250, 250, 250]);
+        assert!(on_light.iter().map(|&c| u32::from(c)).sum::<u32>() < 700);
+    }
+
+    fn lit(out: &[u8]) -> usize {
+        out.as_chunks::<4>().0.iter().filter(|p| p[0] > 100).count()
+    }
+
+    #[test]
+    fn dither_lights_a_share_of_pixels_that_follows_brightness() {
+        let dark = render(solid(16, 16, [20, 20, 20]), 16, 16, Effect::Dither, false);
+        let mid = render(
+            solid(16, 16, [128, 128, 128]),
+            16,
+            16,
+            Effect::Dither,
+            false,
+        );
+        let bright = render(
+            solid(16, 16, [250, 250, 250]),
+            16,
+            16,
+            Effect::Dither,
+            false,
+        );
+        assert!(lit(&dark) < lit(&mid), "{} {}", lit(&dark), lit(&mid));
+        assert!(lit(&mid) < lit(&bright));
+        // Mid grey lights about half of a Bayer tile, not none and not all.
+        assert!((100..160).contains(&lit(&mid)), "{}", lit(&mid));
+        // A lit pixel is lifted to full peak brightness.
+        assert!(mid.as_chunks::<4>().0.iter().any(|p| p[0] == 255));
+    }
+
+    #[test]
+    fn ascii_prints_glyphs_only_where_the_image_is_bright() {
+        let black = solid(12, 16, [0, 0, 0]);
+        assert_eq!(render(black.clone(), 12, 16, Effect::Ascii, false), black);
+        let out = render(solid(12, 16, [255, 255, 255]), 12, 16, Effect::Ascii, false);
+        let values: std::collections::HashSet<u8> =
+            out.as_chunks::<4>().0.iter().map(|p| p[0]).collect();
+        assert!(values.len() > 1, "glyph pixels and gaps differ");
+    }
+
+    #[test]
+    fn halftone_dots_grow_with_brightness() {
+        let dim = render(solid(16, 16, [30, 30, 30]), 16, 16, Effect::Halftone, false);
+        let bright = render(
+            solid(16, 16, [250, 250, 250]),
+            16,
+            16,
+            Effect::Halftone,
+            false,
+        );
+        let sum = |o: &[u8]| {
+            o.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|p| u32::from(p[0]))
+                .sum::<u32>()
+        };
+        assert!(sum(&dim) < sum(&bright));
+    }
+
+    #[test]
+    fn light_scanlines_lift_toward_white() {
+        let out = render(solid(3, 3, [100, 100, 100]), 3, 3, Effect::Scanlines, true);
+        assert!(out[0] > 100, "row 0 is lightened on paper-white");
+        assert_eq!(out[12], 100);
+    }
+
+    #[test]
+    fn short_buffer_is_returned_untouched() {
+        let src = vec![1, 2, 3, 4];
+        assert_eq!(render(src.clone(), 8, 8, Effect::Dither, false), src);
+    }
+
+    #[test]
+    fn halftone_pixel_blends_source_and_dot_coverage() {
+        // Dim source, so the dot is smaller than the cell and coverage is partial at (1, 1):
+        // radius 0.878, distance 0.707, coverage 0.67; 10 * 0.6 + 10 * 0.67 * 0.4 = 8.7.
+        let out = render(solid(8, 8, [10, 10, 10]), 8, 8, Effect::Halftone, false);
+        let at = |x: usize, y: usize| out[(y * 8 + x) * 4];
+        assert_eq!(at(1, 1), 8);
+        // The cell's corner is outside the dot: source only.
+        assert_eq!(at(0, 0), 6);
+    }
+
+    #[test]
+    fn dither_follows_the_bayer_matrix() {
+        // Mid grey against thresholds 0 and 8 of 16: the first 2x2 block is on, the next is off.
+        let out = render(solid(8, 8, [128, 128, 128]), 8, 8, Effect::Dither, false);
+        assert_eq!(out[0], 255);
+        assert_eq!(out[2 * 4], 10);
+    }
+
+    #[test]
+    fn ascii_densest_glyph_is_drawn_for_white() {
+        // Row 0 of the densest glyph is `.###.`: columns 1 to 3 are ink (full), 0 and 4 paper.
+        let out = render(solid(12, 16, [255, 255, 255]), 12, 16, Effect::Ascii, false);
+        let row0: Vec<u8> = (0..6).map(|x| out[x * 4]).collect();
+        assert_eq!(row0, [153, 255, 255, 255, 153, 153]);
     }
 }
