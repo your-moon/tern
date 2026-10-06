@@ -25,6 +25,9 @@ mod text_input;
 mod theme;
 mod themes;
 mod titlebar;
+mod wallpaper_fx;
+#[cfg(test)]
+mod wallpaper_fx_tests;
 
 use gpui::App;
 use tracing_subscriber::EnvFilter;

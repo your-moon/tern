@@ -7186,6 +7186,7 @@ dependencies = [
  "base64 0.22.1",
  "gpui-pre",
  "gpui-pre-platform",
+ "image",
  "nucleo-matcher",
  "objc2-app-kit 0.3.2",
  "serde",

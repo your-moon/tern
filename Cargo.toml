@@ -15,6 +15,8 @@ tern-ssh = { path = "crates/tern-ssh", version = "0.1.0" }
 tern-sync = { path = "crates/tern-sync", version = "0.1.0" }
 tern-term = { path = "crates/tern-term", version = "0.1.0" }
 tern-vault = { path = "crates/tern-vault", version = "0.1.0" }
+# Wallpaper decoding; the same 0.25 gpui renders with, so no second copy is built.
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
 
 # Craft gates. Every crate opts in with `[lints] workspace = true`.
 [workspace.lints.rust]
