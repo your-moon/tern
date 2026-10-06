@@ -24,6 +24,7 @@ use alacritty_terminal::vte::ansi::{
 };
 use gpui::{Context, EventEmitter};
 
+use crate::links::Link;
 use crate::search::{Search, SearchMark, mark_at};
 use crate::theme::TerminalTheme;
 
@@ -473,6 +474,84 @@ impl Terminal {
         }
         let target = (rows / 2 - line).clamp(0, self.history_size() as i32);
         self.term.scroll_display(Scroll::Delta(target - offset));
+    }
+
+    // ---- links ----
+
+    /// The link under a viewport cell: an OSC 8 hyperlink, else a URL found in
+    /// the (soft-wrap-joined) logical line. `None` when the target is not
+    /// something a click may open (see [`crate::links::is_openable`]).
+    pub fn link_at(&self, viewport_row: usize, col: usize) -> Option<Link> {
+        struct Entry {
+            line: i32,
+            col: usize,
+            width: usize,
+            ch: char,
+            hyperlink: Option<alacritty_terminal::term::cell::Hyperlink>,
+        }
+        let hit = self.grid_point(viewport_row, col);
+        let first = self.term.line_search_left(hit).line.0;
+        let last = self.term.line_search_right(hit).line.0;
+        let mut entries = Vec::new();
+        for line in first..=last {
+            let row = &self.term.grid()[Line(line)];
+            for c in 0..self.cols() {
+                let cell = &row[Column(c)];
+                if cell
+                    .flags
+                    .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER)
+                {
+                    continue;
+                }
+                entries.push(Entry {
+                    line,
+                    col: c,
+                    width: if cell.flags.intersects(Flags::WIDE_CHAR) {
+                        2
+                    } else {
+                        1
+                    },
+                    ch: cell.c,
+                    hyperlink: cell.hyperlink(),
+                });
+            }
+        }
+        let at = entries.iter().position(|e| {
+            e.line == hit.line.0 && (e.col..e.col + e.width).contains(&hit.column.0)
+        })?;
+        let (range, uri) = if let Some(link) = entries[at].hyperlink.clone() {
+            let mut lo = at;
+            while lo > 0 && entries[lo - 1].hyperlink.as_ref() == Some(&link) {
+                lo -= 1;
+            }
+            let mut hi = at + 1;
+            while hi < entries.len() && entries[hi].hyperlink.as_ref() == Some(&link) {
+                hi += 1;
+            }
+            (lo..hi, link.uri().to_string())
+        } else {
+            let chars: Vec<char> = entries.iter().map(|e| e.ch).collect();
+            let range = crate::links::find_url(&chars, at)?;
+            let uri = chars[range.clone()].iter().collect();
+            (range, uri)
+        };
+        if !crate::links::is_openable(&uri) {
+            return None;
+        }
+        let offset = self.display_offset() as i32;
+        let mut segments: Vec<(usize, usize, usize)> = Vec::new();
+        for e in &entries[range] {
+            let row = e.line + offset;
+            if row < 0 || row >= self.rows() as i32 {
+                continue;
+            }
+            let (row, end) = (row as usize, e.col + e.width);
+            match segments.last_mut() {
+                Some(seg) if seg.0 == row => seg.2 = end,
+                _ => segments.push((row, e.col, end)),
+            }
+        }
+        Some(Link { uri, segments })
     }
 
     // ---- snapshots ----

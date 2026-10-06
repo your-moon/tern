@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use alacritty_terminal::index::{Column, Line, Point as GridPoint};
 use alacritty_terminal::term::TermMode;
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     App, ClipboardItem, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
@@ -18,6 +19,7 @@ use gpui::{
 
 use crate::element::TerminalElement;
 use crate::find_bar::{FindKey, apply_key, paste_into};
+use crate::links::Link;
 use crate::mappings::keys::keystroke_bytes;
 use crate::mappings::mouse::{alt_scroll, mouse_button_report, mouse_moved_report, scroll_report};
 use crate::terminal::{SelectionType, Side, Terminal};
@@ -65,6 +67,9 @@ pub struct TerminalView {
     reporting_button: bool,
     /// The find bar's query while the bar is open.
     find: Option<String>,
+    /// The link under the pointer while the link modifier is held.
+    hover_link: Option<Link>,
+    last_pointer: Option<gpui::Point<Pixels>>,
     _subscription: Subscription,
 }
 
@@ -87,7 +92,12 @@ impl TerminalView {
         let focus_handle = cx.focus_handle();
         window.focus(&focus_handle, cx);
         // Repaint exactly when the model changes.
-        let subscription = cx.observe(&terminal, |_, _, cx| cx.notify());
+        let subscription = cx.observe(&terminal, |this, _, cx| {
+            // Output moved the grid under any hover; the next pointer move or
+            // modifier change recomputes it.
+            this.hover_link = None;
+            cx.notify();
+        });
         Self {
             terminal,
             option_as_meta: true,
@@ -99,6 +109,8 @@ impl TerminalView {
             scroll_remainder: 0.0,
             reporting_button: false,
             find: None,
+            hover_link: None,
+            last_pointer: None,
             _subscription: subscription,
         }
     }
@@ -114,91 +126,6 @@ impl TerminalView {
 
     pub fn set_option_as_meta(&mut self, on: bool) {
         self.option_as_meta = on;
-    }
-
-    // ---- find in scrollback ----
-    //
-    // The find bar is bound to Cmd+F (Ctrl+Shift+F elsewhere) while the view
-    // has focus. Enter / Shift+Enter step through matches, Escape closes.
-
-    /// Open the find bar on `query` and highlight every match, jumping to the
-    /// newest. An empty query opens an empty bar.
-    pub fn find(&mut self, query: &str, cx: &mut Context<Self>) {
-        self.find = Some(query.to_string());
-        self.terminal.update(cx, |t, cx| {
-            t.search(query);
-            cx.notify();
-        });
-        cx.notify();
-    }
-
-    /// The next match, going up into older output; wraps.
-    pub fn find_next(&mut self, cx: &mut Context<Self>) {
-        self.step_find(true, cx);
-    }
-
-    /// The previous match, going down toward newer output; wraps.
-    pub fn find_prev(&mut self, cx: &mut Context<Self>) {
-        self.step_find(false, cx);
-    }
-
-    /// Close the find bar and drop the highlights.
-    pub fn clear_find(&mut self, cx: &mut Context<Self>) {
-        self.find = None;
-        self.terminal.update(cx, |t, cx| {
-            t.clear_search();
-            cx.notify();
-        });
-        cx.notify();
-    }
-
-    /// Matches for the current query (0 when no search is open).
-    pub fn match_count(&self, cx: &App) -> usize {
-        self.terminal.read(cx).search_count()
-    }
-
-    /// Whether the find bar is open.
-    pub fn is_finding(&self) -> bool {
-        self.find.is_some()
-    }
-
-    fn step_find(&mut self, older: bool, cx: &mut Context<Self>) {
-        self.terminal.update(cx, |t, cx| {
-            t.search_step(older);
-            cx.notify();
-        });
-    }
-
-    /// Keystrokes while the find bar is open. Always swallowed.
-    fn on_find_key(&mut self, ks: &gpui::Keystroke, cx: &mut Context<Self>) {
-        let Some(query) = self.find.as_mut() else {
-            return;
-        };
-        let mods = &ks.modifiers;
-        let action = if ks.key == "v" && (mods.platform || (mods.control && mods.shift)) {
-            match cx.read_from_clipboard().and_then(|item| item.text()) {
-                Some(text) => paste_into(query, &text),
-                None => FindKey::Ignored,
-            }
-        } else if ks.key == "g" && mods.platform {
-            if mods.shift {
-                FindKey::Prev
-            } else {
-                FindKey::Next
-            }
-        } else {
-            apply_key(query, ks)
-        };
-        match action {
-            FindKey::Close => self.clear_find(cx),
-            FindKey::Next => self.find_next(cx),
-            FindKey::Prev => self.find_prev(cx),
-            FindKey::Edited => {
-                let query = self.find.clone().unwrap_or_default();
-                self.find(&query, cx);
-            }
-            FindKey::Ignored => {}
-        }
     }
 
     fn mode(&self, cx: &App) -> TermMode {
@@ -338,6 +265,12 @@ impl TerminalView {
         let Some(hit) = self.hit(event.position) else {
             return;
         };
+        if event.button == MouseButton::Left
+            && let Some(link) = self.link_under(event.position, &event.modifiers, cx)
+        {
+            cx.open_url(&link.uri);
+            return;
+        }
         if self.reporting(event.modifiers.shift, cx) {
             let mode = self.mode(cx);
             if let Some(bytes) = mouse_button_report(
@@ -400,6 +333,7 @@ impl TerminalView {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.update_hover(event.position, &event.modifiers, cx);
         if self.reporting(event.modifiers.shift, cx) {
             if let Some(hit) = self.hit(event.position) {
                 let mode = self.mode(cx);
@@ -613,10 +547,12 @@ impl Render for TerminalView {
                 .child(div().min_w(px(160.0)).child(format!("{query}\u{258f}")))
                 .child(div().text_color(theme.ansi[8]).child(status))
         });
+        let linking = self.hover_link.is_some();
         div()
             .id("tern-terminal")
             .size_full()
             .bg(self.terminal.read(cx).theme().background)
+            .when(linking, |d| d.cursor_pointer())
             .key_context("Terminal")
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(Self::on_key_down))
@@ -624,6 +560,7 @@ impl Render for TerminalView {
             .on_mouse_down(MouseButton::Middle, cx.listener(Self::on_mouse_down))
             .on_mouse_down(MouseButton::Right, cx.listener(Self::on_mouse_down))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
+            .on_modifiers_changed(cx.listener(Self::on_modifiers_changed))
             // Bound on the window as well: a drag that ends outside the view
             // still has to end the gesture.
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
@@ -637,22 +574,6 @@ impl Render for TerminalView {
             )
             .child(TerminalElement::new(cx.entity(), focused))
             .children(find_bar)
-    }
-}
-
-/// Cmd+F (macOS) / Ctrl+Shift+F: open the find bar.
-fn is_find_chord(ks: &gpui::Keystroke) -> bool {
-    let mods = &ks.modifiers;
-    ks.key == "f" && (mods.platform || (mods.control && mods.shift))
-}
-
-/// "3/12", "No matches", or "" for an empty query.
-fn find_status(query: &str, count: usize, index: Option<usize>) -> String {
-    match (query.is_empty(), count, index) {
-        (true, ..) => String::new(),
-        (false, 0, _) => "No matches".to_string(),
-        (false, n, Some(i)) => format!("{}/{n}", i + 1),
-        (false, n, None) => format!("{n}"),
     }
 }
 
@@ -723,66 +644,8 @@ pub fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
 }
 
 #[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[path = "view_tests.rs"]
+mod tests;
 
-    use super::*;
-
-    #[test]
-    fn paste_wraps_when_bracketed_and_strips_injection() {
-        assert_eq!(paste_bytes("hi", false), b"hi".to_vec());
-        assert_eq!(paste_bytes("hi", true), b"\x1b[200~hi\x1b[201~".to_vec());
-        assert_eq!(
-            paste_bytes("a\x1b[201~rm -rf", true),
-            b"\x1b[200~arm -rf\x1b[201~".to_vec()
-        );
-    }
-
-    fn hit(x: f32, y: f32) -> CellHit {
-        cell_at(x, y, 10.0, 20.0, 8, 4)
-    }
-
-    #[test]
-    fn pointer_maps_to_cell_and_side() {
-        assert_eq!(
-            hit(25.0, 45.0),
-            CellHit {
-                row: 2,
-                col: 2,
-                side: Side::Left
-            }
-        );
-        assert_eq!(hit(26.0, 45.0).side, Side::Right);
-        assert_eq!(
-            hit(70.0, 60.0),
-            CellHit {
-                row: 3,
-                col: 7,
-                side: Side::Left
-            }
-        );
-    }
-
-    #[test]
-    fn overshoot_clamps_and_forces_side() {
-        assert_eq!(hit(9_999.0, 0.0).col, 7);
-        assert_eq!(
-            hit(1.0, 9_999.0),
-            CellHit {
-                row: 3,
-                col: 0,
-                side: Side::Right
-            }
-        );
-        assert_eq!(
-            hit(75.0, -50.0),
-            CellHit {
-                row: 0,
-                col: 7,
-                side: Side::Left
-            }
-        );
-        assert_eq!(cell_at(f32::NAN, f32::INFINITY, 10.0, 20.0, 8, 4).col, 0);
-        assert_eq!(cell_at(5.0, 5.0, 0.0, 20.0, 8, 4).row, 0);
-    }
-}
+mod find_links;
+use find_links::{find_status, is_find_chord};

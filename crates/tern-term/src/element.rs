@@ -50,6 +50,8 @@ pub struct TerminalPrepaint {
     origin: gpui::Point<Pixels>,
     cursor_under: Option<PaintQuad>,
     cursor_over: Option<PaintQuad>,
+    /// Underline under the hovered link, painted over the glyphs.
+    link_quads: Vec<PaintQuad>,
 }
 
 impl gpui::IntoElement for TerminalElement {
@@ -129,6 +131,12 @@ impl gpui::Element for TerminalElement {
             );
             view.terminal.clone()
         });
+        let link_segments = self
+            .view
+            .read(cx)
+            .hover_link()
+            .map(|link| link.segments.clone())
+            .unwrap_or_default();
         let (grid, cursor) = {
             let t = terminal.read(cx);
             (t.lines(), t.cursor())
@@ -195,6 +203,22 @@ impl gpui::Element for TerminalElement {
             None => (None, None),
         };
 
+        let link_quads = link_segments
+            .iter()
+            .map(|&(row, start, end)| {
+                fill(
+                    Bounds::new(
+                        point(
+                            origin.x + cell_w * start as f32,
+                            origin.y + line_h * row as f32 + line_h - px(2.0),
+                        ),
+                        size(cell_w * (end - start) as f32, px(1.0)),
+                    ),
+                    theme.foreground,
+                )
+            })
+            .collect();
+
         TerminalPrepaint {
             bg_quads,
             sel_quads,
@@ -205,6 +229,7 @@ impl gpui::Element for TerminalElement {
             origin,
             cursor_under,
             cursor_over,
+            link_quads,
         }
     }
 
@@ -244,6 +269,9 @@ impl gpui::Element for TerminalElement {
             }
             for (ix, boxes) in prepaint.box_rows.iter().enumerate() {
                 paint_box_row(boxes, origin, ix, cell_w, line_h, window);
+            }
+            for quad in prepaint.link_quads.drain(..) {
+                window.paint_quad(quad);
             }
             if let Some(quad) = prepaint.cursor_over.take() {
                 window.paint_quad(quad);

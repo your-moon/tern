@@ -1,0 +1,61 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+use super::*;
+
+#[test]
+fn paste_wraps_when_bracketed_and_strips_injection() {
+    assert_eq!(paste_bytes("hi", false), b"hi".to_vec());
+    assert_eq!(paste_bytes("hi", true), b"\x1b[200~hi\x1b[201~".to_vec());
+    assert_eq!(
+        paste_bytes("a\x1b[201~rm -rf", true),
+        b"\x1b[200~arm -rf\x1b[201~".to_vec()
+    );
+}
+
+fn hit(x: f32, y: f32) -> CellHit {
+    cell_at(x, y, 10.0, 20.0, 8, 4)
+}
+
+#[test]
+fn pointer_maps_to_cell_and_side() {
+    assert_eq!(
+        hit(25.0, 45.0),
+        CellHit {
+            row: 2,
+            col: 2,
+            side: Side::Left
+        }
+    );
+    assert_eq!(hit(26.0, 45.0).side, Side::Right);
+    assert_eq!(
+        hit(70.0, 60.0),
+        CellHit {
+            row: 3,
+            col: 7,
+            side: Side::Left
+        }
+    );
+}
+
+#[test]
+fn overshoot_clamps_and_forces_side() {
+    assert_eq!(hit(9_999.0, 0.0).col, 7);
+    assert_eq!(
+        hit(1.0, 9_999.0),
+        CellHit {
+            row: 3,
+            col: 0,
+            side: Side::Right
+        }
+    );
+    assert_eq!(
+        hit(75.0, -50.0),
+        CellHit {
+            row: 0,
+            col: 7,
+            side: Side::Left
+        }
+    );
+    assert_eq!(cell_at(f32::NAN, f32::INFINITY, 10.0, 20.0, 8, 4).col, 0);
+    assert_eq!(cell_at(5.0, 5.0, 0.0, 20.0, 8, 4).row, 0);
+}

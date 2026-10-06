@@ -5,12 +5,14 @@
 mod box_drawing;
 mod element;
 mod find_bar;
+mod links;
 mod mappings;
 mod search;
 mod terminal;
 mod theme;
 mod view;
 
+pub use links::Link;
 pub use search::SearchMark;
 pub use terminal::{
     CellColor, CellSnapshot, CursorSnapshot, SCROLLBACK_LINES, Terminal, TerminalEvent,
