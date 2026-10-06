@@ -4,6 +4,7 @@
 //! own connections, then `~/.ssh/config`), one-line rows, and a footer with sync and settings.
 //! Every row action lives in the right-click menu; hover shows a "…" that opens the same menu.
 
+use crate::a11y::Accessible as _;
 use crate::hover::HoverFade as _;
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -297,6 +298,7 @@ fn header(t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
         )
         .child(
             icon_button("new-connection", icons::PLUS, 24., 16., t)
+                .icon_button("New connection", t)
                 .on_click(cx.listener(|s, _, w, cx| s.open_form(None, None, w, cx))),
         )
 }
@@ -436,6 +438,7 @@ fn row(
         .child(
             div()
                 .id((scope_more(scope), ix))
+                .icon_button("Host actions", t)
                 .absolute()
                 .right(px(4.))
                 .top(px(5.))
@@ -486,6 +489,7 @@ fn footer(t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
         )
         .child(
             icon_button("footer-settings", icons::SETTINGS, 28., 15., t)
+                .icon_button("Settings", t)
                 .on_click(cx.listener(|s, _, w, cx| s.toggle_settings(w, cx))),
         )
 }

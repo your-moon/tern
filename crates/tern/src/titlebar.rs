@@ -1,6 +1,7 @@
 // Adapted from zeron crates/ui/src/shell.rs (traffic-light-aware titlebar layout) (MIT).
 //! The custom titlebar: app name, tabs, and an empty strip that drags the window.
 
+use crate::a11y::Accessible as _;
 use crate::hover::HoverFade as _;
 use gpui::{
     InteractiveElement, IntoElement, MouseButton, ParentElement, StatefulInteractiveElement,
@@ -34,11 +35,13 @@ pub fn render(
                 .gap(px(2.))
                 .child(
                     control("toggle-sidebar", t)
+                        .icon_button("Toggle sidebar", t)
                         .on_click(cx.listener(|s, _, _, cx| s.toggle_sidebar(cx)))
                         .child(crate::icons::sidebar_glyph(sidebar_open, 16., t.muted)),
                 )
                 .child(
                     control("find-host", t)
+                        .icon_button("New tab: find a host", t)
                         .on_click(cx.listener(|s, _, w, cx| s.toggle_picker(w, cx)))
                         .child(
                             crate::icons::icon(crate::icons::PLUS)

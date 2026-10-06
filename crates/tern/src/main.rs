@@ -1,5 +1,6 @@
 //! tern: a fast, low-memory SSH terminal.
 
+mod a11y;
 mod connections;
 #[cfg(debug_assertions)]
 mod devkeys;

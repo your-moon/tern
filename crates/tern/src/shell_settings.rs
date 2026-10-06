@@ -3,6 +3,7 @@
 //! The Settings page. ⌘, swaps the window body for it, as zeron does; Escape or Back returns.
 //! Every control writes `settings.json` at once.
 
+use crate::a11y::Accessible as _;
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, Context, InteractiveElement, IntoElement, ParentElement, SharedString,
@@ -223,6 +224,7 @@ impl Shell {
                     Some("Host, connection state and session time under the terminal".into()),
                     div()
                         .id("toggle-status-line")
+                        .switch("Show status line", show_status)
                         .cursor_pointer()
                         .on_click(cx.listener(|s, _, _, cx| {
                             s.update_settings(|st| st.show_status_line = !st.show_status_line, cx)
@@ -271,6 +273,7 @@ impl Shell {
                     Some("Hold the connecting pulse and sidebar slide still. On by itself when macOS Reduce motion is on".into()),
                     div()
                         .id("toggle-reduce-motion")
+                        .switch("Reduce motion", reduce)
                         .cursor_pointer()
                         .on_click(cx.listener(|s, _, _, cx| {
                             s.update_settings(|st| st.reduce_motion = !st.reduce_motion, cx);
@@ -546,6 +549,7 @@ impl Shell {
                         ),
                         div()
                             .id("toggle-check-updates")
+                            .switch("Check for updates", on)
                             .cursor_pointer()
                             .on_click(cx.listener(|s, _, _, cx| {
                                 s.update_settings(

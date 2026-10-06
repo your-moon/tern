@@ -3,6 +3,7 @@
 //! The building blocks of the Settings page, with zeron's sizes. zeron frosts its switch with
 //! gradients; tern's surfaces are opaque, so the flat tones are used.
 
+use crate::a11y::Accessible as _;
 use std::time::Instant;
 
 use gpui::prelude::FluentBuilder;
@@ -198,7 +199,7 @@ pub fn stepper(
     value: impl Into<SharedString>,
 ) -> (Stateful<Div>, Div, Stateful<Div>) {
     (
-        button(t, (id, 0usize), "−"),
+        button(t, (id, 0usize), "−").icon_button("Decrease", t),
         div()
             .min_w(px(44.))
             .flex()
@@ -206,7 +207,7 @@ pub fn stepper(
             .text_size(px(13.))
             .text_color(t.text)
             .child(value.into()),
-        button(t, (id, 1usize), "+"),
+        button(t, (id, 1usize), "+").icon_button("Increase", t),
     )
 }
 

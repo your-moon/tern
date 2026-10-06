@@ -1,6 +1,7 @@
 //! Settings → Terminal, and carrying those settings to every open terminal: cursor, scrollback,
 //! mouse habits and the bell. Rows follow the zeron settings widgets the other pages use.
 
+use crate::a11y::Accessible as _;
 use gpui::prelude::FluentBuilder;
 use gpui::{
     Context, Entity, InteractiveElement, ParentElement, StatefulInteractiveElement, Styled,
@@ -60,15 +61,17 @@ impl Shell {
     pub(super) fn terminal_page(&self, cx: &mut Context<Self>) -> gpui::Div {
         let t = self.theme;
         let s = &self.settings;
-        let toggle = |id: &'static str, on: bool, flip: fn(&mut Settings)| {
+        let toggle = |id: &'static str, label: &'static str, on: bool, flip: fn(&mut Settings)| {
             div()
                 .id(id)
+                .switch(label, on)
                 .cursor_pointer()
                 .on_click(cx.listener(move |shell, _, _, cx| shell.change_terminal(flip, cx)))
                 .child(w::toggle(&t, on, id))
         };
         let meta = div()
             .id("toggle-option-meta")
+            .switch("Use Option as Meta", s.option_as_meta)
             .cursor_pointer()
             .on_click(cx.listener(|s, _, _, cx| {
                 s.update_settings(|st| st.option_as_meta = !st.option_as_meta, cx);
@@ -174,7 +177,7 @@ impl Shell {
                         false,
                         "Blink",
                         None,
-                        toggle("cursor-blink", s.cursor_blink, |st| {
+                        toggle("cursor-blink", "Cursor blink", s.cursor_blink, |st| {
                             st.cursor_blink = !st.cursor_blink
                         }),
                     )),
@@ -209,7 +212,7 @@ impl Shell {
                         false,
                         "Copy on select",
                         Some("Finishing a selection copies it".into()),
-                        toggle("copy-on-select", s.copy_on_select, |st| {
+                        toggle("copy-on-select", "Copy on select", s.copy_on_select, |st| {
                             st.copy_on_select = !st.copy_on_select
                         }),
                     ))
@@ -218,9 +221,12 @@ impl Shell {
                         false,
                         "Middle-click pastes",
                         None,
-                        toggle("middle-paste", s.middle_click_paste, |st| {
-                            st.middle_click_paste = !st.middle_click_paste
-                        }),
+                        toggle(
+                            "middle-paste",
+                            "Middle-click pastes",
+                            s.middle_click_paste,
+                            |st| st.middle_click_paste = !st.middle_click_paste,
+                        ),
                     )),
             ))
             .child(w::section(
@@ -232,18 +238,24 @@ impl Shell {
                         true,
                         "Flash the terminal",
                         None,
-                        toggle("visual-bell", s.visual_bell, |st| {
-                            st.visual_bell = !st.visual_bell
-                        }),
+                        toggle(
+                            "visual-bell",
+                            "Flash the terminal on bell",
+                            s.visual_bell,
+                            |st| st.visual_bell = !st.visual_bell,
+                        ),
                     ))
                     .child(w::row(
                         &t,
                         false,
                         "Bounce the Dock icon",
                         Some("When tern is in the background".into()),
-                        toggle("bell-dock", s.bell_bounces_dock, |st| {
-                            st.bell_bounces_dock = !st.bell_bounces_dock
-                        }),
+                        toggle(
+                            "bell-dock",
+                            "Bounce the Dock icon on bell",
+                            s.bell_bounces_dock,
+                            |st| st.bell_bounces_dock = !st.bell_bounces_dock,
+                        ),
                     )),
             ))
     }

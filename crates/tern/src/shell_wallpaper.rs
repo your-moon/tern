@@ -3,6 +3,7 @@
 //! The window wallpaper: loading it off the UI thread, drawing it behind everything with a
 //! crossfade on change, keeping terminal text readable over it, and the Settings controls.
 
+use crate::a11y::Accessible as _;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -398,6 +399,7 @@ impl Shell {
             Some("Tint the accent with the image's dominant colour".into()),
             div()
                 .id("toggle-wallpaper-colours")
+                .switch("Theme colours from wallpaper", on)
                 .cursor_pointer()
                 .on_click(cx.listener(|s, _, _, cx| {
                     s.update_settings(

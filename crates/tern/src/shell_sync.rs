@@ -2,6 +2,7 @@
 //! Mac through a private GitHub gist (see `tern-sync`). The vault file travels as it is; the
 //! rest is sealed with the vault passphrase first, so GitHub only ever holds ciphertext.
 
+use crate::a11y::Accessible as _;
 use std::time::{Duration, Instant};
 
 use gpui::InteractiveElement as _;
@@ -569,6 +570,7 @@ impl Shell {
                 ),
                 div()
                     .id("toggle-sync-auto")
+                    .switch("Sync automatically", self.settings.sync_auto)
                     .cursor_pointer()
                     .on_click(cx.listener(|s, _, _, cx| {
                         s.update_settings(|st| st.sync_auto = !st.sync_auto, cx);
