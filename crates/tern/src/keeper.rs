@@ -49,7 +49,8 @@ impl Keeper {
             keychain,
             keychain_current: false,
             ticket: 0,
-            pin: crate::keychain::load_pin_blob().is_some(),
+            // From the local mark, not the Keychain item: reading that asks macOS first.
+            pin: crate::settings::dir().is_some_and(|d| crate::vault_pin::marked(&d)),
         });
     }
 

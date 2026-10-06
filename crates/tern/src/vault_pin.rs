@@ -40,6 +40,30 @@ pub fn verdict(count: u32, correct: bool) -> Attempt {
     }
 }
 
+/// Marks that a PIN is set, so launch can know without reading the Keychain item (reading it
+/// asks macOS for permission, and that question must never stand before the window).
+const MARK: &str = "vault-pin.on";
+
+/// A PIN is set on this Mac.
+pub fn marked(dir: &Path) -> bool {
+    dir.join(MARK).exists()
+}
+
+fn mark(dir: &Path, on: bool) {
+    let path = dir.join(MARK);
+    let done = if on {
+        std::fs::create_dir_all(dir).and_then(|()| std::fs::write(&path, b""))
+    } else {
+        match std::fs::remove_file(&path) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            other => other,
+        }
+    };
+    if let Err(e) = done {
+        tracing::warn!(error = %e, "vault_pin_mark_unwritten");
+    }
+}
+
 fn count(dir: &Path) -> u32 {
     std::fs::read(dir.join(FILE))
         .ok()
@@ -91,6 +115,7 @@ pub fn check(dir: &Path, blob: &[u8], entered: &str, wipe: impl FnOnce()) -> Che
             Attempt::Wipe => {
                 wipe();
                 reset(dir);
+                mark(dir, false);
                 Check::Wiped
             }
             Attempt::Wrong { left } => Check::Wrong { left },
@@ -183,6 +208,7 @@ pub fn set(
     let blob = pin::wrap(passphrase, entered).map_err(|e| e.to_string())?;
     store.save(&blob)?;
     reset(dir);
+    mark(dir, true);
     Ok(())
 }
 
@@ -193,6 +219,7 @@ pub fn set(
 /// A message when the store refuses.
 pub fn clear(dir: &Path, store: &impl Store) -> Result<(), String> {
     reset(dir);
+    mark(dir, false);
     store.delete()
 }
 
@@ -446,5 +473,23 @@ mod tests {
             message(&Outcome::Wiped).unwrap(),
             "Too many wrong PINs — PIN unlock is off; use your passphrase"
         );
+    }
+
+    #[test]
+    fn the_mark_follows_set_wipe_and_clear_without_reading_the_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Mem::default();
+        let pass = SecretString::from("vault passphrase".to_owned());
+        assert!(!marked(dir.path()));
+        set(dir.path(), &pass, "1112", &store).unwrap();
+        assert!(marked(dir.path()), "a set PIN is marked");
+        let blob = store.load().unwrap();
+        for _ in 0..5 {
+            let _ = check(dir.path(), &blob, "0000", || {});
+        }
+        assert!(!marked(dir.path()), "the fifth wrong PIN unmarks it");
+        set(dir.path(), &pass, "1112", &store).unwrap();
+        clear(dir.path(), &store).unwrap();
+        assert!(!marked(dir.path()), "turning the PIN off unmarks it");
     }
 }
