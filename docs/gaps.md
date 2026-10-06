@@ -18,6 +18,7 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 | ✓ L8 | Settings nav | Text only | Icon per section |
 | L9 | Light appearance | Dark only | Light, dark, follow system |
 | L10 | Empty states | Text and shortcuts | Illustration-free but iconised, with primary action buttons |
+| ✓ W1 | Wallpaper (asked 2026-10-06) | — | zeron's wallpaper: image, effects, visibility, colours from the image, contrast guard |
 | L11 | Status | Dot only | Status line under the panel (zeron: checkout, branch, usage) — tern: host, latency, session time |
 
 ## 2. Terminal
@@ -76,11 +77,11 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 
 | # | State | Note |
 | --- | --- | --- |
-| F1 | Host key changed | Wording tested in tern-ssh; not seen in the app |
+| ✓ F1 | Host key changed | Wording tested in tern-ssh; not seen in the app |
 | F2 | Network drop mid-session, Mac sleep and wake | Keep-alive exists; UI not checked |
 | F3 | Keyboard-interactive (2FA) in the app | Tested in tern-ssh only |
-| F4 | Window at its 900×600 minimum, fullscreen | Not checked since tabs and settings |
-| F5 | Many hosts (200+) in sidebar and picker | Scroll and speed not measured |
+| ✓ F4 | Window at its 900×600 minimum, fullscreen | Not checked since tabs and settings |
+| ✓ F5 | Many hosts (200+) in sidebar and picker | Scroll and speed not measured |
 | F6 | Crash reported this morning | Not reproduced; panic.log now records any |
 | F7 | 153 MB start-up memory peak | Unexplained (docs/perf.md) |
 | ✓ F8 | macOS Reduce motion | Follows the system setting via objc2-app-kit (safe), re-read on activation |
