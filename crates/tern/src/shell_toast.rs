@@ -328,7 +328,11 @@ impl Shell {
                     .justify_between()
                     .gap(px(10.))
                     .child(
+                        // Takes the width the action leaves and wraps in it; without this a long
+                        // message ran past the card.
                         div()
+                            .flex_1()
+                            .min_w_0()
                             .text_size(px(14.))
                             .line_height(px(19.))
                             .text_color(colors.text)

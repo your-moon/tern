@@ -104,11 +104,18 @@ impl Shell {
             cx.notify();
             s.start_logging()
         }) {
-            Ok(path) => self.notify_toast(
-                super::ToastKind::Default,
-                format!("Logging to {}", path.display()),
-                cx,
-            ),
+            // The file name, not the full path (it ran past the toast), and a way to find it.
+            Ok(path) => {
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                self.toast(
+                    super::Toast::new(super::ToastKind::Default, format!("Logging to {name}"))
+                        .action("Show in Finder", move |_, _, cx| cx.reveal_path(&path)),
+                    cx,
+                );
+            }
             Err(e) => self.notify_toast(
                 super::ToastKind::Critical,
                 format!("Could not start the log: {e}"),
