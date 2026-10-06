@@ -125,6 +125,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 confirm_delete: None,
                 tabs: Vec::new(),
                 renaming: None,
+                restoring: false,
                 active: 0,
                 error: None,
                 picker: None,
@@ -163,6 +164,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
     // With no tab open nothing else holds focus, and gpui only dispatches key bindings along
     // the focused element's path, so the shell itself must be focused for ⌘K to work.
     window.update(cx, |shell, window, cx| window.focus(&shell.focus, cx))?;
+    window.update(cx, |shell, window, cx| shell.restore_tabs(window, cx))?;
     Ok(window)
 }
 
@@ -180,6 +182,8 @@ pub struct Shell {
     tabs: Vec<Tab>,
     /// The tab whose title is being edited in the strip.
     renaming: Option<tabs_ui::Rename>,
+    /// True while the last run's tabs are being reopened, so half a list is never saved.
+    restoring: bool,
     active: usize,
     error: Option<String>,
     picker: Option<Picker>,
@@ -205,8 +209,21 @@ pub struct Shell {
 /// What a local shell tab is called until the user renames it.
 const LOCAL_ALIAS: &str = "Terminal";
 
+/// Debug builds: keep scripted logins out of the real ~/.ssh/known_hosts.
+#[cfg(debug_assertions)]
+fn with_dev_known_hosts(spec: ConnectSpec) -> ConnectSpec {
+    ConnectSpec {
+        known_hosts: std::env::var_os("TERN_KNOWN_HOSTS")
+            .map(Into::into)
+            .or(spec.known_hosts),
+        ..spec
+    }
+}
+
 struct Tab {
     alias: String,
+    /// A shell on this machine rather than a connection.
+    local: bool,
     /// The user's name for the tab. It belongs to the tab, not the session, so a reconnect
     /// keeps it.
     title: Option<String>,
@@ -227,7 +244,7 @@ impl Shell {
         {
             let session = self.tabs[ix].session.clone();
             session.update(cx, |s, cx| {
-                if s.status == Status::Closed {
+                if s.status.is_dormant() {
                     s.reconnect(cx);
                 }
             });
@@ -262,14 +279,11 @@ impl Shell {
         // Debug builds: keep scripted logins out of the real ~/.ssh/known_hosts.
         #[cfg(debug_assertions)]
         let launch = match launch {
-            Launch::Ssh(spec) => Launch::Ssh(ConnectSpec {
-                known_hosts: std::env::var_os("TERN_KNOWN_HOSTS")
-                    .map(Into::into)
-                    .or(spec.known_hosts),
-                ..spec
-            }),
+            Launch::Ssh(spec) => Launch::Ssh(with_dev_known_hosts(spec)),
+            Launch::SshIdle(spec) => Launch::SshIdle(with_dev_known_hosts(spec)),
             local => local,
         };
+        let local = matches!(launch, Launch::Local);
         let theme = self.terminal_theme(&alias);
         let session = Session::open(launch, theme, window, cx);
         let meta = self.settings.option_as_meta;
@@ -309,6 +323,7 @@ impl Shell {
             });
         self.tabs.push(Tab {
             alias,
+            local,
             title: None,
             session,
             _repaint: repaint,
@@ -323,6 +338,7 @@ impl Shell {
             return;
         };
         self.active = ix;
+        self.persist_tabs();
         self.tab_scroll.scroll_to_item(ix);
         let focus = tab.session.read(cx).view.focus_handle(cx);
         window.focus(&focus, cx);
@@ -338,6 +354,7 @@ impl Shell {
         self.tabs.remove(ix);
         if self.tabs.is_empty() {
             self.active = 0;
+            self.persist_tabs();
             window.focus(&self.focus, cx);
             cx.notify();
             return;

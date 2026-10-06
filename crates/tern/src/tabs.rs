@@ -236,6 +236,7 @@ const PULSE: Duration = Duration::from_millis(2400);
 /// a host's tab dot and sidebar dot pulse together.
 pub fn status_dot(id: impl Into<ElementId>, status: &Status, t: &Theme) -> AnyElement {
     let color = match status {
+        Status::Idle => t.faint,
         Status::Connected => t.success,
         Status::Connecting => t.accent,
         Status::Closed => t.danger,

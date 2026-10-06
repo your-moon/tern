@@ -1,9 +1,12 @@
 //! Tab editing on the strip: renaming a title in place and dragging a tab to a new slot.
 
 use gpui::{AppContext, Context, Entity, KeyDownEvent, Window};
+use tern_ssh::ConnectSpec;
 
 use super::Shell;
+use crate::session::Launch;
 use crate::tabs;
+use crate::tabs_store::{SavedKind, SavedTab, SavedTabs};
 use crate::text_input::{InputColors, TextInput};
 
 /// A title being edited: which tab, and the field holding the text.
@@ -50,6 +53,7 @@ impl Shell {
         if let Some(tab) = self.tabs.get_mut(rename.ix) {
             tab.title = custom_title(&typed, &tab.alias);
         }
+        self.persist_tabs();
         self.restore_focus(window, cx);
     }
 
@@ -88,6 +92,92 @@ impl Shell {
         self.renaming = None;
         let active = tabs::reorder(&mut self.tabs, self.active, from, to);
         self.activate_tab(active, window, cx);
+    }
+}
+
+impl Shell {
+    /// Writes the open tabs to `tabs.json`; a failed write is logged, not fatal. It runs on
+    /// every change, never at launch, so an unreadable file survives until the user changes
+    /// something.
+    pub(crate) fn persist_tabs(&self) {
+        if self.restoring || !self.settings.reopen_tabs {
+            return;
+        }
+        let Some(dir) = crate::settings::dir() else {
+            return;
+        };
+        if let Err(e) = self.saved_tabs().save(&dir) {
+            tracing::warn!(error = %e, "tabs_save_failed");
+        }
+    }
+
+    fn saved_tabs(&self) -> SavedTabs {
+        SavedTabs {
+            tabs: self
+                .tabs
+                .iter()
+                .map(|tab| SavedTab {
+                    kind: if tab.local {
+                        SavedKind::Local
+                    } else {
+                        SavedKind::Ssh {
+                            alias: tab.alias.clone(),
+                        }
+                    },
+                    title: tab.title.clone(),
+                })
+                .collect(),
+            active: self.active,
+        }
+    }
+
+    /// Reopens the last run's tabs: shells start, connections wait for Enter.
+    pub(crate) fn restore_tabs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.settings.reopen_tabs {
+            return;
+        }
+        let Some(saved) = crate::settings::dir().and_then(|d| SavedTabs::load(&d)) else {
+            return;
+        };
+        self.restoring = true;
+        for saved_tab in &saved.tabs {
+            let opened = match &saved_tab.kind {
+                SavedKind::Local => {
+                    self.open_local_tab(window, cx);
+                    true
+                }
+                SavedKind::Ssh { alias } => self.reopen_idle(alias, window, cx),
+            };
+            if opened {
+                let title = saved_tab.title.clone();
+                if let Some(tab) = self.tabs.last_mut() {
+                    tab.title = title;
+                }
+            }
+        }
+        self.restoring = false;
+        if !self.tabs.is_empty() {
+            let active = saved.active_slot().min(self.tabs.len() - 1);
+            self.activate_tab(active, window, cx);
+        }
+    }
+
+    /// A connection tab that does not dial yet. A host that is gone from the lists is skipped.
+    fn reopen_idle(&mut self, alias: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let spec = match self.hosts.iter().find(|h| h.alias == alias) {
+            Some(host) => ConnectSpec::from_host_entry(host),
+            None => ConnectSpec::parse(alias),
+        };
+        match spec {
+            Ok(spec) => {
+                self.open_tab(Launch::SshIdle(spec), alias.to_owned(), window, cx);
+                true
+            }
+            Err(e) => {
+                tracing::warn!(alias, error = %e, "tab_restore_skipped");
+                false
+            }
+        }
     }
 }
 

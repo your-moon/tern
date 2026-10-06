@@ -109,8 +109,31 @@ impl Shell {
                 shell.change_terminal(|st| st.step_scrollback(true), cx)
             })));
 
+        let reopen = div()
+            .id("toggle-reopen-tabs")
+            .cursor_pointer()
+            .on_click(cx.listener(|s, _, _, cx| {
+                s.update_settings(|st| st.reopen_tabs = !st.reopen_tabs, cx);
+                s.persist_tabs();
+            }))
+            .child(w::toggle(&t, s.reopen_tabs, "reopen-tabs"));
+
         w::page_column()
             .child(w::page_header(&t, "Terminal"))
+            .child(w::section(
+                &t,
+                "Startup",
+                w::card(&t).child(w::row(
+                    &t,
+                    true,
+                    "Reopen tabs on launch",
+                    Some(
+                        "Local shells start again; connections wait for Enter before they dial"
+                            .into(),
+                    ),
+                    reopen,
+                )),
+            ))
             .child(w::section(
                 &t,
                 "Cursor",

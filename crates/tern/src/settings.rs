@@ -31,6 +31,8 @@ pub struct Settings {
     pub reduce_motion: bool,
     /// Option sends Meta (ESC-prefixed keys) to the remote, as most terminals offer.
     pub option_as_meta: bool,
+    /// Open the tabs of the last run again at launch.
+    pub reopen_tabs: bool,
     /// Bundled scheme for every host without its own; `None` is zeron's palette.
     pub terminal_theme: Option<String>,
     /// Per-host scheme by host alias, as Termius does per host.
@@ -89,6 +91,7 @@ impl Default for Settings {
             terminal_font_size: FONT_DEFAULT,
             reduce_motion: false,
             option_as_meta: true,
+            reopen_tabs: true,
             terminal_theme: None,
             host_themes: BTreeMap::new(),
             wallpaper: None,
@@ -281,6 +284,7 @@ mod tests {
             terminal_font_size: 15.0,
             reduce_motion: true,
             option_as_meta: false,
+            reopen_tabs: false,
             terminal_theme: Some("Dracula".into()),
             host_themes: BTreeMap::from([("grape".into(), "Nord".into())]),
             wallpaper: Some("/tmp/w.png".into()),

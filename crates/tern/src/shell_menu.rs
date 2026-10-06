@@ -13,7 +13,6 @@ use tern_ssh::{ConnectSpec, HostEntry};
 
 use super::{Shell, ThemeTarget};
 use crate::icons::{self, icon};
-use crate::session::Status;
 
 type Run = Rc<dyn Fn(&mut Shell, &mut Window, &mut Context<Shell>)>;
 
@@ -106,7 +105,7 @@ impl Shell {
             return;
         };
         let alias = tab.alias.clone();
-        let closed = tab.session.read(cx).status == Status::Closed;
+        let closed = tab.session.read(cx).status.is_dormant();
         let local = tab.session.read(cx).is_local();
         let mut items = Vec::new();
         if closed {

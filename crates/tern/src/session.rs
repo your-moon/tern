@@ -12,6 +12,8 @@ use tern_term::TerminalTheme;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
+    /// Restored from the last run and not dialled yet: Enter connects.
+    Idle,
     Connecting,
     Connected,
     Closed,
@@ -21,6 +23,9 @@ pub enum Status {
 #[derive(Debug, Clone)]
 pub enum Launch {
     Ssh(ConnectSpec),
+    /// A connection that waits for Enter before it dials, so reopening many tabs at launch
+    /// does not hit every server at once.
+    SshIdle(ConnectSpec),
     /// The user's login shell on this machine.
     Local,
 }
@@ -32,6 +37,13 @@ enum Link {
         handle: Option<SessionHandle>,
     },
     Local(Option<LocalPty>),
+}
+
+impl Status {
+    /// Nothing is running; Enter starts it.
+    pub fn is_dormant(&self) -> bool {
+        matches!(self, Status::Idle | Status::Closed)
+    }
 }
 
 pub struct Session {
@@ -77,13 +89,22 @@ impl Session {
             let subscription = cx.subscribe(&terminal, |this: &mut Self, _, event, cx| {
                 this.on_terminal_event(event, cx);
             });
+            let idle = matches!(launch, Launch::SshIdle(_));
             let mut link = match launch {
-                Launch::Ssh(spec) => Link::Ssh { spec, handle: None },
+                Launch::Ssh(spec) | Launch::SshIdle(spec) => Link::Ssh { spec, handle: None },
                 Launch::Local => Link::Local(None),
             };
-            let task = Self::start(&mut link, size, cx);
-            Self {
-                status: Status::Connecting,
+            let task = if idle {
+                Task::ready(())
+            } else {
+                Self::start(&mut link, size, cx)
+            };
+            let this = Self {
+                status: if idle {
+                    Status::Idle
+                } else {
+                    Status::Connecting
+                },
                 flow: None,
                 asking: None,
                 typed: None,
@@ -98,7 +119,11 @@ impl Session {
                 login: None,
                 _session_events: task,
                 _terminal_events: subscription,
+            };
+            if idle {
+                this.show(b"\x1b[2mPress Enter to connect\x1b[0m\r\n", cx);
             }
+            this
         })
     }
 
@@ -231,7 +256,7 @@ impl Session {
 
     fn on_terminal_event(&mut self, event: &TerminalEvent, cx: &mut Context<Self>) {
         match event {
-            TerminalEvent::Output(bytes) if self.status == Status::Closed => {
+            TerminalEvent::Output(bytes) if self.status.is_dormant() => {
                 if wants_reconnect(bytes) {
                     self.reconnect(cx);
                 }

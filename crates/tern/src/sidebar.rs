@@ -342,6 +342,7 @@ fn section_header(
 /// The leading 13 pt slot: a 6 pt dot coloured by the host's newest tab.
 fn status_dot(status: Option<&Status>, t: &Theme) -> impl IntoElement + use<> {
     let color: Option<Hsla> = status.map(|s| match s {
+        Status::Idle => t.faint.opacity(0.8),
         Status::Connected => t.success.opacity(0.9),
         Status::Connecting => t.accent.opacity(0.6),
         Status::Closed => t.danger.opacity(0.65),
