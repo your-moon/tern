@@ -32,6 +32,8 @@ actions!(
     ]
 );
 
+#[path = "shell_menu.rs"]
+mod menu;
 #[path = "shell_settings.rs"]
 mod settings_ui;
 #[path = "shell_sync.rs"]
@@ -97,6 +99,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
             sync_ui: None,
             toasts: toast::Toasts::new(),
             tab_scroll: gpui::ScrollHandle::new(),
+            context_menu: None,
         };
         shell.refresh_hosts();
         cx.new(|_| shell)
@@ -137,6 +140,7 @@ pub struct Shell {
     sync_ui: Option<sync_ui::SyncUi>,
     toasts: toast::Toasts,
     tab_scroll: gpui::ScrollHandle,
+    context_menu: Option<menu::ContextMenu>,
 }
 
 struct Tab {
@@ -558,6 +562,7 @@ impl Render for Shell {
         let panel_bg = self.panel_background();
         let theme_picker = self.render_theme_picker(window, cx);
         let toast = self.render_toast(window, cx);
+        let context_menu = self.render_menu(cx);
         let sidebar_now = self.sidebar_now();
         if self.sidebar_tween.is_some() {
             if sidebar_now == self.sidebar_target() {
@@ -589,6 +594,12 @@ impl Render for Shell {
             .on_action(cx.listener(|s, _: &NewConnection, w, cx| s.open_form(None, None, w, cx)))
             .on_action(cx.listener(|s, _: &OpenSettings, w, cx| s.toggle_settings(w, cx)))
             .on_key_down(cx.listener(|s, e: &gpui::KeyDownEvent, w, cx| {
+                if e.keystroke.key == "escape" && s.context_menu.is_some() {
+                    s.context_menu = None;
+                    cx.notify();
+                    cx.stop_propagation();
+                    return;
+                }
                 if e.keystroke.key == "escape" && s.settings_page.is_some() && s.form.is_none() {
                     s.toggle_settings(w, cx);
                     cx.stop_propagation();
@@ -645,6 +656,7 @@ impl Render for Shell {
             })
             .when_some(form, |el, form| el.child(form))
             .when_some(theme_picker, |el, p| el.child(p))
+            .when_some(context_menu, |el, m| el.child(m))
             .when_some(toast, |el, t| el.child(t))
             .when_some(self.picker.as_ref(), |el, p| {
                 el.child(picker::render(

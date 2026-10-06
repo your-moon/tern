@@ -1,0 +1,235 @@
+// Adapted from zeron crates/ui/src/popover.rs (popover_card, menu_row, menu_separator) (MIT).
+//! The right-click menu for host rows and tabs: every action on a host in one place, opened
+//! at the pointer. A click outside, Escape or choosing an item closes it.
+
+use std::rc::Rc;
+
+use gpui::prelude::FluentBuilder;
+use gpui::{
+    AnyElement, Context, InteractiveElement, IntoElement, ParentElement, Pixels, Point,
+    SharedString, StatefulInteractiveElement, Styled, Window, anchored, deferred, div, px,
+};
+use tern_ssh::{ConnectSpec, HostEntry};
+
+use super::{Shell, ThemeTarget};
+use crate::connections::Connection;
+use crate::session::Status;
+
+type Run = Rc<dyn Fn(&mut Shell, &mut Window, &mut Context<Shell>)>;
+
+enum Item {
+    Action {
+        label: &'static str,
+        destructive: bool,
+        run: Run,
+    },
+    Separator,
+}
+
+fn action(
+    label: &'static str,
+    run: impl Fn(&mut Shell, &mut Window, &mut Context<Shell>) + 'static,
+) -> Item {
+    Item::Action {
+        label,
+        destructive: false,
+        run: Rc::new(run),
+    }
+}
+
+fn destructive(
+    label: &'static str,
+    run: impl Fn(&mut Shell, &mut Window, &mut Context<Shell>) + 'static,
+) -> Item {
+    Item::Action {
+        label,
+        destructive: true,
+        run: Rc::new(run),
+    }
+}
+
+pub(super) struct ContextMenu {
+    position: Point<Pixels>,
+    items: Vec<Item>,
+}
+
+impl Shell {
+    /// Right-click on a host row. `editable` is its index among tern's own connections.
+    pub(crate) fn open_host_menu(
+        &mut self,
+        host: &HostEntry,
+        editable: Option<usize>,
+        position: Point<Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        let alias = host.alias.clone();
+        let connect = host.clone();
+        let mut items = vec![action("Connect", move |s, w, cx| {
+            s.connect_host(connect.clone(), w, cx)
+        })];
+        let fresh = host.clone();
+        items.push(action("Open in new tab", move |s, w, cx| {
+            s.open_new_tab(&fresh, w, cx)
+        }));
+        items.push(Item::Separator);
+        match editable {
+            Some(ix) => items.push(action("Edit…", move |s, w, cx| {
+                let draft = s.connection(ix);
+                s.open_form(Some(ix), draft, w, cx);
+            })),
+            None => {
+                let draft = Connection::from_entry(host);
+                items.push(action("Duplicate to edit…", move |s, w, cx| {
+                    s.open_form(None, Some(draft.clone()), w, cx)
+                }));
+            }
+        }
+        let theme_alias = alias.clone();
+        items.push(action("Theme…", move |s, w, cx| {
+            s.open_theme_picker(ThemeTarget::Host(theme_alias.clone()), w, cx)
+        }));
+        items.push(Item::Separator);
+        match editable {
+            // The menu is already a deliberate second step, so remove at once; Undo covers it.
+            Some(ix) => items.push(destructive("Remove", move |s, _, cx| {
+                s.confirm_delete = Some(ix);
+                s.delete_connection(ix, cx);
+            })),
+            None => items.push(destructive("Remove from list", move |s, _, cx| {
+                s.hide_host(alias.clone(), cx)
+            })),
+        }
+        self.context_menu = Some(ContextMenu { position, items });
+        cx.notify();
+    }
+
+    /// Right-click on a tab.
+    pub(crate) fn open_tab_menu(
+        &mut self,
+        ix: usize,
+        position: Point<Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(tab) = self.tabs.get(ix) else {
+            return;
+        };
+        let alias = tab.alias.clone();
+        let closed = tab.session.read(cx).status == Status::Closed;
+        let mut items = Vec::new();
+        if closed {
+            items.push(action("Reconnect", move |s, w, cx| {
+                if let Some(tab) = s.tabs.get(ix) {
+                    let session = tab.session.clone();
+                    session.update(cx, |s, cx| s.reconnect(cx));
+                }
+                s.activate_tab(ix, w, cx);
+            }));
+        }
+        let again = alias.clone();
+        items.push(action("New tab to this host", move |s, w, cx| {
+            match s.hosts.iter().find(|h| h.alias == again).cloned() {
+                Some(host) => s.open_new_tab(&host, w, cx),
+                None => s.connect_target(&again, w, cx),
+            }
+        }));
+        let theme_alias = alias.clone();
+        items.push(action("Theme…", move |s, w, cx| {
+            s.open_theme_picker(ThemeTarget::Host(theme_alias.clone()), w, cx)
+        }));
+        items.push(Item::Separator);
+        items.push(destructive("Close tab", move |s, w, cx| {
+            s.close_tab_at(ix, w, cx)
+        }));
+        if self.tabs.len() > 1 {
+            items.push(destructive("Close other tabs", move |s, w, cx| {
+                s.close_other_tabs(ix, w, cx)
+            }));
+        }
+        self.context_menu = Some(ContextMenu { position, items });
+        cx.notify();
+    }
+
+    /// A second session to the same host, even when one is already open.
+    fn open_new_tab(&mut self, host: &HostEntry, window: &mut Window, cx: &mut Context<Self>) {
+        match ConnectSpec::from_host_entry(host) {
+            Ok(spec) => self.open_tab(spec, host.alias.clone(), window, cx),
+            Err(e) => self.notify_toast(super::ToastKind::Critical, e.to_string(), cx),
+        }
+    }
+
+    fn close_other_tabs(&mut self, keep: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if keep >= self.tabs.len() {
+            return;
+        }
+        let kept = self.tabs.remove(keep);
+        self.tabs = vec![kept];
+        self.activate_tab(0, window, cx);
+    }
+
+    fn close_menu(&mut self, cx: &mut Context<Self>) {
+        if self.context_menu.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    pub(super) fn render_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let menu = self.context_menu.as_ref()?;
+        let t = self.theme;
+        let mut card = div()
+            .id("context-menu")
+            .occlude()
+            .min_w(px(180.))
+            .p(px(4.))
+            .flex()
+            .flex_col()
+            .gap(px(2.))
+            .rounded(px(12.))
+            .border_1()
+            .border_color(t.border)
+            .bg(t.popup)
+            .shadow_lg()
+            .text_size(px(13.))
+            .text_color(t.text)
+            .on_mouse_down_out(cx.listener(|s, _, _, cx| s.close_menu(cx)));
+        for (ix, item) in menu.items.iter().enumerate() {
+            card = match item {
+                Item::Separator => {
+                    card.child(div().h(px(1.)).mx(px(-4.)).my(px(2.)).bg(t.hairline))
+                }
+                Item::Action {
+                    label,
+                    destructive,
+                    run,
+                } => {
+                    let run = run.clone();
+                    card.child(
+                        div()
+                            .id(("menu-item", ix))
+                            .px(px(8.))
+                            .py(px(6.))
+                            .rounded(px(7.))
+                            .cursor_pointer()
+                            .when(*destructive, |el| el.text_color(t.danger))
+                            .hover(|s| s.bg(t.row_active))
+                            .on_click(cx.listener(move |s, _, w, cx| {
+                                s.context_menu = None;
+                                run(s, w, cx);
+                                cx.notify();
+                            }))
+                            .child(SharedString::from(*label)),
+                    )
+                }
+            };
+        }
+        Some(
+            deferred(
+                anchored()
+                    .position(menu.position)
+                    .snap_to_window_with_margin(px(8.))
+                    .child(card),
+            )
+            .priority(2)
+            .into_any_element(),
+        )
+    }
+}

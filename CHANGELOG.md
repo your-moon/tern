@@ -42,6 +42,7 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 - `tern`: an empty window shows what to do next, with the current shortcuts for finding a host, a new connection and settings.
 - `tern`: logs are also written to `~/Library/Logs/tern/tern.log` (daily, a week kept).
 - `tern`: `~/.ssh/config` hosts can be removed from tern's list (× on hover; the file is never written), with Undo and a "Removed from the list" section in Settings → Connections to bring them back.
+- `tern`: right-click a host or a tab for its menu: connect, open in a new tab, edit or duplicate, theme, remove; on tabs reconnect, close and close others.
 - `tern`: a macOS menu bar (Hide, Hide Others, Show All, Quit, Minimize, Zoom) with ⌘Q, ⌘H, ⌥⌘H and ⌘M.
 - `tern-term`: `local_demo <command>` for visual checks; scripted runs never take keyboard focus.
 - Project: craft gates (`clippy -D warnings`, file-size and attribution checks, `cargo deny`), CI, architecture diagram, UI spec and measured performance notes.

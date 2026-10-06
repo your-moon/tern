@@ -97,6 +97,13 @@ fn tab_pill(
         // A click on a tab must not also start a window drag from the titlebar.
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(cx.listener(move |shell, _, window, cx| shell.activate_tab(ix, window, cx)))
+        .on_mouse_down(
+            MouseButton::Right,
+            cx.listener(move |shell, e: &gpui::MouseDownEvent, _, cx| {
+                cx.stop_propagation();
+                shell.open_tab_menu(ix, e.position, cx);
+            }),
+        )
         .on_mouse_up(
             MouseButton::Middle,
             cx.listener(move |shell, _, window, cx| shell.close_tab_at(ix, window, cx)),

@@ -206,6 +206,11 @@ fn row(
     } else {
         address(host)
     };
+    let menu_host = host.clone();
+    let editable = match kind {
+        RowKind::Connection { .. } => Some(ix),
+        RowKind::SshConfig => None,
+    };
     let hover_actions = actions(ix, host, kind, t, cx);
     div()
         .id(("host", ix))
@@ -222,6 +227,13 @@ fn row(
         .on_click(cx.listener(move |shell, _, window, cx| {
             shell.connect_host(target.clone(), window, cx);
         }))
+        .on_mouse_down(
+            gpui::MouseButton::Right,
+            cx.listener(move |shell, e: &gpui::MouseDownEvent, _, cx| {
+                cx.stop_propagation();
+                shell.open_host_menu(&menu_host, editable, e.position, cx);
+            }),
+        )
         .child(match status {
             Some(s) => tabs::status_dot(("host-dot", ix), s, t).into_any_element(),
             None => div().flex_none().size(px(6.)).into_any_element(),

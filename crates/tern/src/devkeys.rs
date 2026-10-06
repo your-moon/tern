@@ -1,6 +1,6 @@
 //! Debug builds only: `TERN_DEV_KEYS="cmd-k s t b"` replays keystrokes into the window after
 //! start-up (`sleep-500` waits half a second, for a prompt to arrive; `click:x,y` and
-//! `dblclick:x,y` click and `drag:x0,y0,x1,y1` drags at window points),
+//! `dblclick:x,y` click, `rclick:x,y` right-clicks and `drag:x0,y0,x1,y1` drags at window points),
 //! start-up, so a scripted visual check can drive the app without taking keyboard focus from
 //! whatever window the person at the machine is using.
 
@@ -60,8 +60,12 @@ fn at(x: f32, y: f32) -> Point<gpui::Pixels> {
 }
 
 fn down(p: Point<gpui::Pixels>, clicks: usize) -> PlatformInput {
+    down_with(p, clicks, MouseButton::Left)
+}
+
+fn down_with(p: Point<gpui::Pixels>, clicks: usize, button: MouseButton) -> PlatformInput {
     PlatformInput::MouseDown(MouseDownEvent {
-        button: MouseButton::Left,
+        button,
         position: p,
         modifiers: Modifiers::default(),
         click_count: clicks,
@@ -70,8 +74,12 @@ fn down(p: Point<gpui::Pixels>, clicks: usize) -> PlatformInput {
 }
 
 fn up(p: Point<gpui::Pixels>, clicks: usize) -> PlatformInput {
+    up_with(p, clicks, MouseButton::Left)
+}
+
+fn up_with(p: Point<gpui::Pixels>, clicks: usize, button: MouseButton) -> PlatformInput {
     PlatformInput::MouseUp(MouseUpEvent {
-        button: MouseButton::Left,
+        button,
         position: p,
         modifiers: Modifiers::default(),
         click_count: clicks,
@@ -91,6 +99,11 @@ fn mouse(token: &str) -> Option<Vec<PlatformInput>> {
     let (kind, args) = token.split_once(':')?;
     let n: Vec<f32> = args.split(',').filter_map(|v| v.parse().ok()).collect();
     match (kind, n.as_slice()) {
+        ("rclick", [x, y]) => Some(vec![
+            moved(at(*x, *y), false),
+            down_with(at(*x, *y), 1, MouseButton::Right),
+            up_with(at(*x, *y), 1, MouseButton::Right),
+        ]),
         ("click", [x, y]) => Some(vec![
             moved(at(*x, *y), false),
             down(at(*x, *y), 1),
