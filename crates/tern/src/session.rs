@@ -287,6 +287,14 @@ impl Session {
         Launch::Ssh(self.link.spec.clone())
     }
 
+    /// The live connection, for features that open their own channel on it (SFTP).
+    pub fn ssh_handle(&self) -> Option<SessionHandle> {
+        self.link
+            .handle
+            .clone()
+            .filter(|_| self.status == Status::Connected)
+    }
+
     pub fn reconnect(&mut self, cx: &mut Context<Self>) {
         self.retry = None;
         self.show(b"\r\n", cx);

@@ -15,6 +15,13 @@ use crate::forward_spec;
 use crate::session::Status;
 use crate::text_input::{InputColors, TextInput};
 
+/// The popovers and side panels a tab can have open.
+#[derive(Default)]
+pub(super) struct Panels {
+    pub forwards: Option<ForwardsPanel>,
+    pub sftp: Option<super::sftp_ui::SftpPanel>,
+}
+
 pub(super) struct ForwardsPanel {
     tab: TabId,
     position: Point<Pixels>,
@@ -66,7 +73,7 @@ impl Shell {
         // The panel re-renders as the person types so a bad spec's message can clear.
         cx.observe(&input, |_, _, cx| cx.notify()).detach();
         window.focus(&input.focus_handle(cx), cx);
-        self.forwards_panel = Some(ForwardsPanel {
+        self.panels.forwards = Some(ForwardsPanel {
             tab,
             position,
             input,
@@ -90,13 +97,13 @@ impl Shell {
     }
 
     pub(super) fn close_forwards_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.forwards_panel.take().is_some() {
+        if self.panels.forwards.take().is_some() {
             self.restore_focus(window, cx);
         }
     }
 
     fn add_panel_forward(&mut self, cx: &mut Context<Self>) {
-        let Some(panel) = self.forwards_panel.as_mut() else {
+        let Some(panel) = self.panels.forwards.as_mut() else {
             return;
         };
         let text = panel.input.read(cx).text().to_owned();
@@ -138,8 +145,22 @@ impl Shell {
         cx.stop_propagation();
     }
 
-    pub(super) fn render_forwards_panel(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let panel = self.forwards_panel.as_ref()?;
+    pub(super) fn render_panels(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        [
+            self.render_forwards_panel(cx),
+            self.render_sftp_panel(window, cx),
+        ]
+        .into_iter()
+        .flatten()
+        .collect()
+    }
+
+    fn render_forwards_panel(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let panel = self.panels.forwards.as_ref()?;
         let t = self.theme;
         let tab = self.tabs.iter().find(|tab| tab.id == panel.tab)?;
         let label = tab.title.clone().unwrap_or_else(|| tab.alias.clone());

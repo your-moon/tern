@@ -23,6 +23,8 @@ rand = { version = "0.10", features = ["thread_rng"] }
 security-framework = "3"
 
 russh-sftp = "3.0.1"
+# Local-time dates in the file browser.
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 # Craft gates. Every crate opts in with `[lints] workspace = true`.
 [workspace.lints.rust]

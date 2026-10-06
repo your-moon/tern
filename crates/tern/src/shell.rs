@@ -43,6 +43,9 @@ actions!(
 mod broadcast_ui;
 #[path = "shell_forwards.rs"]
 mod forwards_ui;
+#[path = "shell_sftp.rs"]
+mod sftp_ui;
+pub(crate) use sftp_ui::ToggleSftp;
 #[path = "shell_look.rs"]
 mod look;
 #[path = "shell_menu.rs"]
@@ -152,7 +155,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 next_pane: 0,
                 broadcast: None,
                 broadcast_picker: None,
-                forwards_panel: None,
+                panels: Default::default(),
                 active: 0,
                 error: None,
                 picker: None,
@@ -243,7 +246,7 @@ pub struct Shell {
     next_pane: PaneId,
     broadcast: Option<broadcast_ui::Broadcast>,
     broadcast_picker: Option<broadcast_ui::BroadcastPicker>,
-    forwards_panel: Option<forwards_ui::ForwardsPanel>,
+    panels: forwards_ui::Panels,
     active: usize,
     error: Option<String>,
     picker: Option<Picker>,
@@ -675,6 +678,7 @@ impl Render for Shell {
             .on_action(cx.listener(|s, _: &FocusHostSearch, w, cx| s.focus_search(w, cx)))
             .on_action(cx.listener(|s, _: &ToggleSnippets, w, cx| s.toggle_snippet_picker(w, cx)))
             .on_action(cx.listener(|s, _: &ToggleSidebar, _, cx| s.toggle_sidebar(cx)))
+            .on_action(cx.listener(|s, _: &ToggleSftp, w, cx| s.toggle_sftp(w, cx)))
             .on_action(cx.listener(|s, _: &NewConnection, w, cx| s.open_form(None, None, w, cx)))
             .on_action(cx.listener(|s, _: &OpenSettings, w, cx| s.toggle_settings(w, cx)))
             // Capture phase: the terminal handles Escape itself, and ending a broadcast must
@@ -770,7 +774,7 @@ impl Render for Shell {
             .when_some(theme_picker, |el, p| el.child(p))
             .when_some(context_menu, |el, m| el.child(m))
             .when_some(self.render_broadcast_picker(cx), |el, p| el.child(p))
-            .when_some(self.render_forwards_panel(cx), |el, p| el.child(p))
+            .children(self.render_panels(window, cx))
             .when_some(toast, |el, t| el.child(t))
             .when_some(self.picker.as_ref(), |el, p| {
                 el.child(picker::render(

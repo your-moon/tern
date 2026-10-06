@@ -4,11 +4,16 @@
 //!
 //! `cargo run -p tern-ssh --example password_server -- 2299 hunter2`
 //!
+//! With `--sftp DIR` it also serves the `sftp` subsystem over DIR (`/` is DIR, the login
+//! directory is DIR/home), the same file service tern-ssh's tests use.
+//!
 //! With `--otp 123456` it behaves like a 2FA server: the password is only the first step
 //! (partial success), then a keyboard-interactive "Verification code:" prompt with echo off
 //! must be answered with the code.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::print_stderr)]
 
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,11 +21,18 @@ use russh::keys::PrivateKey;
 use russh::server::{self, Auth, Msg, Session};
 use russh::{Channel, ChannelId, MethodKind, MethodSet};
 
+#[path = "../tests/common/sftp.rs"]
+mod sftp;
+
 struct PasswordServer {
     password: Arc<String>,
     otp: Option<Arc<String>>,
     /// The password step passed on this connection; the code is asked only after it.
     password_ok: bool,
+    /// Served as `/` for the sftp subsystem, when asked for.
+    sftp_root: Option<PathBuf>,
+    /// Session channels not yet claimed by a subsystem.
+    sessions: HashMap<ChannelId, Channel<Msg>>,
 }
 
 impl server::Handler for PasswordServer {
@@ -95,11 +107,31 @@ impl server::Handler for PasswordServer {
 
     async fn channel_open_session(
         &mut self,
-        _: Channel<Msg>,
+        channel: Channel<Msg>,
         reply: server::ChannelOpenHandle,
         _: &mut Session,
     ) -> Result<(), Self::Error> {
+        self.sessions.insert(channel.id(), channel);
         reply.accept().await;
+        Ok(())
+    }
+
+    async fn subsystem_request(
+        &mut self,
+        ch: ChannelId,
+        name: &str,
+        s: &mut Session,
+    ) -> Result<(), Self::Error> {
+        match (name, self.sftp_root.clone(), self.sessions.remove(&ch)) {
+            ("sftp", Some(root), Some(channel)) => {
+                s.channel_success(ch)?;
+                tokio::spawn(russh_sftp::server::run(
+                    channel.into_stream(),
+                    sftp::FsHandler::new(root),
+                ));
+            }
+            _ => s.channel_failure(ch)?,
+        }
         Ok(())
     }
 
@@ -117,6 +149,12 @@ async fn main() {
         let code = args.get(i + 1).cloned().expect("--otp needs a code");
         args.drain(i..=i + 1);
         Arc::new(code)
+    });
+    let sftp_root = args.iter().position(|a| a == "--sftp").map(|i| {
+        let dir = PathBuf::from(args.get(i + 1).cloned().expect("--sftp needs a directory"));
+        args.drain(i..=i + 1);
+        std::fs::create_dir_all(dir.join("home")).expect("create the sftp home");
+        dir
     });
     let mut args = args.into_iter();
     let port: u16 = args.next().map_or(2299, |p| p.parse().expect("port"));
@@ -142,6 +180,8 @@ async fn main() {
             password: password.clone(),
             otp: otp.clone(),
             password_ok: false,
+            sftp_root: sftp_root.clone(),
+            sessions: HashMap::new(),
         };
         let config = config.clone();
         tokio::spawn(async move {

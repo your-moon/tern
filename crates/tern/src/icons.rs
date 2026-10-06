@@ -57,6 +57,11 @@ icon_assets!(
     (MORE, "more-horizontal"),
     (SEARCH, "magnifer"),
     (GLOBE, "global"),
+    (FOLDER, "folder"),
+    (DOCUMENT, "document"),
+    (ARROW_UP, "arrow-up"),
+    (HOME, "home"),
+    (UPLOAD, "archive-up-minimalistic"),
 );
 
 pub fn icon(path: &'static str) -> Svg {

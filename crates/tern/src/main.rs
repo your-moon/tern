@@ -23,6 +23,7 @@ mod session;
 mod session_log;
 mod settings;
 mod settings_widgets;
+mod sftp_paths;
 mod shell;
 mod sidebar;
 mod snippets;

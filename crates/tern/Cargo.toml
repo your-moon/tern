@@ -20,6 +20,7 @@ tern-term.workspace = true
 tern-sync.workspace = true
 tern-vault.workspace = true
 base64 = "0.22"
+chrono.workspace = true
 ureq.workspace = true
 image.workspace = true
 security-framework.workspace = true

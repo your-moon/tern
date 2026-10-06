@@ -28,6 +28,7 @@ pub enum ShortcutId {
     PaneDown,
     Settings,
     ToggleSidebar,
+    BrowseFiles,
     CloseTab,
     NextTab,
     PrevTab,
@@ -37,7 +38,7 @@ pub enum ShortcutId {
 }
 
 impl ShortcutId {
-    pub const ALL: [ShortcutId; 18] = [
+    pub const ALL: [ShortcutId; 19] = [
         ShortcutId::HostPicker,
         ShortcutId::SearchHosts,
         ShortcutId::Snippets,
@@ -50,6 +51,7 @@ impl ShortcutId {
         ShortcutId::PaneDown,
         ShortcutId::Settings,
         ShortcutId::ToggleSidebar,
+        ShortcutId::BrowseFiles,
         ShortcutId::CloseTab,
         ShortcutId::NextTab,
         ShortcutId::PrevTab,
@@ -72,6 +74,7 @@ impl ShortcutId {
             ShortcutId::PaneDown => "Focus pane down",
             ShortcutId::Settings => "Open settings",
             ShortcutId::ToggleSidebar => "Toggle sidebar",
+            ShortcutId::BrowseFiles => "Browse files",
             ShortcutId::CloseTab => "Close tab",
             ShortcutId::NextTab => "Next tab",
             ShortcutId::PrevTab => "Previous tab",
@@ -95,6 +98,7 @@ impl ShortcutId {
             ShortcutId::PaneDown => "alt-cmd-down",
             ShortcutId::Settings => "cmd-,",
             ShortcutId::ToggleSidebar => "cmd-b",
+            ShortcutId::BrowseFiles => "cmd-shift-o",
             ShortcutId::CloseTab => "cmd-w",
             ShortcutId::NextTab => "cmd-shift-]",
             ShortcutId::PrevTab => "cmd-shift-[",
@@ -124,6 +128,7 @@ impl ShortcutId {
             ShortcutId::PaneDown => Box::new(FocusPaneDown),
             ShortcutId::Settings => Box::new(OpenSettings),
             ShortcutId::ToggleSidebar => Box::new(ToggleSidebar),
+            ShortcutId::BrowseFiles => Box::new(crate::shell::ToggleSftp),
             ShortcutId::CloseTab => Box::new(CloseTab),
             ShortcutId::NextTab => Box::new(NextTab),
             ShortcutId::PrevTab => Box::new(PrevTab),

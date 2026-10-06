@@ -150,6 +150,9 @@ impl Shell {
                 s.start_logging(ix, cx)
             }));
         }
+        items.push(action(icons::FOLDER, "Browse files", move |s, w, cx| {
+            s.open_sftp(ix, w, cx)
+        }));
         items.push(action(icons::GLOBE, "Port forwards…", move |s, w, cx| {
             s.open_forwards_panel(ix, position, w, cx)
         }));
