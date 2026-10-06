@@ -127,13 +127,19 @@ fn set_hover(key: &str, hovered: bool, reduced: bool) {
 }
 
 /// An `.on_hover` listener driving the fade for `key`.
-fn hover_listener(key: SharedString) -> impl Fn(&bool, &mut Window, &mut App) + 'static {
+pub fn hover_listener(key: SharedString) -> impl Fn(&bool, &mut Window, &mut App) + 'static {
     move |hovered, window, cx| {
         set_hover(&key, *hovered, cx.reduce_motion());
         // `refresh` marks the window dirty; the shell render keeps frames coming while the
         // fade is mid-flight.
         window.refresh();
     }
+}
+
+/// `base` blended toward `hover` by the fade for `key`: for text and fills that cannot go
+/// through `hover_fade` because the rest colour itself is animating (zeron `motion::hover_blend`).
+pub fn blend(key: &str, base: Hsla, hover: Hsla) -> Hsla {
+    mix(base, hover, hover_t(key))
 }
 
 /// Call once per frame, after the elements are built; true while a fade needs more frames.

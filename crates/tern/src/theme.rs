@@ -15,6 +15,8 @@ pub const TITLEBAR_HEIGHT: f32 = 38.0;
 pub const TITLEBAR_TOP_PAD: f32 = 4.0;
 pub const PANEL_RADIUS: f32 = 10.0;
 pub const SPACE_SM: f32 = 8.0;
+/// zeron `Theme::SPACE_LG` (crates/ui/src/theme.rs:842): the gap between nav groups.
+pub const SPACE_LG: f32 = 16.0;
 pub const UI_FONT: &str = "Geist";
 pub const MONO_FONT: &str = "Geist Mono";
 pub const CONTROL_RADIUS: f32 = 6.0;

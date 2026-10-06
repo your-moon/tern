@@ -725,7 +725,7 @@ impl Render for Shell {
                 cx,
             ))
             .child(match self.settings_page {
-                Some(section) => self.render_settings(section, cx),
+                Some(section) => self.render_settings(section, window, cx),
                 None => div()
                     .flex_1()
                     .min_h_0()

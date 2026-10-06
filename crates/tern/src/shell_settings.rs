@@ -10,6 +10,9 @@ use gpui::{
     StatefulInteractiveElement, Styled, Window, div, px,
 };
 
+#[path = "shell_settings_nav.rs"]
+mod nav;
+
 use super::Shell;
 use crate::keymap::{Keymap, Record, ShortcutId, badge, record};
 use crate::settings::{AppearanceMode, FONT_DEFAULT, FONT_MAX, FONT_MIN};
@@ -58,7 +61,7 @@ impl Section {
             Section::Terminal => crate::icons::TERMINAL,
             Section::Shortcuts => crate::icons::KEYBOARD,
             Section::Connections => crate::icons::SERVER,
-            Section::Snippets => crate::icons::TERMINAL,
+            Section::Snippets => crate::icons::FILE_CODE,
             Section::Vault => crate::icons::KEY,
             Section::Sync => crate::icons::CLOUD,
             Section::About => crate::icons::INFO,
@@ -99,45 +102,25 @@ impl Shell {
         cx.notify();
     }
 
-    pub(crate) fn render_settings(&self, section: Section, cx: &mut Context<Self>) -> AnyElement {
-        let t = self.theme;
-        let mut nav = div()
-            .w(px(self.settings.sidebar_width))
-            .flex_none()
-            .h_full()
-            .px(px(8.))
-            .pt(px(12.))
-            .pb(px(8.))
-            .flex()
-            .flex_col()
-            .gap(px(2.))
-            .child(
-                w::nav_tab(
-                    &t,
-                    false,
-                    "nav-back",
-                    "Back",
-                    Some(crate::icons::CHEVRON_LEFT),
-                )
-                .on_click(cx.listener(|s, _, window, cx| s.toggle_settings(window, cx))),
-            )
-            .child(div().h(px(12.)));
-        for s in Section::ALL {
-            nav = nav.child(
-                w::nav_tab(&t, s == section, s.id(), s.label(), Some(s.icon())).on_click(
-                    cx.listener(move |shell, _, _, cx| {
-                        shell.settings_page = Some(s);
-                        if s == Section::Sync {
-                            shell.ensure_sync_ui(cx);
-                        }
-                        if s == Section::Vault {
-                            shell.ensure_vault_ui(cx);
-                        }
-                        cx.notify();
-                    }),
-                ),
-            );
+    /// Opens `section` and starts whatever it shows that loads lazily.
+    fn select_section(&mut self, section: Section, cx: &mut Context<Self>) {
+        self.settings_page = Some(section);
+        if section == Section::Sync {
+            self.ensure_sync_ui(cx);
         }
+        if section == Section::Vault {
+            self.ensure_vault_ui(cx);
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn render_settings(
+        &self,
+        section: Section,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let nav = nav::render(self, section, window, cx);
         let page = match section {
             Section::Appearance => self.appearance_page(cx),
             Section::Terminal => self.terminal_page(cx),

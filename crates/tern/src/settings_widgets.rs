@@ -1,5 +1,5 @@
 // Adapted from zeron crates/ui/src/settings/widgets.rs (page_column, page_header, section,
-// section_card, card_row, row_title, meta_line, section_tab, toggle_switch) (MIT).
+// section_card, card_row, row_title, meta_line, toggle_switch) (MIT).
 //! The building blocks of the Settings page, with zeron's sizes. zeron frosts its switch with
 //! gradients; tern's surfaces are opaque, so the flat tones are used.
 
@@ -125,46 +125,6 @@ pub fn row(
                 }),
         )
         .child(div().flex_none().child(control))
-}
-
-/// Left-nav entry: radius 8, 8×6 padding, at least 32 tall, 13 pt; the selected one is
-/// medium weight on an 11% wash.
-pub fn nav_tab(
-    t: &Theme,
-    selected: bool,
-    id: &'static str,
-    label: &'static str,
-    glyph: Option<&'static str>,
-) -> Stateful<Div> {
-    div()
-        .id(id)
-        .flex()
-        .items_center()
-        .gap(px(8.))
-        .rounded(px(8.))
-        .px(px(8.))
-        .py(px(6.))
-        .min_h(px(32.))
-        .text_size(px(13.))
-        .cursor_pointer()
-        .when(selected, |el| {
-            el.font_weight(FontWeight::MEDIUM)
-                .text_color(t.text)
-                .bg(t.ink(0.11))
-        })
-        .when(!selected, |el| {
-            el.text_color(t.muted)
-                .hover_fade(id, gpui::transparent_black(), t.row_hover)
-                .hover(|s| s.text_color(t.text))
-        })
-        .when_some(glyph, |el, g| {
-            el.child(crate::icons::icon(g).size(px(16.)).text_color(if selected {
-                t.text
-            } else {
-                t.muted
-            }))
-        })
-        .child(label)
 }
 
 /// zeron `action_button`: radius 8, at least 32 tall, 10×5 padding, 12.5 pt.
