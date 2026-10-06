@@ -40,6 +40,8 @@ mod settings_ui;
 mod sync_ui;
 #[path = "shell_tabs.rs"]
 mod tabs_ui;
+#[path = "shell_term_options.rs"]
+mod term_options;
 #[path = "shell_toast.rs"]
 mod toast;
 
@@ -181,6 +183,7 @@ struct Tab {
     title: Option<String>,
     session: Entity<Session>,
     _repaint: Subscription,
+    _bell: Subscription,
 }
 
 impl Shell {
@@ -230,7 +233,12 @@ impl Shell {
         let session = Session::open(spec, theme, window, cx);
         let meta = self.settings.option_as_meta;
         let view = session.read(cx).view.clone();
-        view.update(cx, |v, _| v.set_option_as_meta(meta));
+        let options = self.terminal_options();
+        view.update(cx, |v, cx| {
+            v.set_option_as_meta(meta);
+            v.set_options(options, cx);
+        });
+        let bell = self.on_bell(&session, window, cx);
         // A tab that is not in front can drop without anyone seeing its terminal; say so, with
         // a way to get to it.
         let mut last = Status::Connecting;
@@ -263,6 +271,7 @@ impl Shell {
             title: None,
             session,
             _repaint: repaint,
+            _bell: bell,
         });
         self.error = None;
         self.activate_tab(self.tabs.len() - 1, window, cx);

@@ -194,6 +194,10 @@ impl Session {
         }
     }
 
+    pub fn terminal(&self) -> Entity<Terminal> {
+        self.terminal.clone()
+    }
+
     /// Types `text` into the remote as the keyboard would: a newline is Enter (CR), so a
     /// snippet runs only when it ends with one. False when nothing could take it (not
     /// connected, or a login question is open and would swallow it).

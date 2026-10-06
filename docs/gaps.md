@@ -24,15 +24,15 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 
 | # | Gap | Impact |
 | --- | --- | --- |
-| T1 | Find in scrollback (⌘F) | Cannot search output |
-| T2 | Clickable URLs and OSC 8 links | Links must be copied by hand |
+| ✓ T1 | Find in scrollback (⌘F) | Cannot search output |
+| ✓ T2 | Clickable URLs and OSC 8 links | Links must be copied by hand |
 | T3 | Split panes (⌘D, ⌘⇧D) | One session per view |
-| T4 | Font family choice | Geist Mono only |
-| T5 | Cursor style and blink | Fixed block |
-| T6 | Scrollback length setting | Fixed in code |
-| T7 | Copy on select, paste on middle-click (option) | Common Linux habit missing |
-| T8 | Bell: visual flash or Dock bounce | Bell is ignored |
-| T9 | Tab rename and drag to reorder | Tabs fixed by open order |
+| ✓ T4 | Font family choice | Geist Mono only |
+| ✓ T5 | Cursor style and blink | Fixed block |
+| ✓ T6 | Scrollback length setting | Fixed in code |
+| ✓ T7 | Copy on select, paste on middle-click (option) | Common Linux habit missing |
+| ✓ T8 | Bell: visual flash or Dock bounce | Bell is ignored |
+| ✓ T9 | Tab rename and drag to reorder | Tabs fixed by open order |
 | T10 | Broadcast input to several tabs | Cannot run one command on many hosts |
 | T11 | Restore tabs on relaunch | Sessions lost on quit |
 | T12 | Session logging to file | No transcript |

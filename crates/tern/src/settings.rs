@@ -23,7 +23,7 @@ pub struct Settings {
     pub sidebar_width: f32,
     pub sidebar_collapsed: bool,
     pub terminal_font_size: f32,
-    /// Hold looping animations still. macOS's own setting is not read yet (#18).
+    /// Hold looping animations still. macOS's Reduce motion does the same on its own.
     pub reduce_motion: bool,
     /// Option sends Meta (ESC-prefixed keys) to the remote, as most terminals offer.
     pub option_as_meta: bool,
@@ -34,7 +34,34 @@ pub struct Settings {
     /// A git remote to sync through (any host git can reach); `None` uses a GitHub gist.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sync_remote: Option<String>,
+    /// The cursor until the remote picks its own with DECSCUSR.
+    pub cursor_style: CursorStyle,
+    pub cursor_blink: bool,
+    /// Lines of output kept per terminal.
+    pub scrollback_lines: usize,
+    /// Finishing a mouse selection copies it, as on Linux desktops.
+    pub copy_on_select: bool,
+    pub middle_click_paste: bool,
+    /// Flash the terminal on BEL.
+    pub visual_bell: bool,
+    /// Bounce the Dock icon on BEL while tern is in the background.
+    pub bell_bounces_dock: bool,
 }
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CursorStyle {
+    #[default]
+    Block,
+    Bar,
+    Underline,
+}
+
+pub const SCROLLBACK_MIN: usize = 1_000;
+pub const SCROLLBACK_MAX: usize = 100_000;
+pub const SCROLLBACK_DEFAULT: usize = 10_000;
+/// The stops the Settings stepper moves between.
+pub const SCROLLBACK_STEPS: [usize; 5] = [1_000, 5_000, 10_000, 50_000, 100_000];
 
 impl Default for Settings {
     fn default() -> Self {
@@ -47,6 +74,13 @@ impl Default for Settings {
             terminal_theme: None,
             host_themes: BTreeMap::new(),
             sync_remote: None,
+            cursor_style: CursorStyle::Block,
+            cursor_blink: false,
+            scrollback_lines: SCROLLBACK_DEFAULT,
+            copy_on_select: false,
+            middle_click_paste: false,
+            visual_bell: false,
+            bell_bounces_dock: true,
         }
     }
 }
@@ -87,7 +121,21 @@ impl Settings {
         );
         self.terminal_font_size =
             clamp_or(self.terminal_font_size, FONT_MIN, FONT_MAX, FONT_DEFAULT);
+        self.scrollback_lines = self.scrollback_lines.clamp(SCROLLBACK_MIN, SCROLLBACK_MAX);
         self
+    }
+
+    /// The next scrollback stop up or down from the current value.
+    pub fn step_scrollback(&mut self, up: bool) {
+        let now = self.scrollback_lines;
+        let next = if up {
+            SCROLLBACK_STEPS.into_iter().find(|&s| s > now)
+        } else {
+            SCROLLBACK_STEPS.into_iter().rev().find(|&s| s < now)
+        };
+        if let Some(next) = next {
+            self.scrollback_lines = next;
+        }
     }
 
     /// One point larger or smaller, held inside the legal range.
@@ -124,6 +172,43 @@ mod tests {
         dir
     }
 
+    /// A settings file from before the terminal options keeps its values and gains defaults.
+    #[test]
+    fn older_file_gains_terminal_defaults() {
+        let dir = temp_dir("older");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("settings.json"),
+            r#"{"terminalFontSize": 15, "optionAsMeta": false}"#,
+        )
+        .unwrap();
+        let got = Settings::load(&dir);
+        assert_eq!(got.terminal_font_size, 15.0);
+        assert!(!got.option_as_meta);
+        assert_eq!(got.cursor_style, CursorStyle::Block);
+        assert_eq!(got.scrollback_lines, SCROLLBACK_DEFAULT);
+        assert!(got.bell_bounces_dock);
+    }
+
+    #[test]
+    fn scrollback_steps_between_stops_and_clamps() {
+        let mut s = Settings::default();
+        s.step_scrollback(true);
+        assert_eq!(s.scrollback_lines, 50_000);
+        s.step_scrollback(false);
+        s.step_scrollback(false);
+        assert_eq!(s.scrollback_lines, 5_000);
+        // A hand-edited value between stops moves to the neighbouring stop.
+        s.scrollback_lines = 7_000;
+        s.step_scrollback(false);
+        assert_eq!(s.scrollback_lines, 5_000);
+        s.scrollback_lines = 100_000;
+        s.step_scrollback(true);
+        assert_eq!(s.scrollback_lines, 100_000, "stays at the top stop");
+        s.scrollback_lines = 5;
+        assert_eq!(s.clamped().scrollback_lines, SCROLLBACK_MIN);
+    }
+
     #[test]
     fn missing_file_gives_defaults() {
         assert_eq!(Settings::load(&temp_dir("missing")), Settings::default());
@@ -141,6 +226,13 @@ mod tests {
             terminal_theme: Some("Dracula".into()),
             host_themes: BTreeMap::from([("grape".into(), "Nord".into())]),
             sync_remote: Some("git@github.com:me/tern-sync.git".into()),
+            cursor_style: CursorStyle::Bar,
+            cursor_blink: true,
+            scrollback_lines: 50_000,
+            copy_on_select: true,
+            middle_click_paste: true,
+            visual_bell: true,
+            bell_bounces_dock: false,
         };
         saved.save(&dir).unwrap();
         assert_eq!(Settings::load(&dir), saved);

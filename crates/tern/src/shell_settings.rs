@@ -240,33 +240,6 @@ impl Shell {
             ))
     }
 
-    fn terminal_page(&self, cx: &mut Context<Self>) -> gpui::Div {
-        let t = self.theme;
-        let meta = self.settings.option_as_meta;
-        w::page_column()
-            .child(w::page_header(&t, "Terminal"))
-            .child(w::section(
-                &t,
-                "Keyboard",
-                w::card(&t).child(w::row(
-                    &t,
-                    true,
-                    "Use Option as Meta",
-                    Some(
-                        "⌥B, ⌥F and friends reach the shell; off types the macOS character".into(),
-                    ),
-                    div()
-                        .id("toggle-option-meta")
-                        .cursor_pointer()
-                        .on_click(cx.listener(|s, _, _, cx| {
-                            s.update_settings(|st| st.option_as_meta = !st.option_as_meta, cx);
-                            s.apply_option_as_meta(cx);
-                        }))
-                        .child(w::toggle(&t, meta, "option-meta")),
-                )),
-            ))
-    }
-
     fn shortcuts_page(&self, cx: &mut Context<Self>) -> gpui::Div {
         let t = self.theme;
         let keymap = cx.global::<Keymap>().clone();
