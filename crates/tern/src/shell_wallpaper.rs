@@ -32,6 +32,8 @@ pub const TEXT_CONTRAST: f32 = 4.5;
 struct Want {
     source: PathBuf,
     effect: Effect,
+    /// Effects print on white paper in the light appearance, black in the dark.
+    light: bool,
 }
 
 struct Shown {
@@ -80,6 +82,7 @@ impl Shell {
         self.active_wallpaper().map(|p| Want {
             source: PathBuf::from(p),
             effect: self.settings.wallpaper_effect,
+            light: self.theme.light,
         })
     }
 
@@ -117,7 +120,7 @@ impl Shell {
         self.wp.loading = Some(want.clone());
         let job = want.clone();
         let task = cx.background_spawn(async move {
-            wallpaper::prepare(&job.source, job.effect, false, &config)
+            wallpaper::prepare(&job.source, job.effect, job.light, &config)
         });
         cx.spawn(async move |this, cx| {
             let result = task.await;
@@ -176,9 +179,10 @@ impl Shell {
                     wallpaper_colors::accent_for(color, rgb3(self.theme.terminal_background));
                 crate::theme::hex(u32::from(r) << 16 | u32::from(g) << 8 | u32::from(b))
             });
-        let accent = tinted.unwrap_or_else(|| Theme::zeron_dark().accent);
+        let accent = tinted.unwrap_or_else(|| Theme::zeron(self.theme.light).accent);
         if accent != self.theme.accent {
             self.theme.accent = accent;
+            self.install_input_colors(cx);
             self.restyle_tabs(cx);
             cx.notify();
         }

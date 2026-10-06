@@ -5,7 +5,7 @@ use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
     IntoElement, KeyDownEvent, ParentElement, SharedString, StatefulInteractiveElement, Styled,
-    Subscription, Window, anchored, deferred, div, hsla, point, px,
+    Subscription, Window, anchored, deferred, div, point, px,
 };
 use tern_ssh::SecretString;
 use tern_vault::{Key, Vault, VaultError};
@@ -557,7 +557,7 @@ impl Shell {
                         .occlude()
                         .w(viewport.width)
                         .h(viewport.height)
-                        .bg(hsla(0., 0., 0., 0.35))
+                        .bg(t.scrim(0.35))
                         .flex()
                         .items_center()
                         .justify_center()

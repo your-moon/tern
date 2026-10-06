@@ -12,7 +12,7 @@ use gpui::{
 use super::Shell;
 use crate::keeper::Keeper;
 use crate::keymap::{Keymap, Record, ShortcutId, badge, record};
-use crate::settings::{FONT_DEFAULT, FONT_MAX, FONT_MIN};
+use crate::settings::{AppearanceMode, FONT_DEFAULT, FONT_MAX, FONT_MIN};
 use crate::settings_widgets as w;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -184,14 +184,40 @@ impl Shell {
                     |s, _, _, cx| s.change_font(|st| st.terminal_font_size = FONT_DEFAULT, cx),
                 )));
         let reduce = self.settings.reduce_motion;
+        let mut appearance_modes = div().flex().gap(px(6.));
+        for (id, label, mode) in [
+            ("appearance-system", "System", AppearanceMode::System),
+            ("appearance-light", "Light", AppearanceMode::Light),
+            ("appearance-dark", "Dark", AppearanceMode::Dark),
+        ] {
+            let selected = self.settings.appearance == mode;
+            appearance_modes = appearance_modes.child(
+                w::button(&t, id, label)
+                    .when(selected, |el| {
+                        el.bg(t.ink(0.18)).font_weight(gpui::FontWeight::MEDIUM)
+                    })
+                    .on_click(cx.listener(move |s, _, _, cx| {
+                        s.update_settings(|st| st.appearance = mode, cx);
+                        s.apply_appearance(cx);
+                    })),
+            );
+        }
         w::page_column()
             .child(w::page_header(&t, "Appearance"))
             .child(w::section(
                 &t,
                 "Theme",
-                w::card(&t).child(w::row(
+                w::card(&t)
+                .child(w::row(
                     &t,
                     true,
+                    "Appearance",
+                    Some("System follows macOS; the default terminal colours follow it too".into()),
+                    appearance_modes,
+                ))
+                .child(w::row(
+                    &t,
+                    false,
                     "Terminal theme",
                     Some(
                         "For every host without its own; set one per host from the sidebar".into(),
@@ -202,7 +228,7 @@ impl Shell {
                         self.settings
                             .terminal_theme
                             .clone()
-                            .unwrap_or_else(|| crate::themes::DEFAULT_NAME.to_owned()),
+                            .unwrap_or_else(|| crate::themes::default_name(t.light).to_owned()),
                     )
                     .on_click(cx.listener(|s, _, window, cx| {
                         s.open_theme_picker(super::ThemeTarget::Default, window, cx)

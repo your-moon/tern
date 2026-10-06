@@ -8,7 +8,7 @@ use gpui::{
     AnyElement, AppContext, Context, Entity, FocusHandle, Focusable, FontWeight,
     InteractiveElement, IntoElement, KeyDownEvent, ParentElement, ScrollHandle, SharedString,
     StatefulInteractiveElement, Styled, Subscription, Window, actions, anchored, deferred, div,
-    hsla, point, px,
+    point, px,
 };
 
 use super::connections_ui::{button, note, row};
@@ -307,7 +307,7 @@ impl Shell {
                     .child(picker::hint("Esc", "Close", t))
                     .child(div().text_size(px(10.)).text_color(t.faint).child(HINT)),
             );
-        Some(overlay(card.into_any_element(), viewport))
+        Some(overlay(card.into_any_element(), viewport, t))
     }
 
     // ---- Settings → Snippets --------------------------------------------------------------
@@ -584,18 +584,22 @@ impl Shell {
                         cx.listener(|shell, _, window, cx| shell.submit_snippet_form(window, cx)),
                     )),
             );
-        Some(overlay(card.into_any_element(), viewport))
+        Some(overlay(card.into_any_element(), viewport, t))
     }
 }
 
-fn overlay(card: AnyElement, viewport: gpui::Size<gpui::Pixels>) -> AnyElement {
+fn overlay(
+    card: AnyElement,
+    viewport: gpui::Size<gpui::Pixels>,
+    t: &crate::theme::Theme,
+) -> AnyElement {
     deferred(
         anchored().position(point(px(0.), px(0.))).child(
             div()
                 .occlude()
                 .w(viewport.width)
                 .h(viewport.height)
-                .bg(hsla(0., 0., 0., 0.35))
+                .bg(t.scrim(0.35))
                 .flex()
                 .items_center()
                 .justify_center()

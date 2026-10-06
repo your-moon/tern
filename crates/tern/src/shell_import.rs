@@ -6,8 +6,7 @@
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, Context, FocusHandle, InteractiveElement, IntoElement, KeyDownEvent, ParentElement,
-    SharedString, StatefulInteractiveElement, Styled, Window, anchored, deferred, div, hsla, point,
-    px,
+    SharedString, StatefulInteractiveElement, Styled, Window, anchored, deferred, div, point, px,
 };
 use tern_ssh::HostEntry;
 
@@ -266,7 +265,7 @@ impl Shell {
                         .occlude()
                         .w(viewport.width)
                         .h(viewport.height)
-                        .bg(hsla(0., 0., 0., 0.35))
+                        .bg(t.scrim(0.35))
                         .flex()
                         .items_center()
                         .justify_center()

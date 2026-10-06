@@ -21,9 +21,33 @@ pub const WALLPAPER_OPACITY_MAX: f32 = 1.0;
 pub const WALLPAPER_OPACITY_DEFAULT: f32 = 0.3;
 const FILE_NAME: &str = "settings.json";
 
+/// Which palette the window wears: macOS's own, or one of tern's two.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AppearanceMode {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+impl AppearanceMode {
+    /// Whether the light palette applies, given whether the system is light.
+    pub fn is_light(self, system_light: bool) -> bool {
+        match self {
+            Self::System => system_light,
+            Self::Light => true,
+            Self::Dark => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
+    pub appearance: AppearanceMode,
+    /// The strip under the terminal: host, state, session time.
+    pub show_status_line: bool,
     pub sidebar_width: f32,
     pub sidebar_collapsed: bool,
     pub terminal_font_size: f32,
@@ -88,6 +112,8 @@ pub const SCROLLBACK_STEPS: [usize; 5] = [1_000, 5_000, 10_000, 50_000, 100_000]
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            appearance: AppearanceMode::System,
+            show_status_line: true,
             sidebar_width: SIDEBAR_DEFAULT,
             sidebar_collapsed: false,
             terminal_font_size: FONT_DEFAULT,
@@ -282,6 +308,8 @@ mod tests {
     fn save_then_load_round_trips() {
         let dir = temp_dir("roundtrip");
         let saved = Settings {
+            appearance: AppearanceMode::Light,
+            show_status_line: false,
             sidebar_width: 312.0,
             sidebar_collapsed: true,
             terminal_font_size: 15.0,
@@ -332,6 +360,27 @@ mod tests {
         let loaded = Settings::load(&dir);
         assert!(loaded.sidebar_collapsed);
         assert_eq!(loaded.sidebar_width, SIDEBAR_DEFAULT);
+    }
+
+    #[test]
+    fn appearance_follows_the_system_only_when_set_to_system() {
+        for system_light in [true, false] {
+            assert_eq!(AppearanceMode::System.is_light(system_light), system_light);
+            assert!(AppearanceMode::Light.is_light(system_light));
+            assert!(!AppearanceMode::Dark.is_light(system_light));
+        }
+    }
+
+    #[test]
+    fn an_older_file_gets_system_appearance_and_the_status_line() {
+        let dir = temp_dir("appearance");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(FILE_NAME), r#"{"sidebarWidth":300}"#).unwrap();
+        let loaded = Settings::load(&dir);
+        assert_eq!(loaded.appearance, AppearanceMode::System);
+        assert!(loaded.show_status_line);
+        std::fs::write(dir.join(FILE_NAME), r#"{"appearance":"light"}"#).unwrap();
+        assert_eq!(Settings::load(&dir).appearance, AppearanceMode::Light);
     }
 
     /// `hiddenHosts` was the old "Remove from list" for `~/.ssh/config` hosts; files that still

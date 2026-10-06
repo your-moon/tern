@@ -52,7 +52,7 @@ pub fn bindings() -> Vec<KeyBinding> {
     ]
 }
 
-/// Field colours, from tern's theme.
+/// Field colours, from tern's theme. The shell also installs the current ones as a global.
 #[derive(Debug, Clone, Copy)]
 pub struct InputColors {
     pub text: Hsla,
@@ -60,6 +60,8 @@ pub struct InputColors {
     pub cursor: Hsla,
     pub selection: Hsla,
 }
+
+impl gpui::Global for InputColors {}
 
 pub struct TextInput {
     focus_handle: FocusHandle,
@@ -549,7 +551,12 @@ impl Element for TextElement {
         let selected_range = input.shown_offset(input.selected_range.start)
             ..input.shown_offset(input.selected_range.end);
         let cursor = input.shown_offset(input.cursor_offset());
-        let colors = input.colors;
+        // The window's current colours win over those the field was built with, so open
+        // fields follow an appearance change.
+        let colors = cx
+            .try_global::<InputColors>()
+            .copied()
+            .unwrap_or(input.colors);
         let style = window.text_style();
 
         let (display_text, text_color) = if content.is_empty() {

@@ -161,6 +161,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 snippets: snippets_ui::SnippetsUi::load(),
                 import: None,
                 wp: wallpaper_ui::State::default(),
+                system_light: false,
             };
             shell.refresh_hosts();
             shell
@@ -174,6 +175,14 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
             crate::motion::apply(shell.settings.reduce_motion, cx);
         })
         .detach();
+        shell.system_light = is_light(window.appearance());
+        shell.apply_appearance(cx);
+        shell.install_input_colors(cx);
+        cx.observe_window_appearance(window, |shell, window, cx| {
+            shell.system_light = is_light(window.appearance());
+            shell.apply_appearance(cx);
+        })
+        .detach();
         shell.check_for_updates(cx);
         shell.start_auto_sync(window, cx);
     })?;
@@ -182,6 +191,14 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
     window.update(cx, |shell, window, cx| window.focus(&shell.focus, cx))?;
     window.update(cx, |shell, window, cx| shell.restore_tabs(window, cx))?;
     Ok(window)
+}
+
+/// macOS's light appearances; the dark ones and anything new count as dark.
+fn is_light(appearance: gpui::WindowAppearance) -> bool {
+    matches!(
+        appearance,
+        gpui::WindowAppearance::Light | gpui::WindowAppearance::VibrantLight
+    )
 }
 
 pub struct Shell {
@@ -225,6 +242,8 @@ pub struct Shell {
     snippets: snippets_ui::SnippetsUi,
     import: Option<import_ui::ImportSheet>,
     wp: wallpaper_ui::State,
+    /// Whether macOS is in its light appearance; what `Appearance: System` follows.
+    system_light: bool,
 }
 
 /// Debug builds: keep scripted logins out of the real ~/.ssh/known_hosts.
@@ -370,6 +389,32 @@ impl Shell {
             .get(alias)
             .or(self.settings.terminal_theme.as_ref())
             .and_then(|name| crate::themes::find(name))
+    }
+
+    /// Switches the palette when the chosen appearance (or the system's, for System) differs
+    /// from the one showing, and restyles everything that holds a colour: open terminals, text
+    /// fields, the wallpaper render.
+    pub(crate) fn apply_appearance(&mut self, cx: &mut Context<Self>) {
+        let light = self.settings.appearance.is_light(self.system_light);
+        if light == self.theme.light {
+            return;
+        }
+        self.theme = Theme::zeron(light);
+        self.refresh_accent(cx);
+        self.install_input_colors(cx);
+        self.restyle_tabs(cx);
+        cx.notify();
+    }
+
+    /// Text fields read their colours from this global, so open ones follow the theme.
+    pub(crate) fn install_input_colors(&self, cx: &mut Context<Self>) {
+        let t = self.theme;
+        cx.set_global(crate::text_input::InputColors {
+            text: t.text,
+            placeholder: t.faint,
+            cursor: t.accent,
+            selection: t.accent.opacity(0.35),
+        });
     }
 
     fn terminal_theme(&self, alias: &str) -> tern_term::TerminalTheme {

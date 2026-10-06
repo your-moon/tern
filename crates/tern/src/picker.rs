@@ -7,7 +7,7 @@ use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, App, Context, FocusHandle, FontWeight, InteractiveElement, IntoElement,
     KeyDownEvent, ParentElement, Pixels, ScrollHandle, SharedString, Size,
-    StatefulInteractiveElement, Styled, Window, actions, anchored, deferred, div, hsla, point, px,
+    StatefulInteractiveElement, Styled, Window, actions, anchored, deferred, div, point, px,
 };
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
@@ -349,7 +349,7 @@ pub fn render(
                 .occlude()
                 .w(viewport.width)
                 .h(viewport.height)
-                .bg(hsla(0., 0., 0., 0.35))
+                .bg(t.scrim(0.35))
                 .flex()
                 .items_center()
                 .justify_center()

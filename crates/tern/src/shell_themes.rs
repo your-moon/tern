@@ -8,13 +8,13 @@ use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, Context, FocusHandle, InteractiveElement, IntoElement, KeyDownEvent, ParentElement,
     ScrollHandle, SharedString, StatefulInteractiveElement, Styled, Window, anchored, deferred,
-    div, hsla, point, px,
+    div, point, px,
 };
 
 use super::Shell;
 use crate::picker::{Key, classify, rank_labels};
 use crate::theme::hex;
-use crate::themes::{self, DEFAULT_NAME, Scheme};
+use crate::themes::{self, Scheme};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ThemeTarget {
@@ -31,10 +31,10 @@ enum Choice {
 }
 
 impl Choice {
-    fn label(self) -> String {
+    fn label(self, light: bool) -> String {
         match self {
             Choice::FollowDefault => "Use the default theme".into(),
-            Choice::Zeron => DEFAULT_NAME.into(),
+            Choice::Zeron => themes::default_name(light).into(),
             Choice::Scheme(s) => s.name.clone(),
         }
     }
@@ -161,7 +161,7 @@ impl Shell {
             return Vec::new();
         };
         let all = choices(&p.target);
-        let labels: Vec<String> = all.iter().map(|c| c.label()).collect();
+        let labels: Vec<String> = all.iter().map(|c| c.label(self.theme.light)).collect();
         rank_labels(&p.query, &labels)
             .into_iter()
             .map(|ix| all[ix])
@@ -252,7 +252,7 @@ impl Shell {
                         .min_w_0()
                         .truncate()
                         .text_sm()
-                        .child(SharedString::from(choice.label())),
+                        .child(SharedString::from(choice.label(t.light))),
                 )
         });
         let query: SharedString = if p.query.is_empty() {
@@ -325,7 +325,7 @@ impl Shell {
                         .occlude()
                         .w(viewport.width)
                         .h(viewport.height)
-                        .bg(hsla(0., 0., 0., 0.35))
+                        .bg(t.scrim(0.35))
                         .flex()
                         .items_center()
                         .justify_center()
@@ -351,11 +351,10 @@ fn swatch(choice: Choice, t: &crate::theme::Theme) -> impl IntoElement + use<> {
                 .border_1()
                 .border_color(t.border);
         }
-        Choice::Zeron => (
-            t.terminal_background,
-            t.text,
-            [0xf87171, 0x4ade80, 0xfacc15, 0x60a5fa, 0xc084fc, 0x22d3ee].map(hex),
-        ),
+        Choice::Zeron => (t.terminal_background, t.text, {
+            let ansi = t.terminal(13.0, None).ansi;
+            [ansi[1], ansi[2], ansi[3], ansi[4], ansi[5], ansi[6]]
+        }),
         Choice::Scheme(s) => (
             hex(s.background),
             hex(s.foreground),

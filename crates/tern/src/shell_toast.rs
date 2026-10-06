@@ -233,7 +233,7 @@ impl Shell {
             }
         };
         let toast = toast.clone();
-        let colors = Colors::dark();
+        let colors = Colors::for_theme(self.theme.light);
         let icon = match toast.kind {
             Kind::Default => None,
             Kind::Positive => Some(("✓", colors.positive)),
@@ -337,7 +337,8 @@ impl Shell {
     }
 }
 
-/// seed-design's dark theme: an inverted neutral-solid surface so it reads over dark content.
+/// seed-design's snackbar colours: an inverted neutral-solid surface, so it reads over the
+/// content behind it in either theme.
 struct Colors {
     background: Hsla,
     text: Hsla,
@@ -347,6 +348,25 @@ struct Colors {
 }
 
 impl Colors {
+    fn for_theme(light: bool) -> Self {
+        if light { Self::light() } else { Self::dark() }
+    }
+
+    /// seed-design `theme-light` (packages/rootage/__generated__/color.json): bg-neutral-solid =
+    /// gray-900, fg-on-neutral-solid = gray-00, fg-positive = green-700, fg-critical = red-700.
+    /// The action is tern's dark-palette accent, which has the contrast the light accent lacks
+    /// on this dark surface.
+    fn light() -> Self {
+        Self {
+            background: hex(0x2a3038),
+            text: hex(0xffffff),
+            action: hex(0x8b7cf6),
+            positive: hex(0x079171),
+            critical: hex(0xfa342c),
+        }
+    }
+
+    /// seed-design `theme-dark`.
     fn dark() -> Self {
         Self {
             // bg-neutral-solid = palette gray-1000, fg-on-neutral-solid = gray-100 (dark).

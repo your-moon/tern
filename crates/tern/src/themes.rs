@@ -4,7 +4,17 @@
 use std::sync::OnceLock;
 
 /// The built-in scheme: zeron's dark palette, used when no other is chosen.
-pub const DEFAULT_NAME: &str = "Zeron Dark";
+const DEFAULT_NAME: &str = "Zeron Dark";
+const DEFAULT_NAME_LIGHT: &str = "Zeron Light";
+
+/// The name shown for the built-in palette that follows the appearance.
+pub fn default_name(light: bool) -> &'static str {
+    if light {
+        DEFAULT_NAME_LIGHT
+    } else {
+        DEFAULT_NAME
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Scheme {
