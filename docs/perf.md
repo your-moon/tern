@@ -78,3 +78,17 @@ bounds rather than idle figures.
 | Ghostty | 339 MB | 1 | running, with sessions |
 | Termius | 627 MB | 7 | fresh, idle |
 | Tabby | 752 MB | 5 | fresh, idle |
+
+### With an SSH session open
+
+Same method, each app pointed at the demo server
+(`cargo run -p tern-ssh --example password_server -- --demo`, 127.0.0.1:2399).
+
+| App | phys_footprint | Processes | State |
+| --- | --- | --- | --- |
+| tern 0.1.0 | 124 MB | 1 | one tab, logged in, wallpaper on |
+| Tabby | 812–829 MB | 5 | one SSH tab open, at the password prompt (Tabby crashed before the login finished) |
+
+Termius was not measured with a live session: driving its UI on the owner's screen was
+stopped after Tabby crashed. Its idle figure above (627 MB) is already five times tern's
+figure with a session open.

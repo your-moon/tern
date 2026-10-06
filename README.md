@@ -67,13 +67,15 @@ Measured on the same Mac on 2026-10-06, using macOS `footprint` (the number Acti
 | App | Memory | What was measured |
 | --- | --- | --- |
 | **tern** | **83 MB** | fresh launch, idle, wallpaper on, 1 process |
+| **tern** | **124 MB** | one SSH session logged in, wallpaper on |
+| Tabby | 812 MB | one SSH tab open (at the password prompt), 5 processes |
 | iTerm2 | 200 MB | running with sessions |
 | Ghostty | 339 MB | running with sessions |
 | Termius | 627 MB | fresh launch, idle, 7 processes (Electron) |
 | Tabby | 752 MB | fresh launch, idle, 5 processes (Electron) |
 | Terminal.app | 30 MB | fresh launch: no SSH features, for scale |
 
-Against the SSH clients it competes with, tern uses roughly a seventh to a ninth of the memory. Details and method are in [docs/perf.md](docs/perf.md).
+Against the SSH clients it competes with, tern uses roughly a seventh to a ninth of the memory, idle or with a session open. Details and method are in [docs/perf.md](docs/perf.md).
 
 ## Keyboard
 
