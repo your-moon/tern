@@ -44,6 +44,15 @@ pub fn render(
                                 .size(px(16.))
                                 .text_color(t.muted),
                         ),
+                )
+                .child(
+                    control("new-local", t)
+                        .on_click(cx.listener(|s, _, w, cx| s.open_local_tab(w, cx)))
+                        .child(
+                            crate::icons::icon(crate::icons::TERMINAL)
+                                .size(px(16.))
+                                .text_color(t.muted),
+                        ),
                 ),
         )
         .child(tabs)

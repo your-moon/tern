@@ -107,6 +107,7 @@ impl Shell {
         };
         let alias = tab.alias.clone();
         let closed = tab.session.read(cx).status == Status::Closed;
+        let local = tab.session.read(cx).is_local();
         let mut items = Vec::new();
         if closed {
             items.push(action(icons::RESTART, "Reconnect", move |s, w, cx| {
@@ -118,14 +119,20 @@ impl Shell {
             }));
         }
         let again = alias.clone();
-        items.push(action(
-            icons::PLUS,
-            "New tab to this host",
-            move |s, w, cx| match s.hosts.iter().find(|h| h.alias == again).cloned() {
-                Some(host) => s.open_new_tab(&host, w, cx),
-                None => s.connect_target(&again, w, cx),
-            },
-        ));
+        if local {
+            items.push(action(icons::PLUS, "New local terminal", |s, w, cx| {
+                s.open_local_tab(w, cx)
+            }));
+        } else {
+            items.push(action(
+                icons::PLUS,
+                "New tab to this host",
+                move |s, w, cx| match s.hosts.iter().find(|h| h.alias == again).cloned() {
+                    Some(host) => s.open_new_tab(&host, w, cx),
+                    None => s.connect_target(&again, w, cx),
+                },
+            ));
+        }
         items.push(action(icons::PEN, "Rename…", move |s, w, cx| {
             s.start_rename(ix, w, cx)
         }));
@@ -151,7 +158,7 @@ impl Shell {
     /// A second session to the same host, even when one is already open.
     fn open_new_tab(&mut self, host: &HostEntry, window: &mut Window, cx: &mut Context<Self>) {
         match ConnectSpec::from_host_entry(host) {
-            Ok(spec) => self.open_tab(spec, host.alias.clone(), window, cx),
+            Ok(spec) => self.open_tab(super::Launch::Ssh(spec), host.alias.clone(), window, cx),
             Err(e) => self.notify_toast(super::ToastKind::Critical, e.to_string(), cx),
         }
     }

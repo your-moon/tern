@@ -28,6 +28,14 @@ pub fn init(cx: &mut App) {
             disabled: false,
         },
         Menu {
+            name: "Shell".into(),
+            items: vec![MenuItem::action(
+                "New Local Terminal",
+                crate::shell::NewLocalTerminal,
+            )],
+            disabled: false,
+        },
+        Menu {
             name: "Window".into(),
             items: vec![
                 MenuItem::action("Minimize", Minimize),

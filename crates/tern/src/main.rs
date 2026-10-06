@@ -7,6 +7,7 @@ mod fonts;
 mod icons;
 mod keeper;
 mod keymap;
+mod local_pty;
 mod login;
 mod menus;
 mod motion;

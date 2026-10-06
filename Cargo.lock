@@ -7183,12 +7183,14 @@ name = "tern"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-channel",
  "base64 0.22.1",
  "gpui-pre",
  "gpui-pre-platform",
  "image",
  "nucleo-matcher",
  "objc2-app-kit 0.3.2",
+ "portable-pty",
  "serde",
  "serde_json",
  "tempfile",

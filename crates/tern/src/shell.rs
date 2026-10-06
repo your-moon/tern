@@ -14,7 +14,7 @@ use tern_ssh::{ConnectSpec, HostEntry};
 use crate::connections::{self, Connection};
 use crate::pane::{self, DragGhost, SidebarResize, WidthTween};
 use crate::picker::{self, Picker, ToggleHostPicker};
-use crate::session::{Session, Status};
+use crate::session::{Launch, Session, Status};
 use crate::settings::{self, SIDEBAR_DEFAULT, Settings};
 use crate::tabs::{self, ActivateTab, CloseTab, NextTab, PrevTab, TabInfo};
 use crate::theme::{PANEL_RADIUS, SPACE_SM, Theme, UI_FONT};
@@ -28,6 +28,7 @@ actions!(
         DecreaseFontSize,
         ResetFontSize,
         NewConnection,
+        NewLocalTerminal,
         OpenSettings
     ]
 );
@@ -201,6 +202,9 @@ pub struct Shell {
     wp: wallpaper_ui::State,
 }
 
+/// What a local shell tab is called until the user renames it.
+const LOCAL_ALIAS: &str = "Terminal";
+
 struct Tab {
     alias: String,
     /// The user's name for the tab. It belongs to the tab, not the session, so a reconnect
@@ -216,7 +220,11 @@ impl Shell {
     /// a new tab.
     pub fn connect_host(&mut self, host: HostEntry, window: &mut Window, cx: &mut Context<Self>) {
         self.record_recent(&host.alias);
-        if let Some(ix) = self.tabs.iter().position(|tab| tab.alias == host.alias) {
+        if let Some(ix) = self
+            .tabs
+            .iter()
+            .position(|tab| tab.alias == host.alias && !tab.session.read(cx).is_local())
+        {
             let session = self.tabs[ix].session.clone();
             session.update(cx, |s, cx| {
                 if s.status == Status::Closed {
@@ -226,7 +234,7 @@ impl Shell {
             return self.activate_tab(ix, window, cx);
         }
         match ConnectSpec::from_host_entry(&host) {
-            Ok(spec) => self.open_tab(spec, host.alias, window, cx),
+            Ok(spec) => self.open_tab(Launch::Ssh(spec), host.alias, window, cx),
             Err(e) => self.fail(e.to_string(), cx),
         }
     }
@@ -234,28 +242,36 @@ impl Shell {
     /// `tern <target>`: a `~/.ssh/config` alias or `user@host:port`.
     pub fn connect_target(&mut self, target: &str, window: &mut Window, cx: &mut Context<Self>) {
         match ConnectSpec::parse(target) {
-            Ok(spec) => self.open_tab(spec, target.to_string(), window, cx),
+            Ok(spec) => self.open_tab(Launch::Ssh(spec), target.to_string(), window, cx),
             Err(e) => self.fail(e.to_string(), cx),
         }
     }
 
+    /// A shell on this machine, in a tab of its own.
+    pub fn open_local_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_tab(Launch::Local, LOCAL_ALIAS.to_owned(), window, cx);
+    }
+
     fn open_tab(
         &mut self,
-        spec: ConnectSpec,
+        launch: Launch,
         alias: String,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         // Debug builds: keep scripted logins out of the real ~/.ssh/known_hosts.
         #[cfg(debug_assertions)]
-        let spec = ConnectSpec {
-            known_hosts: std::env::var_os("TERN_KNOWN_HOSTS")
-                .map(Into::into)
-                .or(spec.known_hosts),
-            ..spec
+        let launch = match launch {
+            Launch::Ssh(spec) => Launch::Ssh(ConnectSpec {
+                known_hosts: std::env::var_os("TERN_KNOWN_HOSTS")
+                    .map(Into::into)
+                    .or(spec.known_hosts),
+                ..spec
+            }),
+            local => local,
         };
         let theme = self.terminal_theme(&alias);
-        let session = Session::open(spec, theme, window, cx);
+        let session = Session::open(launch, theme, window, cx);
         let meta = self.settings.option_as_meta;
         let view = session.read(cx).view.clone();
         let options = self.terminal_options();
@@ -528,6 +544,7 @@ impl Shell {
             .map(|(ix, tab)| TabInfo {
                 alias: tab.alias.clone(),
                 title: tab.title.clone(),
+                local: tab.session.read(cx).is_local(),
                 status: tab.session.read(cx).status.clone(),
                 rename: self
                     .renaming
@@ -618,6 +635,10 @@ impl Shell {
                         crate::keymap::ShortcutId::NewConnection,
                         "New connection",
                     ))
+                    .child(hint(
+                        crate::keymap::ShortcutId::NewLocalTerminal,
+                        "New local terminal",
+                    ))
                     .child(hint(crate::keymap::ShortcutId::Settings, "Settings")),
             )
             .into_any_element()
@@ -703,6 +724,7 @@ impl Render for Shell {
             .on_action(cx.listener(|s, _: &ToggleSnippets, w, cx| s.toggle_snippet_picker(w, cx)))
             .on_action(cx.listener(|s, _: &ToggleSidebar, _, cx| s.toggle_sidebar(cx)))
             .on_action(cx.listener(|s, _: &NewConnection, w, cx| s.open_form(None, None, w, cx)))
+            .on_action(cx.listener(|s, _: &NewLocalTerminal, w, cx| s.open_local_tab(w, cx)))
             .on_action(cx.listener(|s, _: &OpenSettings, w, cx| s.toggle_settings(w, cx)))
             .on_key_down(cx.listener(|s, e: &gpui::KeyDownEvent, w, cx| {
                 if s.on_rename_key(e, w, cx) {

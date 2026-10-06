@@ -27,7 +27,7 @@ pub(super) enum Flow {
 
 impl Session {
     pub(super) fn on_prompt(&mut self, prompt: Prompt, cx: &mut Context<Self>) {
-        let key = keeper::key_for(&prompt, &self.spec.host, self.spec.port);
+        let key = keeper::key_for(&prompt, self.host(), self.port());
         // Each secret is tried from the vault once per connection, so a stale one falls
         // through to asking instead of failing in a loop.
         if let Some(key) = key.filter(|k| !self.tried.contains(k)) {
@@ -61,7 +61,7 @@ impl Session {
     /// The server's question, asked in the terminal; a typed password is remembered so it can
     /// be offered for saving once the login succeeds.
     fn ask_user(&mut self, prompt: Prompt, cx: &mut Context<Self>) {
-        self.asking = keeper::key_for(&prompt, &self.spec.host, self.spec.port);
+        self.asking = keeper::key_for(&prompt, self.host(), self.port());
         // Asked again for the same secret means the last answer was refused; say so as
         // OpenSSH does, or a retry looks like the same prompt shown twice.
         if let Some(key) = &self.asking {

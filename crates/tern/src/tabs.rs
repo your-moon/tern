@@ -45,6 +45,8 @@ pub struct TabInfo {
     pub alias: String,
     /// The name the user gave the tab; it shows instead of the alias.
     pub title: Option<String>,
+    /// A shell on this machine rather than a connection.
+    pub local: bool,
     pub status: Status,
     /// The field that is editing this tab's title right now.
     pub rename: Option<Entity<TextInput>>,
@@ -168,7 +170,11 @@ fn tab_pill(
             MouseButton::Middle,
             cx.listener(move |shell, _, window, cx| shell.close_tab_at(ix, window, cx)),
         )
-        .child(status_dot(("tab-dot", ix), &tab.status, t))
+        .child(if tab.local {
+            local_glyph(&tab.status, t)
+        } else {
+            status_dot(("tab-dot", ix), &tab.status, t)
+        })
         .child(match renaming {
             Some(input) => div()
                 .flex_1()
@@ -207,6 +213,20 @@ fn tab_pill(
                 }))
                 .child("×"),
         )
+}
+
+/// The mark of a local shell tab: a terminal glyph where a connection has its status dot,
+/// red once the shell has exited.
+fn local_glyph(status: &Status, t: &Theme) -> AnyElement {
+    let color = if *status == Status::Closed {
+        t.danger
+    } else {
+        t.muted
+    };
+    crate::icons::icon(crate::icons::TERMINAL)
+        .size(px(14.))
+        .text_color(color)
+        .into_any_element()
 }
 
 /// zeron's `zeron-pulse` loader: 2.4 s, opacity 0.08 → 1.

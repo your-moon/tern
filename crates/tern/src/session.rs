@@ -5,6 +5,7 @@ use gpui::{App, AppContext, Context, Entity, Subscription, Task, Window};
 use tern_ssh::{ConnectSpec, InputError, SecretString, SessionEvent, SessionHandle, TermSize};
 use tern_term::{Terminal, TerminalEvent, TerminalView};
 
+use crate::local_pty::{self, LocalPty};
 use crate::login::Login;
 use crate::runtime::SshRuntime;
 use tern_term::TerminalTheme;
@@ -14,6 +15,23 @@ pub enum Status {
     Connecting,
     Connected,
     Closed,
+}
+
+/// What a new session runs.
+#[derive(Debug, Clone)]
+pub enum Launch {
+    Ssh(ConnectSpec),
+    /// The user's login shell on this machine.
+    Local,
+}
+
+/// How the session reaches its shell, and what restarting it takes.
+enum Link {
+    Ssh {
+        spec: ConnectSpec,
+        handle: Option<SessionHandle>,
+    },
+    Local(Option<LocalPty>),
 }
 
 pub struct Session {
@@ -33,9 +51,8 @@ pub struct Session {
     ends_line: bool,
     pub view: Entity<TerminalView>,
     terminal: Entity<Terminal>,
-    spec: ConnectSpec,
+    link: Link,
     size: TermSize,
-    handle: SessionHandle,
     login: Option<Login>,
     _session_events: Task<()>,
     _terminal_events: Subscription,
@@ -43,7 +60,7 @@ pub struct Session {
 
 impl Session {
     pub fn open(
-        spec: ConnectSpec,
+        launch: Launch,
         theme: TerminalTheme,
         window: &mut Window,
         cx: &mut App,
@@ -60,7 +77,11 @@ impl Session {
             let subscription = cx.subscribe(&terminal, |this: &mut Self, _, event, cx| {
                 this.on_terminal_event(event, cx);
             });
-            let (handle, task) = Self::dial(&spec, size, cx);
+            let mut link = match launch {
+                Launch::Ssh(spec) => Link::Ssh { spec, handle: None },
+                Launch::Local => Link::Local(None),
+            };
+            let task = Self::start(&mut link, size, cx);
             Self {
                 status: Status::Connecting,
                 flow: None,
@@ -72,9 +93,8 @@ impl Session {
                 ends_line: true,
                 view,
                 terminal,
-                spec,
+                link,
                 size,
-                handle,
                 login: None,
                 _session_events: task,
                 _terminal_events: subscription,
@@ -82,16 +102,36 @@ impl Session {
         })
     }
 
-    /// Starts a connection and the task that feeds its events back. Dropping the task stops
-    /// the feed, so a reconnect never hears from the connection it replaced.
-    fn dial(
-        spec: &ConnectSpec,
-        size: TermSize,
-        cx: &mut Context<Self>,
-    ) -> (SessionHandle, Task<()>) {
-        tracing::info!(host = %spec.host, port = spec.port, "session_open");
-        let (handle, events) = tern_ssh::connect(spec.clone(), size, &SshRuntime::handle(cx));
-        let task = cx.spawn(async move |this, cx| {
+    /// Starts the connection or the shell and the task that feeds its events back. Dropping
+    /// the task stops the feed, so a restart never hears from what it replaced.
+    fn start(link: &mut Link, size: TermSize, cx: &mut Context<Self>) -> Task<()> {
+        let events = match link {
+            Link::Ssh { spec, handle } => {
+                tracing::info!(host = %spec.host, port = spec.port, "session_open");
+                let (h, events) = tern_ssh::connect(spec.clone(), size, &SshRuntime::handle(cx));
+                *handle = Some(h);
+                events
+            }
+            Link::Local(pty) => {
+                tracing::info!("local_session_open");
+                match LocalPty::spawn(local_pty::login_shell(), size) {
+                    Ok((p, events)) => {
+                        *pty = Some(p);
+                        events
+                    }
+                    Err(e) => {
+                        *pty = None;
+                        let (tx, events) = async_channel::bounded(1);
+                        let _ = tx.try_send(SessionEvent::Closed {
+                            exit_status: None,
+                            error: Some(format!("could not start a shell: {e}")),
+                        });
+                        events
+                    }
+                }
+            }
+        };
+        cx.spawn(async move |this, cx| {
             while let Ok(event) = events.recv().await {
                 if this
                     .update(cx, |s, cx| s.on_session_event(event, cx))
@@ -100,15 +140,38 @@ impl Session {
                     break;
                 }
             }
-        });
-        (handle, task)
+        })
+    }
+
+    /// The server this session dials; a local shell has none, and asks no one for a secret.
+    pub(super) fn host(&self) -> &str {
+        match &self.link {
+            Link::Ssh { spec, .. } => &spec.host,
+            Link::Local(_) => "",
+        }
+    }
+
+    pub(super) fn port(&self) -> u16 {
+        match &self.link {
+            Link::Ssh { spec, .. } => spec.port,
+            Link::Local(_) => 0,
+        }
+    }
+
+    fn ssh_spec(&self) -> Option<&ConnectSpec> {
+        match &self.link {
+            Link::Ssh { spec, .. } => Some(spec),
+            Link::Local(_) => None,
+        }
+    }
+
+    pub fn is_local(&self) -> bool {
+        matches!(self.link, Link::Local(_))
     }
 
     pub fn reconnect(&mut self, cx: &mut Context<Self>) {
         self.show(b"\r\n", cx);
-        let (handle, task) = Self::dial(&self.spec, self.size, cx);
-        self.handle = handle;
-        self._session_events = task;
+        self._session_events = Self::start(&mut self.link, self.size, cx);
         self.status = Status::Connecting;
         cx.notify();
     }
@@ -139,18 +202,23 @@ impl Session {
                     (None, Some(code)) => format!("exit status {code}"),
                     (None, None) => "closed".into(),
                 };
-                let next = match reason.starts_with("host key changed") {
+                let (what, again) = if self.is_local() {
+                    ("shell exited", "restart")
+                } else {
+                    ("connection closed", "reconnect")
+                };
+                let next = match self.ssh_spec() {
                     // Reconnecting only fails again; say how to drop the old key, but leave that
                     // step to the user, because a changed key is also what an attack looks like.
-                    true => format!(
+                    Some(spec) if reason.starts_with("host key changed") => format!(
                         "If the server was reinstalled, remove its old key and reconnect:\r\n  {}",
-                        forget_key_command(&self.spec)
+                        forget_key_command(spec)
                     ),
-                    false => "Press Enter to reconnect".into(),
+                    _ => format!("Press Enter to {again}"),
                 };
                 self.show(
                     format!(
-                        "\r\n\x1b[2m[connection closed: {reason}]\x1b[0m\r\n\
+                        "\r\n\x1b[2m[{what}: {reason}]\x1b[0m\r\n\
                          \x1b[2m{next}\x1b[0m\r\n"
                     )
                     .as_bytes(),
@@ -195,8 +263,17 @@ impl Session {
                     pixel_height: *pixel_height,
                 };
                 self.size = size;
-                if let Err(e) = self.handle.resize(size) {
-                    tracing::debug!(error = %e, "session_resize_skipped");
+                match &self.link {
+                    Link::Ssh {
+                        handle: Some(handle),
+                        ..
+                    } => {
+                        if let Err(e) = handle.resize(size) {
+                            tracing::debug!(error = %e, "session_resize_skipped");
+                        }
+                    }
+                    Link::Local(Some(pty)) => pty.resize(size),
+                    _ => {}
                 }
             }
             TerminalEvent::TitleChanged(_) | TerminalEvent::Bell => {}
@@ -219,9 +296,18 @@ impl Session {
     }
 
     fn send(&self, bytes: Vec<u8>) {
-        match self.handle.write(bytes) {
-            Ok(()) | Err(InputError::Closed) => {}
-            Err(InputError::Busy) => tracing::warn!("session_input_dropped_busy"),
+        match &self.link {
+            Link::Ssh {
+                handle: Some(handle),
+                ..
+            } => match handle.write(bytes) {
+                Ok(()) | Err(InputError::Closed) => {}
+                Err(InputError::Busy) => tracing::warn!("session_input_dropped_busy"),
+            },
+            Link::Local(Some(pty)) => {
+                pty.write(bytes);
+            }
+            _ => {}
         }
     }
 

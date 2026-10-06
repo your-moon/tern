@@ -20,6 +20,7 @@ pub enum ShortcutId {
     SearchHosts,
     Snippets,
     NewConnection,
+    NewLocalTerminal,
     Settings,
     ToggleSidebar,
     CloseTab,
@@ -31,11 +32,12 @@ pub enum ShortcutId {
 }
 
 impl ShortcutId {
-    pub const ALL: [ShortcutId; 12] = [
+    pub const ALL: [ShortcutId; 13] = [
         ShortcutId::HostPicker,
         ShortcutId::SearchHosts,
         ShortcutId::Snippets,
         ShortcutId::NewConnection,
+        ShortcutId::NewLocalTerminal,
         ShortcutId::Settings,
         ShortcutId::ToggleSidebar,
         ShortcutId::CloseTab,
@@ -52,6 +54,7 @@ impl ShortcutId {
             ShortcutId::SearchHosts => "Search hosts",
             ShortcutId::Snippets => "Snippets",
             ShortcutId::NewConnection => "New connection",
+            ShortcutId::NewLocalTerminal => "New local terminal",
             ShortcutId::Settings => "Open settings",
             ShortcutId::ToggleSidebar => "Toggle sidebar",
             ShortcutId::CloseTab => "Close tab",
@@ -69,6 +72,7 @@ impl ShortcutId {
             ShortcutId::SearchHosts => "cmd-shift-f",
             ShortcutId::Snippets => "cmd-shift-s",
             ShortcutId::NewConnection => "cmd-n",
+            ShortcutId::NewLocalTerminal => "cmd-t",
             ShortcutId::Settings => "cmd-,",
             ShortcutId::ToggleSidebar => "cmd-b",
             ShortcutId::CloseTab => "cmd-w",
@@ -82,8 +86,8 @@ impl ShortcutId {
 
     fn action(self) -> Box<dyn Action> {
         use crate::shell::{
-            DecreaseFontSize, IncreaseFontSize, NewConnection, OpenSettings, ResetFontSize,
-            ToggleSidebar,
+            DecreaseFontSize, IncreaseFontSize, NewConnection, NewLocalTerminal, OpenSettings,
+            ResetFontSize, ToggleSidebar,
         };
         use crate::tabs::{CloseTab, NextTab, PrevTab};
         match self {
@@ -91,6 +95,7 @@ impl ShortcutId {
             ShortcutId::SearchHosts => Box::new(crate::shell::FocusHostSearch),
             ShortcutId::Snippets => Box::new(crate::shell::ToggleSnippets),
             ShortcutId::NewConnection => Box::new(NewConnection),
+            ShortcutId::NewLocalTerminal => Box::new(NewLocalTerminal),
             ShortcutId::Settings => Box::new(OpenSettings),
             ShortcutId::ToggleSidebar => Box::new(ToggleSidebar),
             ShortcutId::CloseTab => Box::new(CloseTab),
