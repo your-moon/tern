@@ -61,3 +61,20 @@ and connection; that transient is not explained yet (likely shader and font atla
 
 The start-up peak (F7) is the wallpaper: the picture is decoded at full size, then scaled,
 blurred and cached (`wallpaper.rs` `prepare`), and the decode buffers are freed after.
+
+## 2026-10-06 — against other terminal and SSH apps
+
+Method: macOS `footprint -p <pid>`, `phys_footprint` summed over every process whose
+executable lives in the app's bundle (Electron apps run several). Apps not already running
+were launched hidden (`open -g -j`), left 20 s, measured and quit. iTerm2 and Ghostty were
+already running with the owner's sessions and were measured as they were, so they are upper
+bounds rather than idle figures.
+
+| App | phys_footprint | Processes | State |
+| --- | --- | --- | --- |
+| tern 0.1.0 | 83 MB | 1 | fresh, idle, wallpaper on (107 MB with the owner's tabs open) |
+| Terminal.app | 30 MB | 1 | fresh |
+| iTerm2 | 200 MB | 1 | running, with sessions |
+| Ghostty | 339 MB | 1 | running, with sessions |
+| Termius | 627 MB | 7 | fresh, idle |
+| Tabby | 752 MB | 5 | fresh, idle |

@@ -60,6 +60,21 @@
 - zeron-style chrome, tinted to your wallpaper. Panels are frosted glass over one backdrop, and the picture shows sharp in the empty view.
 - Light, dark or system appearance. A "sharper text" mode for 1× monitors. Reduce motion follows macOS.
 
+## Memory
+
+Measured on the same Mac on 2026-10-06, using macOS `footprint` (the number Activity Monitor shows) summed over every process of each app:
+
+| App | Memory | What was measured |
+| --- | --- | --- |
+| **tern** | **83 MB** | fresh launch, idle, wallpaper on, 1 process |
+| iTerm2 | 200 MB | running with sessions |
+| Ghostty | 339 MB | running with sessions |
+| Termius | 627 MB | fresh launch, idle, 7 processes (Electron) |
+| Tabby | 752 MB | fresh launch, idle, 5 processes (Electron) |
+| Terminal.app | 30 MB | fresh launch: no SSH features, for scale |
+
+Against the SSH clients it competes with, tern uses roughly a seventh to a ninth of the memory. Details and method are in [docs/perf.md](docs/perf.md).
+
 ## Keyboard
 
 | Action | Keys | Action | Keys |
