@@ -31,15 +31,34 @@ pub struct GitRepo {
 // Runs on a background thread, never on an executor, so blocking on git is fine here.
 #[allow(clippy::disallowed_methods)]
 fn run(dir: Option<&Path>, args: &[&str]) -> Result<Output, GithubError> {
+    command(dir, args)
+        .output()
+        .map_err(|e| GithubError::Http(format!("git: {e}")))
+}
+
+/// Variables git exports to hooks (and that a parent shell may carry) which point git at a
+/// different repository; they beat `-C`, so a sync started from inside a hook would read and
+/// rewrite that repository instead of the sync clone.
+const REPO_VARS: [&str; 5] = [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_COMMON_DIR",
+    "GIT_OBJECT_DIRECTORY",
+];
+
+fn command(dir: Option<&Path>, args: &[&str]) -> std::process::Command {
     let mut cmd = std::process::Command::new("git");
     if let Some(dir) = dir {
         cmd.arg("-C").arg(dir);
     }
+    for var in REPO_VARS {
+        cmd.env_remove(var);
+    }
     // Never stop for a password prompt: tern has no terminal for git to ask in.
     cmd.env("GIT_TERMINAL_PROMPT", "0");
-    cmd.args(args)
-        .output()
-        .map_err(|e| GithubError::Http(format!("git: {e}")))
+    cmd.args(args);
+    cmd
 }
 
 fn ok(out: Output, what: &str) -> Result<Output, GithubError> {
@@ -256,6 +275,20 @@ pub fn create_github_repo() -> Result<String, GithubError> {
 #[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
+
+    /// Inside a git hook `GIT_DIR` names the outer repository and beats `-C`; the sync clone's
+    /// git must not inherit it.
+    #[test]
+    fn git_runs_without_the_callers_repository_variables() {
+        let cmd = command(Some(Path::new("/tmp/clone")), &["status"]);
+        let envs: Vec<_> = cmd.get_envs().collect();
+        for var in REPO_VARS {
+            assert!(
+                envs.iter().any(|(k, v)| *k == var && v.is_none()),
+                "{var} is not cleared"
+            );
+        }
+    }
 
     /// A bare repository on disk stands in for GitHub: push from one clone, fetch from another.
     #[test]
