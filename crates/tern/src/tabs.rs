@@ -47,6 +47,8 @@ pub struct TabInfo {
     pub title: Option<String>,
     /// A shell on this machine rather than a connection.
     pub local: bool,
+    /// The session's output is being written to a file.
+    pub logging: bool,
     pub status: Status,
     /// The field that is editing this tab's title right now.
     pub rename: Option<Entity<TextInput>>,
@@ -191,6 +193,18 @@ fn tab_pill(
                 .when(active, |el| el.font_weight(FontWeight::MEDIUM))
                 .child(SharedString::from(middle_ellipsis(tab.label(), 18)))
                 .into_any_element(),
+        })
+        .when(tab.logging, |el| {
+            el.child(
+                div()
+                    .flex_none()
+                    .px(px(4.))
+                    .rounded(px(3.))
+                    .bg(t.danger.opacity(0.18))
+                    .text_color(t.danger)
+                    .text_size(px(9.))
+                    .child("LOG"),
+            )
         })
         .child(
             div()

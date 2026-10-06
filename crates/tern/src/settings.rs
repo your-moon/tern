@@ -33,6 +33,8 @@ pub struct Settings {
     pub option_as_meta: bool,
     /// Open the tabs of the last run again at launch.
     pub reopen_tabs: bool,
+    /// Write every session's output to a log file.
+    pub log_sessions: bool,
     /// Bundled scheme for every host without its own; `None` is zeron's palette.
     pub terminal_theme: Option<String>,
     /// Per-host scheme by host alias, as Termius does per host.
@@ -92,6 +94,7 @@ impl Default for Settings {
             reduce_motion: false,
             option_as_meta: true,
             reopen_tabs: true,
+            log_sessions: false,
             terminal_theme: None,
             host_themes: BTreeMap::new(),
             wallpaper: None,
@@ -285,6 +288,7 @@ mod tests {
             reduce_motion: true,
             option_as_meta: false,
             reopen_tabs: false,
+            log_sessions: true,
             terminal_theme: Some("Dracula".into()),
             host_themes: BTreeMap::from([("grape".into(), "Nord".into())]),
             wallpaper: Some("/tmp/w.png".into()),

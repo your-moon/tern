@@ -96,6 +96,44 @@ impl Shell {
 }
 
 impl Shell {
+    pub(crate) fn start_logging(&mut self, ix: usize, cx: &mut Context<Self>) {
+        let Some(session) = self.tabs.get(ix).map(|t| t.session.clone()) else {
+            return;
+        };
+        match session.update(cx, |s, cx| {
+            cx.notify();
+            s.start_logging()
+        }) {
+            Ok(path) => self.notify_toast(
+                super::ToastKind::Default,
+                format!("Logging to {}", path.display()),
+                cx,
+            ),
+            Err(e) => self.notify_toast(
+                super::ToastKind::Critical,
+                format!("Could not start the log: {e}"),
+                cx,
+            ),
+        }
+    }
+
+    pub(crate) fn stop_logging(&mut self, ix: usize, cx: &mut Context<Self>) {
+        let Some(session) = self.tabs.get(ix).map(|t| t.session.clone()) else {
+            return;
+        };
+        let path = session.update(cx, |s, cx| {
+            cx.notify();
+            s.stop_logging()
+        });
+        if let Some(path) = path {
+            self.notify_toast(
+                super::ToastKind::Default,
+                format!("Log saved to {}", path.display()),
+                cx,
+            );
+        }
+    }
+
     /// Writes the open tabs to `tabs.json`; a failed write is logged, not fatal. It runs on
     /// every change, never at launch, so an unreadable file survives until the user changes
     /// something.

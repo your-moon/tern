@@ -118,8 +118,30 @@ impl Shell {
             }))
             .child(w::toggle(&t, s.reopen_tabs, "reopen-tabs"));
 
+        let log_all = div()
+            .id("toggle-log-sessions")
+            .cursor_pointer()
+            .on_click(cx.listener(|s, _, _, cx| {
+                s.update_settings(|st| st.log_sessions = !st.log_sessions, cx);
+            }))
+            .child(w::toggle(&t, s.log_sessions, "log-sessions"));
+
         w::page_column()
             .child(w::page_header(&t, "Terminal"))
+            .child(w::section(
+                &t,
+                "Logging",
+                w::card(&t).child(w::row(
+                    &t,
+                    true,
+                    "Log every session",
+                    Some(
+                        "New tabs write plain text to ~/Library/Logs/tern/sessions; or start one from a tab's menu"
+                            .into(),
+                    ),
+                    log_all,
+                )),
+            ))
             .child(w::section(
                 &t,
                 "Startup",

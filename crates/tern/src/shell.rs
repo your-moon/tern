@@ -285,7 +285,14 @@ impl Shell {
         };
         let local = matches!(launch, Launch::Local);
         let theme = self.terminal_theme(&alias);
-        let session = Session::open(launch, theme, window, cx);
+        let session = Session::open(
+            launch,
+            alias.clone(),
+            self.settings.log_sessions,
+            theme,
+            window,
+            cx,
+        );
         let meta = self.settings.option_as_meta;
         let view = session.read(cx).view.clone();
         let options = self.terminal_options();
@@ -562,6 +569,7 @@ impl Shell {
                 alias: tab.alias.clone(),
                 title: tab.title.clone(),
                 local: tab.session.read(cx).is_local(),
+                logging: tab.session.read(cx).is_logging(),
                 status: tab.session.read(cx).status.clone(),
                 rename: self
                     .renaming

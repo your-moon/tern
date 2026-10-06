@@ -229,7 +229,7 @@ dependencies = [
  "serde",
  "signal-hook 0.4.5",
  "unicode-width",
- "vte",
+ "vte 0.15.0",
  "windows-sys 0.59.0",
 ]
 
@@ -6921,6 +6921,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "strip-ansi-escapes"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a8f8038e7e7969abb3f1b7c2a811225e9296da208539e0f79c5251d6cac0025"
+dependencies = [
+ "vte 0.14.1",
+]
+
+[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7193,6 +7202,7 @@ dependencies = [
  "portable-pty",
  "serde",
  "serde_json",
+ "strip-ansi-escapes",
  "tempfile",
  "tern-ssh",
  "tern-sync",
@@ -7954,6 +7964,15 @@ checksum = "fb067e4cbd1ff067d1df46c9194b5de0e98efd2810bbc95c5d5e5f25a3231150"
 dependencies = [
  "cc",
  "libc",
+]
+
+[[package]]
+name = "vte"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "231fdcd7ef3037e8330d8e17e61011a2c244126acc0a982f4040ac3f9f0bc077"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]

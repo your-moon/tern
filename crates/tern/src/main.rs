@@ -16,6 +16,7 @@ mod picker;
 mod recent;
 mod runtime;
 mod session;
+mod session_log;
 mod settings;
 mod settings_widgets;
 mod shell;

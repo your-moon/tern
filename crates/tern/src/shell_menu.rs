@@ -107,6 +107,7 @@ impl Shell {
         let alias = tab.alias.clone();
         let closed = tab.session.read(cx).status.is_dormant();
         let local = tab.session.read(cx).is_local();
+        let logging = tab.session.read(cx).is_logging();
         let mut items = Vec::new();
         if closed {
             items.push(action(icons::RESTART, "Reconnect", move |s, w, cx| {
@@ -135,6 +136,15 @@ impl Shell {
         items.push(action(icons::PEN, "Rename…", move |s, w, cx| {
             s.start_rename(ix, w, cx)
         }));
+        if logging {
+            items.push(action(icons::INFO, "Stop logging", move |s, _, cx| {
+                s.stop_logging(ix, cx)
+            }));
+        } else {
+            items.push(action(icons::INFO, "Start logging…", move |s, _, cx| {
+                s.start_logging(ix, cx)
+            }));
+        }
         let theme_alias = alias.clone();
         items.push(action(icons::PALETTE, "Theme…", move |s, w, cx| {
             s.open_theme_picker(ThemeTarget::Host(theme_alias.clone()), w, cx)

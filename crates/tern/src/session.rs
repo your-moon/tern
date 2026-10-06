@@ -8,6 +8,7 @@ use tern_term::{Terminal, TerminalEvent, TerminalView};
 use crate::local_pty::{self, LocalPty};
 use crate::login::Login;
 use crate::runtime::SshRuntime;
+use crate::session_log::{self, SessionLog};
 use tern_term::TerminalTheme;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +65,11 @@ pub struct Session {
     pub view: Entity<TerminalView>,
     terminal: Entity<Terminal>,
     link: Link,
+    /// The tab's name, for the log file.
+    name: String,
+    log: Option<SessionLog>,
+    /// Every connection of this session is logged, as the settings ask.
+    auto_log: bool,
     size: TermSize,
     login: Option<Login>,
     _session_events: Task<()>,
@@ -73,6 +79,8 @@ pub struct Session {
 impl Session {
     pub fn open(
         launch: Launch,
+        name: String,
+        auto_log: bool,
         theme: TerminalTheme,
         window: &mut Window,
         cx: &mut App,
@@ -115,6 +123,9 @@ impl Session {
                 view,
                 terminal,
                 link,
+                name,
+                log: None,
+                auto_log,
                 size,
                 login: None,
                 _session_events: task,
@@ -122,6 +133,10 @@ impl Session {
             };
             if idle {
                 this.show(b"\x1b[2mPress Enter to connect\x1b[0m\r\n", cx);
+            }
+            let mut this = this;
+            if auto_log && !idle {
+                this.start_auto_log();
             }
             this
         })
@@ -190,12 +205,46 @@ impl Session {
         }
     }
 
+    pub fn is_logging(&self) -> bool {
+        self.log.is_some()
+    }
+
+    /// Starts writing this session's output to a new file under `~/Library/Logs/tern/sessions`.
+    ///
+    /// # Errors
+    ///
+    /// When the file cannot be created.
+    pub fn start_logging(&mut self) -> std::io::Result<std::path::PathBuf> {
+        let dir = session_log::directory()
+            .ok_or_else(|| std::io::Error::other("no home directory for the log"))?;
+        let log = SessionLog::create(&dir, &self.name, std::time::SystemTime::now())?;
+        let path = log.path().to_owned();
+        tracing::info!(path = %path.display(), "session_log_started");
+        self.log = Some(log);
+        Ok(path)
+    }
+
+    /// The settings' "log every session": a failure is logged, never in the way of the tab.
+    fn start_auto_log(&mut self) {
+        if let Err(e) = self.start_logging() {
+            tracing::warn!(error = %e, "session_log_start_failed");
+        }
+    }
+
+    /// Stops logging and returns the file it wrote.
+    pub fn stop_logging(&mut self) -> Option<std::path::PathBuf> {
+        self.log.take().map(|log| log.path().to_owned())
+    }
+
     pub fn is_local(&self) -> bool {
         matches!(self.link, Link::Local(_))
     }
 
     pub fn reconnect(&mut self, cx: &mut Context<Self>) {
         self.show(b"\r\n", cx);
+        if self.auto_log && self.log.is_none() {
+            self.start_auto_log();
+        }
         self._session_events = Self::start(&mut self.link, self.size, cx);
         self.status = Status::Connecting;
         cx.notify();
@@ -206,6 +255,7 @@ impl Session {
             SessionEvent::Data(bytes) => {
                 self.last_output = std::time::Instant::now();
                 self.ends_line = bytes.last().is_some_and(|b| *b == b'\n');
+                self.record(&bytes);
                 self.show(&bytes, cx);
             }
             SessionEvent::Prompt(prompt) => self.on_prompt(prompt, cx),
@@ -318,6 +368,16 @@ impl Session {
         }
         self.send(text.replace("\r\n", "\r").replace('\n', "\r").into_bytes());
         true
+    }
+
+    /// Output goes to the log when there is one; a write that fails ends the logging.
+    fn record(&mut self, bytes: &[u8]) {
+        if let Some(log) = self.log.as_mut()
+            && let Err(e) = log.write(bytes)
+        {
+            tracing::warn!(error = %e, "session_log_write_failed");
+            self.log = None;
+        }
     }
 
     fn send(&self, bytes: Vec<u8>) {
