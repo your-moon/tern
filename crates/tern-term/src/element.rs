@@ -137,9 +137,12 @@ impl gpui::Element for TerminalElement {
             .hover_link()
             .map(|link| link.segments.clone())
             .unwrap_or_default();
+        // A focused blinking cursor is dark in its off phase; an unfocused
+        // one is a steady hollow box.
+        let cursor_on = !self.focused || self.view.read(cx).cursor_on();
         let (grid, cursor) = {
             let t = terminal.read(cx);
-            (t.lines(), t.cursor())
+            (t.lines(), t.cursor().filter(|_| cursor_on))
         };
 
         let mut bg_quads = Vec::new();

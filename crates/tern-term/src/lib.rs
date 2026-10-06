@@ -7,12 +7,14 @@ mod element;
 mod find_bar;
 mod links;
 mod mappings;
+mod options;
 mod search;
 mod terminal;
 mod theme;
 mod view;
 
 pub use links::Link;
+pub use options::{CursorStyleSetting, TerminalOptions};
 pub use search::SearchMark;
 pub use terminal::{
     CellColor, CellSnapshot, CursorSnapshot, SCROLLBACK_LINES, Terminal, TerminalEvent,

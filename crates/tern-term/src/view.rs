@@ -4,9 +4,10 @@
 //! The terminal view: focus, keyboard -> bytes, paste/copy, mouse selection,
 //! wheel scrolling (or mouse reporting when the remote app asked for it), and
 //! debounced resize. Repaints only when the [`Terminal`] model or the view
-//! itself calls `cx.notify()`; there is no frame loop and no cursor blink timer.
+//! itself calls `cx.notify()`; there is no frame loop, only a 500ms tick that
+//! repaints when a blinking cursor changes phase.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use alacritty_terminal::index::{Column, Line, Point as GridPoint};
 use alacritty_terminal::term::TermMode;
@@ -22,6 +23,7 @@ use crate::find_bar::{FindKey, apply_key, paste_into};
 use crate::links::Link;
 use crate::mappings::keys::keystroke_bytes;
 use crate::mappings::mouse::{alt_scroll, mouse_button_report, mouse_moved_report, scroll_report};
+use crate::options::TerminalOptions;
 use crate::terminal::{SelectionType, Side, Terminal};
 use crate::theme::TerminalTheme;
 
@@ -70,6 +72,11 @@ pub struct TerminalView {
     /// The link under the pointer while the link modifier is held.
     hover_link: Option<Link>,
     last_pointer: Option<gpui::Point<Pixels>>,
+    options: TerminalOptions,
+    /// Blink phase: whether a blinking cursor is currently drawn.
+    cursor_on: bool,
+    last_input: Instant,
+    _blink_task: Task<()>,
     _subscription: Subscription,
 }
 
@@ -111,6 +118,10 @@ impl TerminalView {
             find: None,
             hover_link: None,
             last_pointer: None,
+            options: TerminalOptions::default(),
+            cursor_on: true,
+            last_input: Instant::now(),
+            _blink_task: Self::blink_loop(cx),
             _subscription: subscription,
         }
     }
@@ -200,6 +211,7 @@ impl TerminalView {
     /// Keyboard input: snap back to the live bottom, clear any selection, and
     /// write to the remote.
     fn send_input(&mut self, bytes: Vec<u8>, cx: &mut Context<Self>) {
+        self.note_input();
         self.terminal.update(cx, |t, cx| {
             if t.display_offset() > 0 {
                 t.scroll_to_bottom();
@@ -647,5 +659,6 @@ pub fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
 #[path = "view_tests.rs"]
 mod tests;
 
+mod cursor;
 mod find_links;
 use find_links::{find_status, is_find_chord};
