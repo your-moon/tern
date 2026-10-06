@@ -96,6 +96,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
             record_interceptor: None,
             sync_ui: None,
             toasts: toast::Toasts::new(),
+            tab_scroll: gpui::ScrollHandle::new(),
         };
         shell.refresh_hosts();
         cx.new(|_| shell)
@@ -135,6 +136,7 @@ pub struct Shell {
     record_interceptor: Option<Subscription>,
     sync_ui: Option<sync_ui::SyncUi>,
     toasts: toast::Toasts,
+    tab_scroll: gpui::ScrollHandle,
 }
 
 struct Tab {
@@ -231,6 +233,7 @@ impl Shell {
             return;
         };
         self.active = ix;
+        self.tab_scroll.scroll_to_item(ix);
         let focus = tab.session.read(cx).view.focus_handle(cx);
         window.focus(&focus, cx);
         cx.notify();
@@ -450,18 +453,62 @@ impl Shell {
         if let Some(tab) = self.tabs.get(self.active) {
             return tab.session.read(cx).view.clone().into_any_element();
         }
-        let message = self
-            .error
-            .clone()
-            .unwrap_or_else(|| "Select a host to connect".into());
+        let t = self.theme;
+        let keymap = cx.global::<crate::keymap::Keymap>();
+        let hint = |id: crate::keymap::ShortcutId, label: &'static str| {
+            div()
+                .flex()
+                .items_center()
+                .gap(px(12.))
+                .child(
+                    div()
+                        .min_w(px(44.))
+                        .flex()
+                        .justify_end()
+                        .text_sm()
+                        .text_color(t.text)
+                        .child(SharedString::from(crate::keymap::badge(keymap.combo(id)))),
+                )
+                .child(div().text_sm().text_color(t.muted).child(label))
+        };
+        let (title, detail): (SharedString, Option<SharedString>) = match &self.error {
+            Some(e) => ("Could not open that".into(), Some(e.clone().into())),
+            None if self.hosts.is_empty() => (
+                "No hosts yet".into(),
+                Some("Add a connection, or hosts from ~/.ssh/config appear here".into()),
+            ),
+            None => ("No session open".into(), None),
+        };
         div()
             .size_full()
             .flex()
+            .flex_col()
             .items_center()
             .justify_center()
-            .text_sm()
-            .text_color(self.theme.muted)
-            .child(SharedString::from(message))
+            .gap(px(16.))
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap(px(4.))
+                    .child(div().text_size(px(15.)).text_color(t.text).child(title))
+                    .when_some(detail, |el, d| {
+                        el.child(div().text_sm().text_color(t.muted).child(d))
+                    }),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(8.))
+                    .child(hint(crate::keymap::ShortcutId::HostPicker, "Find a host"))
+                    .child(hint(
+                        crate::keymap::ShortcutId::NewConnection,
+                        "New connection",
+                    ))
+                    .child(hint(crate::keymap::ShortcutId::Settings, "Settings")),
+            )
             .into_any_element()
     }
 }
@@ -476,7 +523,7 @@ impl Render for Shell {
         let t = self.theme;
         let infos = self.tab_infos(cx);
         let active_alias = infos.get(self.active).map(|i| i.alias.clone());
-        let strip = tabs::strip(&infos, self.active, &t, cx);
+        let strip = tabs::strip(&infos, self.active, &self.tab_scroll, &t, cx);
         let sidebar = sidebar::render(
             &self.hosts,
             sidebar::Editable {

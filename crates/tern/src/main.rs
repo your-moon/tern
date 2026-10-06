@@ -26,7 +26,7 @@ use gpui::App;
 use tracing_subscriber::EnvFilter;
 
 fn main() {
-    init_logging();
+    let _log_guard = init_logging();
     log_panics();
     let _app = tracing::info_span!("app", service = "tern", env = env()).entered();
     let target = std::env::args().nth(1);
@@ -103,13 +103,49 @@ fn log_panics() {
 }
 
 /// Structured JSON logs on stderr, filtered by `TERN_LOG` (default `info`).
-fn init_logging() {
-    tracing_subscriber::fmt()
+/// Structured JSON logs on stderr and, so that a tern started from Finder or the Dock still
+/// leaves a record, in `~/Library/Logs/tern/tern.log` (daily files, a week kept). Filtered by
+/// `TERN_LOG` (default `info`). The returned guard flushes the file on exit.
+fn init_logging() -> Option<tracing_appender::non_blocking::WorkerGuard> {
+    use tracing_subscriber::layer::SubscriberExt as _;
+    use tracing_subscriber::util::SubscriberInitExt as _;
+    let filter = || EnvFilter::try_from_env("TERN_LOG").unwrap_or_else(|_| "info".into());
+    let stderr = tracing_subscriber::fmt::layer()
         .json()
         .with_current_span(true)
-        .with_env_filter(EnvFilter::try_from_env("TERN_LOG").unwrap_or_else(|_| "info".into()))
-        .with_writer(std::io::stderr)
+        .with_writer(std::io::stderr);
+    let (file, guard) = match std::env::home_dir()
+        .map(|h| h.join("Library/Logs/tern"))
+        .and_then(|dir| {
+            tracing_appender::rolling::Builder::new()
+                .rotation(tracing_appender::rolling::Rotation::DAILY)
+                .filename_prefix("tern")
+                .filename_suffix("log")
+                .max_log_files(7)
+                .build(dir)
+                .ok()
+        }) {
+        Some(appender) => {
+            let (writer, guard) = tracing_appender::non_blocking(appender);
+            (
+                Some(
+                    tracing_subscriber::fmt::layer()
+                        .json()
+                        .with_current_span(true)
+                        .with_ansi(false)
+                        .with_writer(writer),
+                ),
+                Some(guard),
+            )
+        }
+        None => (None, None),
+    };
+    tracing_subscriber::registry()
+        .with(filter())
+        .with(stderr)
+        .with(file)
         .init();
+    guard
 }
 
 fn env() -> &'static str {

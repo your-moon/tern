@@ -62,6 +62,15 @@ impl Session {
     /// be offered for saving once the login succeeds.
     fn ask_user(&mut self, prompt: Prompt, cx: &mut Context<Self>) {
         self.asking = keeper::key_for(&prompt, &self.spec.host, self.spec.port);
+        // Asked again for the same secret means the last answer was refused; say so as
+        // OpenSSH does, or a retry looks like the same prompt shown twice.
+        if let Some(key) = &self.asking {
+            if self.asked.contains(key) {
+                self.show(b"Permission denied, please try again.\r\n", cx);
+            } else {
+                self.asked.push(key.clone());
+            }
+        }
         let (login, question) = Login::start(prompt);
         self.login = Some(login);
         self.show(&question, cx);

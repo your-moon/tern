@@ -65,6 +65,16 @@ pub(crate) async fn run(
         .await;
 }
 
+/// The proxy's first stderr line, which says why it failed when it does.
+#[derive(Clone, Default)]
+struct ProxyReason(Arc<std::sync::Mutex<Option<String>>>);
+
+impl ProxyReason {
+    fn get(&self) -> Option<String> {
+        self.0.lock().ok().and_then(|s| s.clone())
+    }
+}
+
 /// ProxyCommand transport: the child's stdio is the byte stream.
 fn spawn_proxy(
     cmd: &str,
@@ -72,6 +82,7 @@ fn spawn_proxy(
     (
         Child,
         impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+        ProxyReason,
     ),
     Failure,
 > {
@@ -89,13 +100,22 @@ fn spawn_proxy(
     else {
         return Err(Failure::Proxy("stdio unavailable".into()));
     };
+    let reason = ProxyReason::default();
+    let first = reason.clone();
     tokio::spawn(async move {
         let mut lines = BufReader::new(stderr).lines();
         while let Ok(Some(line)) = lines.next_line().await {
             tracing::debug!(proxy_stderr = %line, "ssh_proxy_stderr");
+            // The first line is usually the error; what follows tends to be usage text.
+            if let Ok(mut slot) = first.0.lock()
+                && slot.is_none()
+                && !line.trim().is_empty()
+            {
+                *slot = Some(line.trim().to_owned());
+            }
         }
     });
-    Ok((child, tokio::io::join(stdout, stdin)))
+    Ok((child, tokio::io::join(stdout, stdin), reason))
 }
 
 async fn run_inner(
@@ -137,13 +157,15 @@ async fn run_inner(
     let proxy = spec.proxy_command.as_deref();
     // Held for the whole session so the proxy process lives as long as the connection.
     let mut _proxy_child: Option<Child> = None;
+    let mut proxy_reason: Option<ProxyReason> = None;
     let connecting = async {
         match proxy {
             Some(cmd) => {
                 let cmd = config::expand_proxy_command(cmd, &spec.host, spec.port, &spec.user);
                 tracing::debug!("ssh_proxy_command_start");
-                let (child, stream) = spawn_proxy(&cmd)?;
+                let (child, stream, reason) = spawn_proxy(&cmd)?;
                 _proxy_child = Some(child);
+                proxy_reason = Some(reason);
                 Ok(client::connect_stream(cfg, stream, handler).await)
             }
             None => Ok::<_, Failure>(
@@ -156,7 +178,10 @@ async fn run_inner(
         .map_err(|_| Failure::ConnectTimeout)??;
     let mut session = match connected {
         Ok(s) => s,
-        Err(e) => return Err(proxy_exit(&mut _proxy_child).unwrap_or(e)),
+        Err(e) => {
+            return Err(proxy_exit(&mut _proxy_child, proxy_reason.as_ref())
+                .unwrap_or_else(|| connect_failure(e, &spec.host, spec.port)));
+        }
     };
 
     let identity_files = spec.identity_files.clone();
@@ -235,13 +260,65 @@ async fn run_inner(
 
 /// A proxy that died during the handshake explains the failure better than russh's
 /// "Disconnected".
-fn proxy_exit(child: &mut Option<Child>) -> Option<Failure> {
+fn proxy_exit(child: &mut Option<Child>, reason: Option<&ProxyReason>) -> Option<Failure> {
     let status = child.as_mut()?.try_wait().ok()??;
-    Some(Failure::Proxy(status.to_string()))
+    Some(Failure::Proxy(
+        reason
+            .and_then(ProxyReason::get)
+            .unwrap_or_else(|| status.to_string()),
+    ))
+}
+
+/// A connect error in words a person can act on, naming where tern tried to go.
+fn connect_failure(e: Failure, host: &str, port: u16) -> Failure {
+    match e {
+        Failure::Io(io) => Failure::Transport(describe_io(&io, host, port)),
+        other => other,
+    }
+}
+
+pub(crate) fn describe_io(e: &std::io::Error, host: &str, port: u16) -> String {
+    use std::io::ErrorKind as K;
+    let text = e.to_string();
+    match e.kind() {
+        K::ConnectionRefused => {
+            format!("{host}:{port} refused the connection (is an SSH server running there?)")
+        }
+        K::TimedOut => format!("{host}:{port} did not answer"),
+        K::HostUnreachable | K::NetworkUnreachable => format!("no route to {host}"),
+        K::ConnectionReset => format!("{host}:{port} closed the connection"),
+        _ if text.contains("lookup address") || text.contains("nodename nor servname") => {
+            format!("could not find host {host}")
+        }
+        _ => text,
+    }
 }
 
 async fn disconnect(session: &Handle<Handler>) {
     let _ = session
         .disconnect(Disconnect::ByApplication, "", "en")
         .await;
+}
+
+#[cfg(test)]
+mod describe_tests {
+    use super::describe_io;
+    use std::io::{Error, ErrorKind};
+
+    #[test]
+    fn common_failures_read_as_sentences_naming_the_target() {
+        let refused = Error::from(ErrorKind::ConnectionRefused);
+        assert_eq!(
+            describe_io(&refused, "10.0.0.5", 2222),
+            "10.0.0.5:2222 refused the connection (is an SSH server running there?)"
+        );
+        let dns =
+            Error::other("failed to lookup address information: nodename nor servname provided");
+        assert_eq!(
+            describe_io(&dns, "nope.example", 22),
+            "could not find host nope.example"
+        );
+        let odd = Error::other("something else");
+        assert_eq!(describe_io(&odd, "h", 22), "something else");
+    }
 }

@@ -194,7 +194,7 @@ async fn password_gives_up_after_three_wrong_answers() {
     let port = serve(Want::Password("hunter2"), MethodKind::Password).await;
     let dir = tempfile::tempdir().unwrap();
     let (asked, error) = login(port, unused_key(&dir), &[Some("a"), Some("b"), Some("c")]).await;
-    assert!(error.unwrap().contains("authentication failed"));
+    assert!(error.unwrap().contains("permission denied"));
     assert_eq!(asked.iter().filter(|a| **a == Ask::Password).count(), 3);
 }
 

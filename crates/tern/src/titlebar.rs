@@ -29,7 +29,9 @@ pub fn render(t: &Theme, fullscreen: bool, tabs: impl IntoElement) -> impl IntoE
         .child(tabs)
         .child(
             div()
+                // The drag strip keeps a grab area even when the tabs fill the bar.
                 .flex_1()
+                .min_w(px(48.))
                 .h_full()
                 .window_control_area(WindowControlArea::Drag)
                 .on_mouse_down(MouseButton::Left, |_, window, _| window.start_window_move()),

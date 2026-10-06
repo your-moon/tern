@@ -36,6 +36,11 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 - `tern`: Settings → Sync keeps connections, settings, shortcuts and the vault the same on every Mac through one private GitHub gist. The token comes from `gh` or is pasted once into the macOS Keychain. Everything but the already-encrypted vault is sealed with the vault passphrase before upload. Sync now uploads or downloads, a new Mac just downloads, and when both sides changed it asks which one to keep.
 - `tern`: keys keep working after the focused field disappears (for example the passphrase field after a sync).
 - `tern`: snackbars in seed-design's style at the top of the window (4 s, paused while the pointer is on them, one at a time, queued): sync results, token saved or removed, connection saved, connection removed with Undo, password saved, vault locked, and a background tab that disconnects (with Show).
+- `tern`: tabs shrink like a browser's and the strip scrolls once they no longer fit, with the active tab kept in view; long host names lose their middle, not their distinct end.
+- `tern`: connection errors name the target and say what to check ("10.0.0.5:22 refused the connection (is an SSH server running there?)", "could not find host …", "no answer within 15 seconds"); a failing ProxyCommand reports its own first error line.
+- `tern`: a refused password says "Permission denied, please try again." before asking again, as OpenSSH does, and running out of attempts reads "permission denied: the server accepted none of the passwords or keys tried".
+- `tern`: an empty window shows what to do next, with the current shortcuts for finding a host, a new connection and settings.
+- `tern`: logs are also written to `~/Library/Logs/tern/tern.log` (daily, a week kept).
 - `tern`: a macOS menu bar (Hide, Hide Others, Show All, Quit, Minimize, Zoom) with ⌘Q, ⌘H, ⌥⌘H and ⌘M.
 - `tern-term`: `local_demo <command>` for visual checks; scripted runs never take keyboard focus.
 - Project: craft gates (`clippy -D warnings`, file-size and attribution checks, `cargo deny`), CI, architecture diagram, UI spec and measured performance notes.

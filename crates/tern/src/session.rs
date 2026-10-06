@@ -25,6 +25,8 @@ pub struct Session {
     typed: Option<(tern_vault::Key, SecretString)>,
     /// Entries already answered from the vault on this connection.
     tried: Vec<tern_vault::Key>,
+    /// Secrets the user was already asked for on this connection.
+    asked: Vec<tern_vault::Key>,
     /// When the remote last wrote, and whether that ended a line: the save offer waits for a
     /// quiet moment so it is not interleaved with the login banner.
     last_output: std::time::Instant,
@@ -65,6 +67,7 @@ impl Session {
                 asking: None,
                 typed: None,
                 tried: Vec::new(),
+                asked: Vec::new(),
                 last_output: std::time::Instant::now(),
                 ends_line: true,
                 view,
@@ -130,6 +133,7 @@ impl Session {
                 self.asking = None;
                 self.typed = None;
                 self.tried.clear();
+                self.asked.clear();
                 let reason = match (error, exit_status) {
                     (Some(e), _) => e,
                     (None, Some(code)) => format!("exit status {code}"),

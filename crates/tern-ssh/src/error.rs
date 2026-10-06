@@ -29,7 +29,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Messages never include secrets.
 #[derive(Debug)]
 pub(crate) enum Failure {
-    HostKeyChanged { line: usize },
+    HostKeyChanged {
+        line: usize,
+    },
     HostKeyRejected,
     HostKeyUnsupported,
     HostKeyCheck(String),
@@ -38,6 +40,8 @@ pub(crate) enum Failure {
     Proxy(String),
     ConnectTimeout,
     Transport(String),
+    /// A socket error, kept whole so the caller can word it with the host it was reaching.
+    Io(std::io::Error),
     UiGone,
 }
 
@@ -52,13 +56,15 @@ impl fmt::Display for Failure {
             Failure::HostKeyRejected => write!(f, "host key rejected by user"),
             Failure::HostKeyUnsupported => write!(f, "host certificates are not supported"),
             Failure::HostKeyCheck(e) => write!(f, "host key check failed: {e}"),
-            Failure::AuthFailed => {
-                write!(f, "authentication failed: no more authentication methods")
-            }
+            Failure::AuthFailed => write!(
+                f,
+                "permission denied: the server accepted none of the passwords or keys tried"
+            ),
             Failure::AuthCancelled => write!(f, "authentication cancelled"),
-            Failure::Proxy(e) => write!(f, "proxy command failed: {e}"),
-            Failure::ConnectTimeout => write!(f, "connection timed out"),
+            Failure::Proxy(e) => write!(f, "ProxyCommand failed: {e}"),
+            Failure::ConnectTimeout => write!(f, "no answer within 15 seconds"),
             Failure::Transport(e) => write!(f, "{e}"),
+            Failure::Io(e) => write!(f, "{e}"),
             Failure::UiGone => write!(f, "event receiver dropped"),
         }
     }
@@ -66,6 +72,9 @@ impl fmt::Display for Failure {
 
 impl From<russh::Error> for Failure {
     fn from(e: russh::Error) -> Self {
-        Failure::Transport(e.to_string())
+        match e {
+            russh::Error::IO(io) => Failure::Io(io),
+            other => Failure::Transport(other.to_string()),
+        }
     }
 }

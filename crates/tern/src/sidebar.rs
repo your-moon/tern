@@ -229,7 +229,7 @@ fn row(
                         .text_sm()
                         .font_weight(FontWeight::MEDIUM)
                         .truncate()
-                        .child(SharedString::from(host.alias.clone())),
+                        .child(SharedString::from(tabs::middle_ellipsis(&host.alias, 24))),
                 )
                 .child(
                     div()
