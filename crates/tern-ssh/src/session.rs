@@ -21,6 +21,7 @@ use crate::error::Failure;
 use crate::forward::{self, Registry};
 use crate::hostkey::{Handler, known_algorithms};
 use crate::jump;
+use crate::latency;
 use crate::outbox::Outbox;
 use crate::sftp;
 use crate::{
@@ -289,6 +290,8 @@ async fn run_inner(
         .await
         .map_err(|_| Failure::UiGone)?;
     tracing::info!(host = %spec.host, port = spec.port, "ssh_connected");
+    // Started after auth, so a prompt never waits behind a probe; dropped with the session.
+    let _latency = latency::start(session.clone(), events.clone());
 
     let mut exit_status = None;
     let mut error = None;

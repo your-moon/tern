@@ -15,6 +15,7 @@ mod error;
 mod forward;
 mod hostkey;
 mod jump;
+mod latency;
 mod outbox;
 mod session;
 mod sftp;
@@ -194,6 +195,8 @@ pub enum Prompt {
 pub enum SessionEvent {
     Connected,
     Data(Vec<u8>),
+    /// Smoothed round-trip time to the server, about every 5 s once logged in.
+    Latency(std::time::Duration),
     Prompt(Prompt),
     Closed {
         exit_status: Option<u32>,

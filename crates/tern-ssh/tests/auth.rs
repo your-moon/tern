@@ -178,7 +178,7 @@ async fn login_with(
                     let _ = reply.send(answers.next().flatten());
                 }
                 SessionEvent::Connected => handle.close(),
-                SessionEvent::Data(_) => {}
+                SessionEvent::Data(_) | SessionEvent::Latency(_) => {}
                 SessionEvent::Closed { error, .. } => return error,
             }
         }

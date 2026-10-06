@@ -1,8 +1,7 @@
 // Sizes from zeron crates/ui/src/composer.rs: SESSION_FOOTER_HEIGHT 24 (line 89), the footer
 // row's 10 px side padding (line ~11474) and its 11 px text (lines 558, 4725) (MIT).
 //! The strip under the terminal panel: which host the active tab is on, whether the
-//! connection is up, and how long it has been. Round-trip latency is not shown: tern-ssh
-//! sends keep-alives (russh) but exposes no timing for them.
+//! connection is up, its round-trip latency, and how long it has been.
 
 use std::time::Duration;
 
@@ -31,6 +30,32 @@ pub fn format_elapsed(elapsed: Duration) -> String {
     }
 }
 
+/// How the latency figure is coloured.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Lag {
+    Fine,
+    Slow,
+    Bad,
+}
+
+const SLOW_OVER: Duration = Duration::from_millis(150);
+const BAD_OVER: Duration = Duration::from_millis(400);
+
+pub fn lag(rtt: Duration) -> Lag {
+    if rtt > BAD_OVER {
+        Lag::Bad
+    } else if rtt > SLOW_OVER {
+        Lag::Slow
+    } else {
+        Lag::Fine
+    }
+}
+
+/// `42 ms`, rounded to whole milliseconds.
+pub fn format_latency(rtt: Duration) -> String {
+    format!("{} ms", (rtt.as_micros() + 500) / 1000)
+}
+
 fn state_label(status: &Status) -> &'static str {
     match status {
         Status::Connecting => "Connecting…",
@@ -45,6 +70,7 @@ pub fn render(
     t: &Theme,
     label: &str,
     status: &Status,
+    latency: Option<Duration>,
     elapsed: Option<Duration>,
     bg: Hsla,
 ) -> impl IntoElement + use<> {
@@ -84,6 +110,14 @@ pub fn render(
                 .child(div().size(px(6.)).rounded_full().bg(dot))
                 .child(state_label(status)),
         );
+    if let Some(rtt) = latency {
+        let colour = match lag(rtt) {
+            Lag::Fine => t.muted,
+            Lag::Slow => t.warning,
+            Lag::Bad => t.danger,
+        };
+        row = row.child(part(format_latency(rtt)).text_color(colour));
+    }
     if let Some(elapsed) = elapsed {
         row = row.child(part(format_elapsed(elapsed)));
     }
@@ -104,6 +138,26 @@ mod tests {
         assert_eq!(format_elapsed(s(3600)), "1:00");
         assert_eq!(format_elapsed(s(3600 + 7 * 60 + 59)), "1:07");
         assert_eq!(format_elapsed(s(26 * 3600 + 5 * 60)), "26:05");
+    }
+
+    #[test]
+    fn latency_reads_in_whole_milliseconds() {
+        let ms = Duration::from_micros;
+        assert_eq!(format_latency(ms(42_400)), "42 ms");
+        assert_eq!(format_latency(ms(42_600)), "43 ms");
+        assert_eq!(format_latency(ms(300)), "0 ms");
+        assert_eq!(format_latency(Duration::from_secs(2)), "2000 ms");
+    }
+
+    #[test]
+    fn latency_turns_amber_over_150_and_red_over_400() {
+        let ms = Duration::from_millis;
+        assert_eq!(lag(ms(0)), Lag::Fine);
+        assert_eq!(lag(ms(150)), Lag::Fine);
+        assert_eq!(lag(ms(151)), Lag::Slow);
+        assert_eq!(lag(ms(400)), Lag::Slow);
+        assert_eq!(lag(ms(401)), Lag::Bad);
+        assert_eq!(lag(ms(5000)), Lag::Bad);
     }
 
     #[test]

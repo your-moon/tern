@@ -87,6 +87,9 @@ async fn keep_alive_off_does_not_time_out_a_quiet_link() {
     s.server_alive_interval = Duration::ZERO;
     let live = start(s).await.unwrap();
     tokio::time::sleep(Duration::from_millis(400)).await;
-    assert!(live.events.try_recv().is_err());
+    // Latency probes keep flowing; only a Closed would mean the quiet link timed out.
+    while let Ok(ev) = live.events.try_recv() {
+        assert!(matches!(ev, tern_ssh::SessionEvent::Latency(_)), "{ev:?}");
+    }
     live.handle.close();
 }

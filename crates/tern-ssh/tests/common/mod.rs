@@ -350,7 +350,7 @@ pub async fn start(spec: ConnectSpec) -> Result<Live, (Option<String>, Disconnec
                 }
                 SessionEvent::Prompt(_) => {}
                 SessionEvent::Connected => return Ok(()),
-                SessionEvent::Data(_) => {}
+                SessionEvent::Data(_) | SessionEvent::Latency(_) => {}
                 SessionEvent::Closed { error, reason, .. } => return Err((error, reason)),
             }
         }

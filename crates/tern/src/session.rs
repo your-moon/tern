@@ -68,6 +68,8 @@ pub struct Session {
     /// time between (or since).
     connected_at: Option<std::time::Instant>,
     ended_at: Option<std::time::Instant>,
+    /// Smoothed round-trip time of the live connection; `None` until the first probe answers.
+    latency: Option<Duration>,
     flow: Option<vault::Flow>,
     /// The vault passphrase is being asked for only so the connection can then dial.
     connect_after_unlock: bool,
@@ -160,6 +162,7 @@ impl Session {
                     Status::Connecting
                 },
                 connected_at: None,
+                latency: None,
                 ended_at: None,
                 flow: None,
                 connect_after_unlock: false,
@@ -330,6 +333,7 @@ impl Session {
         self.status = Status::Connecting;
         self.connected_at = None;
         self.ended_at = None;
+        self.latency = None;
         if Self::keys_need_unlock(&self.link, cx) {
             self.ask_vault_before_dialling(cx);
         } else {
@@ -360,8 +364,14 @@ impl Session {
         Some(self.ended_at.unwrap_or_else(std::time::Instant::now) - start)
     }
 
+    /// Round-trip time to show: only while the connection is up.
+    pub fn latency(&self) -> Option<Duration> {
+        self.latency.filter(|_| self.status == Status::Connected)
+    }
+
     fn on_session_event(&mut self, event: SessionEvent, cx: &mut Context<Self>) {
         match event {
+            SessionEvent::Latency(rtt) => self.latency = Some(rtt),
             SessionEvent::Data(bytes) => {
                 self.last_output = std::time::Instant::now();
                 self.ends_line = bytes.last().is_some_and(|b| *b == b'\n');

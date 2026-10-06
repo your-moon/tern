@@ -117,6 +117,8 @@ pub struct Theme {
     pub accent: Hsla,
     pub success: Hsla,
     pub danger: Hsla,
+    /// Amber: degraded but working (a slow link).
+    pub warning: Hsla,
     pub border: Hsla,
     /// Row washes (zeron `wash(0.10)` active, `wash(0.05)` hover).
     pub row_active: Hsla,
@@ -154,6 +156,7 @@ impl Theme {
             accent: hex(0x5b43e8),
             success: hex(0x15803d),
             danger: hex(0xdc2626),
+            warning: hex(0xb45309),
             border: hairline_for(true, 0.08),
             row_active: wash_for(true, 0.10),
             row_hover: wash_for(true, 0.05),
@@ -174,6 +177,7 @@ impl Theme {
             accent: hex(0x8b7cf6),
             success: hex(0x34d399),
             danger: hex(0xf87171),
+            warning: hex(0xfbbf24),
             border: hairline_for(false, 0.08),
             row_active: wash_for(false, 0.10),
             row_hover: wash_for(false, 0.05),

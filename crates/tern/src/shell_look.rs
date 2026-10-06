@@ -105,6 +105,7 @@ impl Shell {
             &self.theme,
             &session.label(),
             &session.status,
+            session.latency(),
             session.elapsed(),
             bg,
         ))

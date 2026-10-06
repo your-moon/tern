@@ -178,6 +178,7 @@ async fn main() -> ExitCode {
                 let _ = stdout.write_all(&d);
                 let _ = stdout.flush();
             }
+            SessionEvent::Latency(_) => {}
             SessionEvent::Prompt(p) => answer(p).await,
             SessionEvent::Closed {
                 exit_status, error, ..
