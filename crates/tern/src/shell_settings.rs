@@ -11,6 +11,7 @@ use gpui::{
 
 use super::Shell;
 use crate::keeper::Keeper;
+use crate::keymap::{Keymap, Record, ShortcutId, badge, record};
 use crate::settings::{FONT_DEFAULT, FONT_MAX, FONT_MIN};
 use crate::settings_widgets as w;
 
@@ -18,15 +19,17 @@ use crate::settings_widgets as w;
 pub(crate) enum Section {
     Appearance,
     Terminal,
+    Shortcuts,
     Connections,
     Vault,
     About,
 }
 
 impl Section {
-    const ALL: [Section; 5] = [
+    const ALL: [Section; 6] = [
         Section::Appearance,
         Section::Terminal,
+        Section::Shortcuts,
         Section::Connections,
         Section::Vault,
         Section::About,
@@ -36,6 +39,7 @@ impl Section {
         match self {
             Section::Appearance => "Appearance",
             Section::Terminal => "Terminal",
+            Section::Shortcuts => "Shortcuts",
             Section::Connections => "Connections",
             Section::Vault => "Vault",
             Section::About => "About",
@@ -46,6 +50,7 @@ impl Section {
         match self {
             Section::Appearance => "nav-appearance",
             Section::Terminal => "nav-terminal",
+            Section::Shortcuts => "nav-shortcuts",
             Section::Connections => "nav-connections",
             Section::Vault => "nav-vault",
             Section::About => "nav-about",
@@ -95,6 +100,7 @@ impl Shell {
         let page = match section {
             Section::Appearance => self.appearance_page(cx),
             Section::Terminal => self.terminal_page(cx),
+            Section::Shortcuts => self.shortcuts_page(cx),
             Section::Connections => self.connections_page(cx),
             Section::Vault => self.vault_page(cx),
             Section::About => about_page(&t),
@@ -219,6 +225,121 @@ impl Shell {
                         .child(w::toggle(&t, meta, "option-meta")),
                 )),
             ))
+    }
+
+    fn shortcuts_page(&self, cx: &mut Context<Self>) -> gpui::Div {
+        let t = self.theme;
+        let keymap = cx.global::<Keymap>().clone();
+        let mut card = w::card(&t);
+        for (ix, id) in ShortcutId::ALL.into_iter().enumerate() {
+            let recording = self.recording == Some(id);
+            let combo = keymap.combo(id);
+            let chip = w::button(
+                &t,
+                ("shortcut", ix),
+                if recording {
+                    "Press keys…".to_owned()
+                } else {
+                    badge(combo)
+                },
+            )
+            .min_w(px(88.))
+            .when(recording, |el| el.border_1().border_color(t.accent))
+            .on_click(cx.listener(move |s, _, window, cx| s.start_recording(id, window, cx)));
+            let mut control = div().flex().items_center().gap(px(6.)).child(chip);
+            if !keymap.is_default(id) {
+                control = control.child(w::button(&t, ("shortcut-reset", ix), "Reset").on_click(
+                    cx.listener(move |s, _, _, cx| {
+                        s.set_shortcut(id, id.default_combo(), cx);
+                    }),
+                ));
+            }
+            card = card.child(w::row(&t, ix == 0, id.label(), None, control));
+        }
+        w::page_column()
+            .child(w::page_header(&t, "Shortcuts"))
+            .child(w::page_subtitle(
+                &t,
+                "Click a shortcut, then press the new keys. Esc cancels, ⌫ unbinds. Keys without \
+                 ⌘, ⌃ or ⌥ always go to the remote shell.",
+            ))
+            .when_some(self.record_notice.clone(), |el, notice| {
+                el.child(w::page_subtitle(&t, notice).text_color(t.danger))
+            })
+            .child(w::section(&t, "App", card))
+            .child(w::section(
+                &t,
+                "Fixed",
+                w::card(&t)
+                    .child(w::row(
+                        &t,
+                        true,
+                        "Switch to tab 1–9",
+                        None,
+                        div().text_sm().text_color(t.muted).child("⌘1 … ⌘9"),
+                    ))
+                    .child(w::row(
+                        &t,
+                        false,
+                        "Next / previous tab",
+                        None,
+                        div().text_sm().text_color(t.muted).child("⌃Tab  ⌃⇧Tab"),
+                    ))
+                    .child(w::row(
+                        &t,
+                        false,
+                        "Quit, hide, minimise",
+                        None,
+                        div().text_sm().text_color(t.muted).child("⌘Q  ⌘H  ⌘M"),
+                    )),
+            ))
+    }
+
+    fn start_recording(&mut self, id: ShortcutId, window: &mut Window, cx: &mut Context<Self>) {
+        self.recording = Some(id);
+        self.record_notice = None;
+        window.focus(&self.focus, cx);
+        // Bound actions run before element key listeners, so intercept first: the chord being
+        // recorded must not also fire whatever it is bound to now.
+        let shell = cx.entity().downgrade();
+        self.record_interceptor = Some(cx.intercept_keystrokes(move |event, _, cx| {
+            let ks = &event.keystroke;
+            let m = &ks.modifiers;
+            let outcome = record(&ks.key, m.control, m.alt, m.shift, m.platform);
+            let _ = shell.update(cx, |s, cx| s.on_recorded(outcome, cx));
+            cx.stop_propagation();
+        }));
+        cx.notify();
+    }
+
+    fn on_recorded(&mut self, outcome: Record, cx: &mut Context<Self>) {
+        let Some(id) = self.recording else {
+            return;
+        };
+        match outcome {
+            Record::Ignored => return,
+            Record::Cancelled => {}
+            Record::Cleared => self.set_shortcut(id, "", cx),
+            Record::Set(combo) => match cx.global::<Keymap>().refusal(id, &combo) {
+                Some(why) => self.record_notice = Some(why),
+                None => self.set_shortcut(id, &combo, cx),
+            },
+        }
+        self.recording = None;
+        self.record_interceptor = None;
+        cx.notify();
+    }
+
+    /// Saves `keymap.json` and re-installs every binding.
+    fn set_shortcut(&mut self, id: ShortcutId, combo: &str, cx: &mut Context<Self>) {
+        cx.global_mut::<Keymap>().set(id, combo);
+        if let Some(dir) = crate::settings::dir()
+            && let Err(e) = cx.global::<Keymap>().save(&dir)
+        {
+            self.record_notice = Some(format!("Could not save keymap.json: {e}"));
+        }
+        crate::keymap::apply(cx);
+        cx.notify();
     }
 
     fn connections_page(&self, cx: &mut Context<Self>) -> gpui::Div {

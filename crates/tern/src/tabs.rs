@@ -23,10 +23,8 @@ actions!(tern, [CloseTab, NextTab, PrevTab]);
 pub struct ActivateTab(pub usize);
 
 pub fn bindings() -> Vec<KeyBinding> {
+    // ⌘W and ⌘⇧[ / ⌘⇧] are in the keymap; these second chords and the slots stay fixed.
     let mut b = vec![
-        KeyBinding::new("cmd-w", CloseTab, None),
-        KeyBinding::new("cmd-shift-]", NextTab, None),
-        KeyBinding::new("cmd-shift-[", PrevTab, None),
         KeyBinding::new("ctrl-tab", NextTab, None),
         KeyBinding::new("ctrl-shift-tab", PrevTab, None),
     ];

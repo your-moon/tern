@@ -85,6 +85,9 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
             sidebar_tween: None,
             settings_page: None,
             theme_picker: None,
+            recording: None,
+            record_notice: None,
+            record_interceptor: None,
         };
         shell.refresh_hosts();
         cx.new(|_| shell)
@@ -118,6 +121,10 @@ pub struct Shell {
     sidebar_tween: Option<WidthTween>,
     settings_page: Option<settings_ui::Section>,
     theme_picker: Option<themes_ui::ThemePicker>,
+    /// The shortcut being recorded in Settings → Shortcuts, and why the last one was refused.
+    recording: Option<crate::keymap::ShortcutId>,
+    record_notice: Option<String>,
+    record_interceptor: Option<Subscription>,
 }
 
 struct Tab {

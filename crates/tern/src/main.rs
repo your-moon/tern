@@ -5,6 +5,7 @@ mod connections;
 mod devkeys;
 mod fonts;
 mod keeper;
+mod keymap;
 mod login;
 mod menus;
 mod pane;
@@ -33,18 +34,11 @@ fn main() {
         fonts::register(cx);
         menus::init(cx);
         keeper::Keeper::install(cx);
-        cx.bind_keys(tabs::bindings());
-        cx.bind_keys(text_input::bindings());
-        cx.bind_keys([
-            gpui::KeyBinding::new("cmd-k", picker::ToggleHostPicker, None),
-            gpui::KeyBinding::new("cmd-b", shell::ToggleSidebar, None),
-            gpui::KeyBinding::new("cmd-n", shell::NewConnection, None),
-            gpui::KeyBinding::new("cmd-,", shell::OpenSettings, None),
-            gpui::KeyBinding::new("cmd-=", shell::IncreaseFontSize, None),
-            gpui::KeyBinding::new("cmd-+", shell::IncreaseFontSize, None),
-            gpui::KeyBinding::new("cmd--", shell::DecreaseFontSize, None),
-            gpui::KeyBinding::new("cmd-0", shell::ResetFontSize, None),
-        ]);
+        let keymap = settings::dir()
+            .map(|d| keymap::Keymap::load(&d))
+            .unwrap_or_default();
+        cx.set_global(keymap);
+        keymap::apply(cx);
         if let Err(e) = runtime::SshRuntime::install(cx) {
             tracing::error!(error = %e, "ssh_runtime_start_failed");
             cx.quit();

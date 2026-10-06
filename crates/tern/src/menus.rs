@@ -13,12 +13,6 @@ pub fn init(cx: &mut App) {
     cx.on_action(|_: &ShowAll, cx| cx.unhide_other_apps());
     cx.on_action(|_: &Minimize, cx| with_active_window(cx, |w| w.minimize_window()));
     cx.on_action(|_: &Zoom, cx| with_active_window(cx, |w| w.zoom_window()));
-    cx.bind_keys([
-        KeyBinding::new("cmd-q", Quit, None),
-        KeyBinding::new("cmd-h", Hide, None),
-        KeyBinding::new("alt-cmd-h", HideOthers, None),
-        KeyBinding::new("cmd-m", Minimize, None),
-    ]);
     cx.set_menus([
         Menu {
             name: "tern".into(),
@@ -42,6 +36,16 @@ pub fn init(cx: &mut App) {
             disabled: false,
         },
     ]);
+}
+
+/// The menu's own chords; not rebindable, as in every macOS app.
+pub fn bindings() -> Vec<KeyBinding> {
+    vec![
+        KeyBinding::new("cmd-q", Quit, None),
+        KeyBinding::new("cmd-h", Hide, None),
+        KeyBinding::new("alt-cmd-h", HideOthers, None),
+        KeyBinding::new("cmd-m", Minimize, None),
+    ]
 }
 
 fn with_active_window(cx: &mut App, f: impl FnOnce(&mut Window)) {

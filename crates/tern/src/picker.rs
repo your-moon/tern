@@ -243,7 +243,13 @@ pub fn render(
                         .when(picker.query.is_empty(), |el| el.text_color(t.faint))
                         .child(query),
                 )
-                .child(kbd("⌘K", t)),
+                .child(kbd(
+                    SharedString::from(crate::keymap::badge(
+                        cx.global::<crate::keymap::Keymap>()
+                            .combo(crate::keymap::ShortcutId::HostPicker),
+                    )),
+                    t,
+                )),
         )
         .child(
             div()
@@ -298,7 +304,7 @@ pub fn render(
     .into_any_element()
 }
 
-fn kbd(keys: &'static str, t: &Theme) -> impl IntoElement + use<> {
+fn kbd(keys: SharedString, t: &Theme) -> impl IntoElement + use<> {
     div()
         .px(px(5.))
         .rounded(px(4.))
@@ -313,7 +319,7 @@ fn hint(keys: &'static str, label: &'static str, t: &Theme) -> impl IntoElement 
         .flex()
         .items_center()
         .gap(px(5.))
-        .child(kbd(keys, t))
+        .child(kbd(keys.into(), t))
         .child(div().text_size(px(10.)).text_color(t.muted).child(label))
 }
 
