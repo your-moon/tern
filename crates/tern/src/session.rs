@@ -79,6 +79,9 @@ pub struct Session {
     typed: Option<(tern_vault::Key, SecretString)>,
     /// Entries already answered from the vault on this connection.
     tried: Vec<tern_vault::Key>,
+    /// The person skipped opening the vault in this tab, so it is not asked again, also not
+    /// by an automatic reconnect (which would otherwise wait on the question).
+    vault_skipped: bool,
     /// The password command already had its turn on this connection.
     command_tried: bool,
     /// Secrets the user was already asked for on this connection.
@@ -169,6 +172,7 @@ impl Session {
                 asking: None,
                 typed: None,
                 tried: Vec::new(),
+                vault_skipped: false,
                 command_tried: false,
                 asked: Vec::new(),
                 output_seq: 0,
@@ -334,7 +338,7 @@ impl Session {
         self.connected_at = None;
         self.ended_at = None;
         self.latency = None;
-        if Self::keys_need_unlock(&self.link, cx) {
+        if Self::keys_need_unlock(&self.link, cx) && !self.vault_skipped {
             self.ask_vault_before_dialling(cx);
         } else {
             self.dial(cx);

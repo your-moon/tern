@@ -77,7 +77,7 @@ impl Session {
                 }
                 return;
             }
-            if Keeper::locked(cx) {
+            if Keeper::locked(cx) && !self.vault_skipped {
                 let after = After {
                     prompt: Some(prompt),
                     ..After::default()
@@ -117,12 +117,14 @@ impl Session {
     /// The vault was not opened and the person gave up: back to what each reason falls to.
     fn skipped(&mut self, after: After, cx: &mut Context<Self>) {
         if let Some(prompt) = after.prompt {
+            self.vault_skipped = true;
             self.ask_user(prompt, cx);
         } else if after.entry.is_some() {
             self.note("Not saved.", cx);
         } else if after.fill.is_some() {
             self.note("Not filled.", cx);
         } else {
+            self.vault_skipped = true;
             self.connect_after_unlock = false;
             self.dial(cx);
         }
