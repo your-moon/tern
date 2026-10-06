@@ -43,12 +43,12 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 
 | # | Gap | Impact |
 | --- | --- | --- |
-| S1 | ProxyJump / jump host | Only ProxyCommand; bastion setups need ProxyCommand by hand |
-| S2 | Port forwarding (local, remote, dynamic SOCKS) | No tunnels |
-| S3 | Agent forwarding | git on the remote cannot use local keys |
-| S4 | SFTP file browser, drag and drop upload | No file transfer |
-| S5 | Auto-reconnect after network drop or sleep | Manual Enter only |
-| S6 | Keep-alive interval per host | Fixed 30 s |
+| ✓ S1 | ProxyJump / jump host | Only ProxyCommand; bastion setups need ProxyCommand by hand |
+| ✓ S2 | Port forwarding (local, remote, dynamic SOCKS) | No tunnels |
+| ✓ S3 | Agent forwarding | git on the remote cannot use local keys |
+| ✓ S4 | SFTP file browser, drag and drop upload | No file transfer |
+| ✓ S5 | Auto-reconnect after network drop or sleep | Manual Enter only |
+| ✓ S6 | Keep-alive interval per host | Fixed 30 s |
 | ✓ S7 | Host groups / folders and tags | Flat list; poor with many hosts |
 | ✓ S8 | Search in the sidebar | Only the ⌘K picker filters |
 | ✓ S9 | Recent hosts | No history |
@@ -78,8 +78,8 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 | # | State | Note |
 | --- | --- | --- |
 | ✓ F1 | Host key changed | Wording tested in tern-ssh; not seen in the app |
-| F2 | Network drop mid-session, Mac sleep and wake | Keep-alive exists; UI not checked |
-| F3 | Keyboard-interactive (2FA) in the app | Tested in tern-ssh only |
+| ✓ F2 | Network drop mid-session, Mac sleep and wake | Keep-alive exists; UI not checked |
+| ✓ F3 | Keyboard-interactive (2FA) in the app | Tested in tern-ssh only |
 | ✓ F4 | Window at its 900×600 minimum, fullscreen | Not checked since tabs and settings |
 | ✓ F5 | Many hosts (200+) in sidebar and picker | Scroll and speed not measured |
 | ✓ F6 | Crash reported this morning | It was the forced-panic test (same binary UUID d0ce8089); no panic since |
