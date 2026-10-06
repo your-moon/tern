@@ -4,6 +4,8 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 pub const SIDEBAR_MIN: f32 = 224.0;
@@ -25,6 +27,10 @@ pub struct Settings {
     pub reduce_motion: bool,
     /// Option sends Meta (ESC-prefixed keys) to the remote, as most terminals offer.
     pub option_as_meta: bool,
+    /// Bundled scheme for every host without its own; `None` is zeron's palette.
+    pub terminal_theme: Option<String>,
+    /// Per-host scheme by host alias, as Termius does per host.
+    pub host_themes: BTreeMap<String, String>,
 }
 
 impl Default for Settings {
@@ -35,6 +41,8 @@ impl Default for Settings {
             terminal_font_size: FONT_DEFAULT,
             reduce_motion: false,
             option_as_meta: true,
+            terminal_theme: None,
+            host_themes: BTreeMap::new(),
         }
     }
 }
@@ -126,6 +134,8 @@ mod tests {
             terminal_font_size: 15.0,
             reduce_motion: true,
             option_as_meta: false,
+            terminal_theme: Some("Dracula".into()),
+            host_themes: BTreeMap::from([("grape".into(), "Nord".into())]),
         };
         saved.save(&dir).unwrap();
         assert_eq!(Settings::load(&dir), saved);

@@ -79,19 +79,28 @@ pub fn classify(event: &KeyDownEvent) -> Key {
 /// Indices into `hosts` that match `query`, best first. An empty query keeps config order.
 /// Each host is matched as "alias user@hostname", so either the name or the address finds it.
 pub fn rank(query: &str, hosts: &[HostEntry]) -> Vec<usize> {
+    let labels: Vec<String> = hosts
+        .iter()
+        .map(|host| format!("{} {}", host.alias, sidebar::address(host)))
+        .collect();
+    rank_labels(query, &labels)
+}
+
+/// Fuzzy-ranks any labels: indices of the matches, best first, input order on an empty
+/// query or a tie.
+pub fn rank_labels<S: AsRef<str>>(query: &str, labels: &[S]) -> Vec<usize> {
     if query.trim().is_empty() {
-        return (0..hosts.len()).collect();
+        return (0..labels.len()).collect();
     }
     let mut matcher = Matcher::new(Config::DEFAULT);
     let pattern = Pattern::parse(query, CaseMatching::Smart, Normalization::Smart);
     let mut buf = Vec::new();
-    let mut scored: Vec<(u32, usize)> = hosts
+    let mut scored: Vec<(u32, usize)> = labels
         .iter()
         .enumerate()
-        .filter_map(|(ix, host)| {
-            let haystack = format!("{} {}", host.alias, sidebar::address(host));
+        .filter_map(|(ix, label)| {
             pattern
-                .score(Utf32Str::new(&haystack, &mut buf), &mut matcher)
+                .score(Utf32Str::new(label.as_ref(), &mut buf), &mut matcher)
                 .map(|score| (score, ix))
         })
         .collect();

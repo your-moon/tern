@@ -18,6 +18,7 @@ mod sidebar;
 mod tabs;
 mod text_input;
 mod theme;
+mod themes;
 mod titlebar;
 
 use gpui::App;

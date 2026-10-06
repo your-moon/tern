@@ -142,6 +142,29 @@ impl Shell {
             .child(w::page_header(&t, "Appearance"))
             .child(w::section(
                 &t,
+                "Theme",
+                w::card(&t).child(w::row(
+                    &t,
+                    true,
+                    "Terminal theme",
+                    Some(
+                        "For every host without its own; set one per host from the sidebar".into(),
+                    ),
+                    w::button(
+                        &t,
+                        "theme-default",
+                        self.settings
+                            .terminal_theme
+                            .clone()
+                            .unwrap_or_else(|| crate::themes::DEFAULT_NAME.to_owned()),
+                    )
+                    .on_click(cx.listener(|s, _, window, cx| {
+                        s.open_theme_picker(super::ThemeTarget::Default, window, cx)
+                    })),
+                )),
+            ))
+            .child(w::section(
+                &t,
                 "Terminal text",
                 w::card(&t).child(w::row(
                     &t,

@@ -140,12 +140,19 @@ fn actions(
     t: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
+    let alias = host.alias.clone();
     let bar = div()
         .flex_none()
         .flex()
         .gap(px(2.))
         .invisible()
-        .group_hover("host-row", |s| s.visible());
+        .group_hover("host-row", |s| s.visible())
+        .child(icon_button(("theme", ix), "◐", t).on_click(cx.listener(
+            move |shell, _, window, cx| {
+                cx.stop_propagation();
+                shell.open_theme_picker(crate::shell::ThemeTarget::Host(alias.clone()), window, cx);
+            },
+        )));
     match kind {
         RowKind::Connection { confirming } => bar
             .when(confirming, |el| el.visible())

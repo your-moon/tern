@@ -1,6 +1,8 @@
 //! The vault side of logging in: answer prompts from the vault, unlock it when it is locked,
 //! and offer to save what the user typed once the login worked.
 
+use std::time::{Duration, Instant};
+
 use gpui::{AppContext, Context};
 use tern_ssh::{ExposeSecret, Prompt, SecretString};
 use tern_vault::{Key, Vault, VaultError};
@@ -8,6 +10,9 @@ use tern_vault::{Key, Vault, VaultError};
 use super::Session;
 use crate::keeper::{self, Keeper};
 use crate::login::Login;
+
+const QUIET: Duration = Duration::from_millis(500);
+const QUIET_MAX: Duration = Duration::from_secs(3);
 
 /// A question tern is asking for itself, and what to do with the answer.
 pub(super) enum Flow {
@@ -69,11 +74,38 @@ impl Session {
         self.show(&question, cx);
     }
 
+    /// Asks to save a typed secret once the remote has been quiet for [`QUIET`] (at most
+    /// [`QUIET_MAX`] after login), so the question does not land inside the login banner.
     pub(super) fn offer_save(&mut self, cx: &mut Context<Self>) {
-        if let Some((key, secret)) = self.typed.take() {
-            let text = format!("Save {} in tern's vault? (yes/no) ", keeper::describe(&key));
-            self.ask_local(&text, true, Flow::OfferSave(key, secret), cx);
+        if self.typed.is_none() {
+            return;
         }
+        let started = Instant::now();
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(QUIET / 2).await;
+                let quiet = this
+                    .update(cx, |s, _| s.last_output.elapsed() >= QUIET)
+                    .unwrap_or(true);
+                if quiet || started.elapsed() >= QUIET_MAX {
+                    break;
+                }
+            }
+            let _ = this.update(cx, |s, cx| {
+                if s.login.is_some() || s.status != super::Status::Connected {
+                    return;
+                }
+                if let Some((key, secret)) = s.typed.take() {
+                    let lead = if s.ends_line { "" } else { "\r\n" };
+                    let text = format!(
+                        "{lead}Save {} in tern's vault? (yes/no) ",
+                        keeper::describe(&key)
+                    );
+                    s.ask_local(&text, true, Flow::OfferSave(key, secret), cx);
+                }
+            });
+        })
+        .detach();
     }
 
     /// A question finished; `answer` is what was typed, `None` after Ctrl-C.

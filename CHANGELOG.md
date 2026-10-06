@@ -30,6 +30,8 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 - `tern`: text fields (adapted from gpui's input example) with a masked mode that never copies its secret.
 - `tern`: a crash is written to `~/Library/Logs/tern/panic.log` with a backtrace, even when tern was started from Finder or the Dock.
 - `tern`: Settings (⌘, or tern → Settings…) in zeron's layout: Appearance (font size, reduce motion), Terminal (Option as Meta), Connections (list, edit, remove, new), Vault (status, lock now) and About. Escape or Back returns.
+- `tern`: 725 terminal colour schemes (iTerm2-Color-Schemes), a searchable picker with a colour strip per row and live preview (Enter keeps, Escape reverts), a default theme in Settings → Appearance, and a theme per host from the sidebar (◐). The panel around the terminal takes the scheme's background.
+- `tern`: the offer to save a typed password waits for the login banner to finish and starts on its own line.
 - `tern`: a macOS menu bar (Hide, Hide Others, Show All, Quit, Minimize, Zoom) with ⌘Q, ⌘H, ⌥⌘H and ⌘M.
 - `tern-term`: `local_demo <command>` for visual checks; scripted runs never take keyboard focus.
 - Project: craft gates (`clippy -D warnings`, file-size and attribution checks, `cargo deny`), CI, architecture diagram, UI spec and measured performance notes.

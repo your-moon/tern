@@ -4,6 +4,8 @@
 use gpui::{Hsla, hsla, rgb};
 use tern_term::TerminalTheme;
 
+use crate::themes::Scheme;
+
 /// Window frost over the blurred desktop (zeron `Theme::GLASS_ALPHA`, macOS).
 pub const GLASS_ALPHA: f32 = 0.80;
 pub const TITLEBAR_HEIGHT: f32 = 38.0;
@@ -66,7 +68,8 @@ impl Theme {
         }
     }
 
-    pub fn terminal(&self, font_size: f32) -> TerminalTheme {
+    /// The terminal palette: a bundled scheme when one is chosen, else zeron's dark one.
+    pub fn terminal(&self, font_size: f32, scheme: Option<&Scheme>) -> TerminalTheme {
         let mut t = TerminalTheme {
             background: self.terminal_background,
             foreground: self.text,
@@ -76,7 +79,17 @@ impl Theme {
             font_size,
             ..TerminalTheme::default()
         };
-        for (slot, color) in t.ansi.iter_mut().zip(ANSI_DARK) {
+        let ansi = match scheme {
+            Some(s) => {
+                t.background = hex(s.background);
+                t.foreground = hex(s.foreground);
+                t.cursor = hex(s.cursor);
+                t.selection = hex(s.selection).opacity(0.6);
+                s.ansi
+            }
+            None => ANSI_DARK,
+        };
+        for (slot, color) in t.ansi.iter_mut().zip(ansi) {
             *slot = hex(color);
         }
         t
@@ -106,6 +119,6 @@ pub fn flatten(fg: Hsla, bg: Hsla) -> Hsla {
     .into()
 }
 
-fn hex(value: u32) -> Hsla {
+pub fn hex(value: u32) -> Hsla {
     rgb(value).into()
 }

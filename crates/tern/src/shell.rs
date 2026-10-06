@@ -34,6 +34,10 @@ actions!(
 
 #[path = "shell_settings.rs"]
 mod settings_ui;
+#[path = "shell_themes.rs"]
+mod themes_ui;
+
+pub(crate) use themes_ui::ThemeTarget;
 
 #[path = "shell_connections.rs"]
 mod connections_ui;
@@ -80,6 +84,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
             picker: None,
             sidebar_tween: None,
             settings_page: None,
+            theme_picker: None,
         };
         shell.refresh_hosts();
         cx.new(|_| shell)
@@ -112,6 +117,7 @@ pub struct Shell {
     picker: Option<Picker>,
     sidebar_tween: Option<WidthTween>,
     settings_page: Option<settings_ui::Section>,
+    theme_picker: Option<themes_ui::ThemePicker>,
 }
 
 struct Tab {
@@ -162,7 +168,7 @@ impl Shell {
                 .or(spec.known_hosts),
             ..spec
         };
-        let theme = self.terminal_theme();
+        let theme = self.terminal_theme(&alias);
         let session = Session::open(spec, theme, window, cx);
         let meta = self.settings.option_as_meta;
         let view = session.read(cx).view.clone();
@@ -300,18 +306,40 @@ impl Shell {
             )
     }
 
-    fn terminal_theme(&self) -> tern_term::TerminalTheme {
-        self.theme.terminal(self.settings.terminal_font_size)
+    /// The scheme a host's tabs use: its own, else the default, else zeron's (`None`).
+    fn scheme_for(&self, alias: &str) -> Option<&'static crate::themes::Scheme> {
+        self.settings
+            .host_themes
+            .get(alias)
+            .or(self.settings.terminal_theme.as_ref())
+            .and_then(|name| crate::themes::find(name))
     }
 
-    /// Font size applies to every tab at once; each terminal re-measures its cells and the
+    fn terminal_theme(&self, alias: &str) -> tern_term::TerminalTheme {
+        self.theme
+            .terminal(self.settings.terminal_font_size, self.scheme_for(alias))
+    }
+
+    /// Re-applies font and scheme to every open terminal; each re-measures its cells and the
     /// remote side is told the new grid size.
+    fn restyle_tabs(&self, cx: &mut Context<Self>) {
+        for tab in &self.tabs {
+            let theme = self.terminal_theme(&tab.alias);
+            let view = tab.session.read(cx).view.clone();
+            view.update(cx, |v, cx| v.set_theme(theme, cx));
+        }
+    }
+
     fn change_font(&mut self, change: impl FnOnce(&mut Settings), cx: &mut Context<Self>) {
         self.update_settings(change, cx);
-        let theme = self.terminal_theme();
-        for tab in &self.tabs {
-            let view = tab.session.read(cx).view.clone();
-            view.update(cx, |v, cx| v.set_theme(theme.clone(), cx));
+        self.restyle_tabs(cx);
+    }
+
+    /// Background of the main panel: the active tab's scheme, so no seam shows around it.
+    fn panel_background(&self) -> gpui::Hsla {
+        match self.tabs.get(self.active) {
+            Some(tab) => self.terminal_theme(&tab.alias).background,
+            None => self.theme.terminal_background,
         }
     }
 
@@ -414,6 +442,8 @@ impl Render for Shell {
             cx,
         );
         let form = self.render_form(window, cx);
+        let panel_bg = self.panel_background();
+        let theme_picker = self.render_theme_picker(window, cx);
         let sidebar_now = self.sidebar_now();
         if self.sidebar_tween.is_some() {
             if sidebar_now == self.sidebar_target() {
@@ -492,7 +522,7 @@ impl Render for Shell {
                             .rounded(px(PANEL_RADIUS))
                             .border_1()
                             .border_color(t.border)
-                            .bg(t.terminal_background)
+                            .bg(panel_bg)
                             .overflow_hidden()
                             .child(self.panel_content(cx)),
                     )
@@ -500,6 +530,7 @@ impl Render for Shell {
                     .into_any_element(),
             })
             .when_some(form, |el, form| el.child(form))
+            .when_some(theme_picker, |el, p| el.child(p))
             .when_some(self.picker.as_ref(), |el, p| {
                 el.child(picker::render(
                     p,

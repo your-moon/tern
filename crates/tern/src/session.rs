@@ -25,6 +25,10 @@ pub struct Session {
     typed: Option<(tern_vault::Key, SecretString)>,
     /// Entries already answered from the vault on this connection.
     tried: Vec<tern_vault::Key>,
+    /// When the remote last wrote, and whether that ended a line: the save offer waits for a
+    /// quiet moment so it is not interleaved with the login banner.
+    last_output: std::time::Instant,
+    ends_line: bool,
     pub view: Entity<TerminalView>,
     terminal: Entity<Terminal>,
     spec: ConnectSpec,
@@ -61,6 +65,8 @@ impl Session {
                 asking: None,
                 typed: None,
                 tried: Vec::new(),
+                last_output: std::time::Instant::now(),
+                ends_line: true,
                 view,
                 terminal,
                 spec,
@@ -106,7 +112,11 @@ impl Session {
 
     fn on_session_event(&mut self, event: SessionEvent, cx: &mut Context<Self>) {
         match event {
-            SessionEvent::Data(bytes) => self.show(&bytes, cx),
+            SessionEvent::Data(bytes) => {
+                self.last_output = std::time::Instant::now();
+                self.ends_line = bytes.last().is_some_and(|b| *b == b'\n');
+                self.show(&bytes, cx);
+            }
             SessionEvent::Prompt(prompt) => self.on_prompt(prompt, cx),
             SessionEvent::Connected => {
                 self.status = Status::Connected;
