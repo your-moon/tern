@@ -15,6 +15,10 @@ GPG private key (offline, the one thing not on GitHub)
 
 Lose the GPG key and nothing below it can be opened. Keep it backed up offline.
 
+A second copy of the vault passphrase, with these restore steps in its notes, is in Bitwarden
+(`vault.example.com`) as the item **"tern recovery"**. That path needs only the Bitwarden master
+password, not the GPG key.
+
 ## What lives where on this Mac
 
 | What | Where | Synced |
