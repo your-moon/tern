@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- tern app icon master: rounded-square tile in the shell colour (0d0d0d), `>_` in the accent (8b7cf6, theme.rs). -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#0d0d0d"/>
+  <rect x="102" y="102" width="820" height="820" rx="183" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="4"/>
+  <polyline points="330,395 500,512 330,629" fill="none" stroke="#8b7cf6" stroke-width="68" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="560" y1="650" x2="700" y2="650" stroke="#8b7cf6" stroke-width="68" stroke-linecap="round"/>
+</svg>
