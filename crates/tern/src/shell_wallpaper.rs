@@ -244,6 +244,11 @@ impl Shell {
     /// The panel opacity while the picture fills the whole window; `None` in hero-only mode and
     /// without a picture. The smallest alpha at which text, muted and faint text (and the
     /// terminal's own text) keep 4.5:1 over the picture's brightest and darkest regions.
+    /// A wallpaper is showing (hero or full window).
+    pub(crate) fn has_wallpaper(&self) -> bool {
+        self.wp.shown.is_some()
+    }
+
     pub(crate) fn window_fill(&self) -> Option<f32> {
         if !self.settings.wallpaper_fills_window {
             return None;

@@ -317,7 +317,13 @@ impl Session {
 
     pub fn reconnect(&mut self, cx: &mut Context<Self>) {
         self.retry = None;
-        self.show(b"\r\n", cx);
+        // A restored tab shows only its "Press Enter to connect" hint; clear it rather than leave
+        // it above the login banner.
+        if self.status == Status::Idle {
+            self.show(b"\x1b[2J\x1b[3J\x1b[H", cx);
+        } else {
+            self.show(b"\r\n", cx);
+        }
         if self.auto_log && self.log.is_none() {
             self.start_auto_log();
         }

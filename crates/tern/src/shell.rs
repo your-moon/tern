@@ -18,7 +18,7 @@ use crate::session::{Launch, Session, Status};
 use crate::settings::{self, SIDEBAR_DEFAULT, Settings};
 use crate::split::{self, PaneId};
 use crate::tabs::{self, ActivateTab, CloseTab, NextTab, PrevTab, TabInfo};
-use crate::theme::{PANEL_RADIUS, SPACE_SM, Theme, UI_FONT};
+use crate::theme::{Theme, UI_FONT};
 use crate::{sidebar, statusline, titlebar};
 
 actions!(
@@ -640,7 +640,7 @@ impl Render for Shell {
             .relative()
             .flex()
             .flex_col()
-            .bg(t.surface())
+            .bg(self.window_base())
             .children(layers)
             .font_family(UI_FONT)
             .text_color(t.text)
@@ -739,21 +739,13 @@ impl Render for Shell {
                         div()
                             .flex_none()
                             .h_full()
-                            .w(px(sidebar_now))
+                            .w(px(sidebar_now.round()))
                             .overflow_hidden()
                             .children(self.frost(wallpaper_ui::Region::Sidebar))
                             .child(sidebar),
                     )
                     .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .when(sidebar_now < SPACE_SM, |el| el.ml(px(SPACE_SM)))
-                            .mr(px(SPACE_SM))
-                            .mb(px(SPACE_SM))
-                            .rounded(px(PANEL_RADIUS))
-                            .border_1()
-                            .border_color(t.border)
+                        self.main_panel(sidebar_now)
                             .relative()
                             .overflow_hidden()
                             .flex()
