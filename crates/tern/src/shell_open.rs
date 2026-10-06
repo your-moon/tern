@@ -168,3 +168,34 @@ impl Shell {
         self.activate_tab(next, window, cx);
     }
 }
+
+/// 1320×880; debug builds take `TERN_DEV_WINDOW=900x600` so a scripted check can open the
+/// window at its minimum.
+fn start_size() -> (f32, f32) {
+    #[cfg(debug_assertions)]
+    if let Some((w, h)) = std::env::var("TERN_DEV_WINDOW")
+        .ok()
+        .and_then(|v| v.split_once('x').map(|(w, h)| (w.parse(), h.parse())))
+        .and_then(|(w, h)| Some((w.ok()?, h.ok()?)))
+    {
+        return (w, h);
+    }
+    (1320., 880.)
+}
+
+/// Centred on the main display; debug builds take `TERN_DEV_WINDOW_AT=x,y` to place it, e.g. on
+/// a 1× external display.
+pub(super) fn start_bounds(cx: &gpui::App) -> gpui::Bounds<gpui::Pixels> {
+    let (w, h) = start_size();
+    #[allow(unused_mut)]
+    let mut bounds = gpui::Bounds::centered(None, gpui::size(gpui::px(w), gpui::px(h)), cx);
+    #[cfg(debug_assertions)]
+    if let Some((x, y)) = std::env::var("TERN_DEV_WINDOW_AT")
+        .ok()
+        .and_then(|v| v.split_once(',').map(|(x, y)| (x.parse(), y.parse())))
+        .and_then(|(x, y)| Some((x.ok()?, y.ok()?)))
+    {
+        bounds.origin = gpui::point(gpui::px(x), gpui::px(y));
+    }
+    bounds
+}

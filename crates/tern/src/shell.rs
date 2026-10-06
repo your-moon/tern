@@ -3,9 +3,9 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    AnyElement, App, AppContext, Bounds, Context, Entity, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, MouseButton, MouseUpEvent, ParentElement, Render,
-    SharedString, StatefulInteractiveElement, Styled, Subscription, TitlebarOptions, Window,
+    AnyElement, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, MouseButton, MouseUpEvent, ParentElement, Render, SharedString,
+    StatefulInteractiveElement, Styled, Subscription, TitlebarOptions, Window,
     WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowOptions, actions, div, point, px,
     size,
 };
@@ -93,23 +93,8 @@ mod snippets_ui;
 pub(crate) use hostlist::FocusHostSearch;
 pub(crate) use snippets_ui::ToggleSnippets;
 
-/// 1320×880; debug builds take `TERN_DEV_WINDOW=900x600` so a scripted check can open the
-/// window at its minimum.
-fn start_size() -> (f32, f32) {
-    #[cfg(debug_assertions)]
-    if let Some((w, h)) = std::env::var("TERN_DEV_WINDOW")
-        .ok()
-        .and_then(|v| v.split_once('x').map(|(w, h)| (w.parse(), h.parse())))
-        .and_then(|(w, h)| Some((w.ok()?, h.ok()?)))
-    {
-        return (w, h);
-    }
-    (1320., 880.)
-}
-
 pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
-    let (w, h) = start_size();
-    let bounds = Bounds::centered(None, size(px(w), px(h)), cx);
+    let bounds = open::start_bounds(cx);
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         window_min_size: Some(size(px(900.), px(600.))),
