@@ -3,7 +3,7 @@
 #
 #   scripts/bundle-app.sh
 #
-# Signing: always ad-hoc so the bundle runs on this Mac. With TERN_SIGN_ID (a "Developer ID
+# Signing: the local "tern local" identity when present (else ad-hoc), so the bundle runs on this Mac. With TERN_SIGN_ID (a "Developer ID
 # Application: ..." identity) it is signed with the hardened runtime instead; with
 # TERN_NOTARY_PROFILE too (a `xcrun notarytool store-credentials` profile) it is notarised and
 # stapled. Without them those steps are skipped, with a message.
@@ -59,8 +59,16 @@ if [ -n "${TERN_SIGN_ID:-}" ]; then
   codesign --force --deep --options runtime --timestamp -s "$TERN_SIGN_ID" "$app"
   echo "signed with: $TERN_SIGN_ID"
 else
-  codesign --force --deep -s - "$app"
-  echo "ad-hoc signed (set TERN_SIGN_ID to sign with a Developer ID; skipping that)"
+  # A local self-signed identity ("tern local", see scripts/make-local-identity.sh) gives every
+  # build the same designated requirement, so the Keychain's "Always Allow" survives updates;
+  # an ad-hoc signature is a new fingerprint each build and macOS asks for the password again.
+  if security find-identity -p codesigning 2>/dev/null | grep -q '"tern local"'; then
+    codesign --force --deep -s "tern local" "$app"
+    echo "signed with the local identity \"tern local\" (set TERN_SIGN_ID for a Developer ID)"
+  else
+    codesign --force --deep -s - "$app"
+    echo "ad-hoc signed: run scripts/make-local-identity.sh once so Keychain access survives updates"
+  fi
 fi
 
 if [ -n "${TERN_SIGN_ID:-}" ] && [ -n "${TERN_NOTARY_PROFILE:-}" ]; then
