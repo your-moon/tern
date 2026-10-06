@@ -28,6 +28,11 @@ impl Shell {
 
     /// `tern <target>`: a `~/.ssh/config` alias or `user@host:port`.
     pub fn connect_target(&mut self, target: &str, window: &mut Window, cx: &mut Context<Self>) {
+        // A saved connection's name wins, so `tern web-01` and the picker's typed name open the
+        // same host (with its password command, jump host and group) as clicking it does.
+        if let Some(host) = self.hosts.iter().find(|h| h.alias == target).cloned() {
+            return self.connect_host(host, window, cx);
+        }
         match ConnectSpec::parse(target) {
             Ok(spec) => self.open_tab(Launch::Ssh(spec), target.to_string(), window, cx),
             Err(e) => self.fail(e.to_string(), cx),
