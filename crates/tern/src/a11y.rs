@@ -46,6 +46,16 @@ pub trait Accessible: StatefulInteractiveElement + Sized {
             })
     }
 
+    /// Hover text on something that already has visible text (a row's full address).
+    fn hint(self, text: impl Into<SharedString>, t: &Theme) -> Self {
+        let text = text.into();
+        let theme = *t;
+        self.tooltip(move |_, cx: &mut App| -> AnyView {
+            let (text, theme) = (text.clone(), theme);
+            cx.new(|_| Tip { text, theme }).into()
+        })
+    }
+
     /// A switch that is on or off, announced as `label`.
     fn switch(self, label: impl Into<SharedString>, on: bool) -> Self {
         self.role(Role::Switch)

@@ -30,6 +30,13 @@ impl Shell {
         cx.notify();
     }
 
+    /// Standard-density mode for this frame, from the monitor the window is on right now.
+    pub(super) fn sync_density(&self, window: &Window) {
+        crate::theme::set_low_dpi(
+            self.settings.sharp_text && window.scale_factor() < crate::theme::LOW_DPI_BELOW,
+        );
+    }
+
     /// Text fields read their colours from this global, so open ones follow the theme.
     pub(crate) fn install_input_colors(&self, cx: &mut Context<Self>) {
         let t = self.theme;

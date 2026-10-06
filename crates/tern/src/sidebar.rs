@@ -104,6 +104,8 @@ pub fn render(
         .flex()
         .flex_col()
         .px(px(8.));
+    // What a row has to lay out: the sidebar less list padding, row padding, dot and gaps.
+    let inner = s.width - 61.;
     let one = |scope: &'static str, ix: usize, top: bool, cx: &mut Context<Shell>| {
         let host = &s.hosts[ix];
         let status = s
@@ -113,7 +115,7 @@ pub fn render(
             .find(|tab| tab.alias == host.alias)
             .map(|tab| &tab.status);
         let active = s.active_alias == Some(host.alias.as_str());
-        row(scope, ix, host, status, active, top, t, cx)
+        row(scope, ix, host, status, active, top, inner, t, cx)
     };
     if !s.query.trim().is_empty() {
         let found = search(s.query, s.connections);
@@ -293,7 +295,7 @@ fn header(t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
             div()
                 .text_size(px(13.))
                 .font_weight(gpui::FontWeight::MEDIUM)
-                .text_color(t.text.opacity(0.8))
+                .text_color(t.text.opacity(crate::theme::by_dpi(0.8, 0.9)))
                 .child("Hosts"),
         )
         .child(
@@ -314,7 +316,7 @@ fn section_header(
     cx: &mut Context<Shell>,
     on_toggle: impl Fn(&mut Shell, &mut Context<Shell>) + 'static,
 ) -> gpui::Stateful<gpui::Div> {
-    let faint = t.muted.opacity(0.5);
+    let faint = t.muted.opacity(crate::theme::by_dpi(0.7, 1.0));
     let id = id.into();
     let key = format!("section-{id}");
     div()
@@ -358,7 +360,12 @@ fn status_dot(status: Option<&Status>, t: &Theme) -> impl IntoElement + use<> {
         .items_center()
         .justify_center()
         .when_some(color, |el, c| {
-            el.child(div().size(px(6.)).rounded_full().bg(c))
+            el.child(
+                div()
+                    .size(px(crate::theme::fit(13., 6.)))
+                    .rounded_full()
+                    .bg(c),
+            )
         })
 }
 
@@ -380,6 +387,7 @@ fn row(
     status: Option<&Status>,
     active: bool,
     top: bool,
+    inner: f32,
     t: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
@@ -387,6 +395,8 @@ fn row(
     let menu_host = host.clone();
     let more_host = host.clone();
     let group: SharedString = format!("host-row-{scope}-{ix}").into();
+    let meta_size = if crate::theme::low_dpi() { 12. } else { 11. };
+    let meta = fit_meta(host, inner, meta_size);
     div()
         .id((scope, ix))
         .group(group.clone())
@@ -422,17 +432,27 @@ fn row(
                 .truncate()
                 .text_size(px(13.))
                 .line_height(px(17.))
-                .text_color(if active { t.text } else { t.text.opacity(0.8) })
+                .text_color(if active {
+                    t.text
+                } else {
+                    t.text.opacity(crate::theme::by_dpi(0.8, 0.9))
+                })
                 .child(SharedString::from(tabs::middle_ellipsis(&host.alias, 26))),
         )
-        .child(
-            div()
-                .flex_none()
-                .max_w(px(110.))
-                .truncate()
-                .text_size(px(11.))
-                .text_color(t.muted.opacity(0.5))
-                .child(SharedString::from(short_address(host))),
+        // The meta is only drawn whole: `fit_meta` already dropped what would not fit, so the
+        // name is what truncates, never an address cut mid-octet.
+        .when_some(meta.clone(), |el, text| {
+            el.child(
+                div()
+                    .flex_none()
+                    .text_size(px(meta_size))
+                    .text_color(t.muted.opacity(crate::theme::by_dpi(0.6, 0.85)))
+                    .child(SharedString::from(text)),
+            )
+        })
+        .when(
+            meta.as_deref() != Some(short_address(host).as_str()),
+            |el| el.hint(address(host), t),
         )
         // zeron's hover corner: floats over the end of the row, so it reserves no width.
         .child(
@@ -456,7 +476,11 @@ fn row(
                     cx.stop_propagation();
                     shell.open_host_menu(&more_host, ix, e.position(), cx);
                 }))
-                .child(icon(icons::MORE).size(px(13.)).text_color(t.muted)),
+                .child(
+                    icon(icons::MORE)
+                        .size(px(crate::theme::fit(19., 13.)))
+                        .text_color(t.muted),
+                ),
         )
 }
 
@@ -481,7 +505,7 @@ fn footer(t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
                 .cursor_pointer()
                 .text_size(px(13.))
                 .font_weight(gpui::FontWeight::MEDIUM)
-                .text_color(t.text.opacity(0.8))
+                .text_color(t.text.opacity(crate::theme::by_dpi(0.8, 0.9)))
                 .hover_fade("footer-sync", gpui::transparent_black(), t.ink(0.09))
                 .on_click(cx.listener(|s, _, w, cx| s.open_settings_at_sync(w, cx)))
                 .child(icon(icons::CLOUD).size(px(16.)).text_color(t.muted))
@@ -514,7 +538,11 @@ pub fn icon_button(
         .cursor_pointer()
         .hover_fade(key, gpui::transparent_black(), t.ink(0.11))
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        .child(icon(path).size(px(icon_size)).text_color(t.muted))
+        .child(
+            icon(path)
+                .size(px(crate::theme::fit(box_size, icon_size)))
+                .text_color(t.muted),
+        )
 }
 
 /// `user@host` with the port only when it is not 22, as `ssh` would be typed.
@@ -528,6 +556,25 @@ pub fn address(host: &HostEntry) -> String {
         22 => format!("{user}{}", host.host_name),
         port => format!("{user}{}:{port}", host.host_name),
     }
+}
+
+/// The widest the trailing meta may be, as a share of the row's inner width.
+const META_SHARE: f32 = 0.55;
+
+/// The meta that fits in a row `inner` px wide at `size` px text: the address, else the host
+/// without its port, else nothing. An address is never cut, so an IP never loses an octet; the
+/// full text stays in the row's hover tip. Digits in Geist run about 0.6 em.
+fn fit_meta(host: &HostEntry, inner: f32, size: f32) -> Option<String> {
+    let budget = inner * META_SHARE;
+    let fits = |s: &str| s.chars().count() as f32 * size * 0.6 <= budget;
+    let full = short_address(host);
+    if full.is_empty() {
+        return None;
+    }
+    if fits(&full) {
+        return Some(full);
+    }
+    (host.host_name != host.alias && fits(&host.host_name)).then(|| host.host_name.clone())
 }
 
 /// The trailing meta: just the host (and a non-default port), as the user is usually the same.
@@ -568,6 +615,34 @@ mod tests {
         let mut same = host(None, 22);
         same.host_name = "web".into();
         assert_eq!(short_address(&same), "");
+    }
+
+    fn entry(alias: &str, host_name: &str, port: u16) -> HostEntry {
+        HostEntry {
+            alias: alias.into(),
+            host_name: host_name.into(),
+            port,
+            ..host(None, port)
+        }
+    }
+
+    #[test]
+    fn meta_is_dropped_to_the_host_and_then_to_nothing_never_cut() {
+        let ip = entry("prod", "103.50.205.106", 2022);
+        // Wide row: the whole address.
+        assert_eq!(
+            fit_meta(&ip, 400., 12.).as_deref(),
+            Some("103.50.205.106:2022")
+        );
+        // The default 256 sidebar: the port goes first.
+        assert_eq!(
+            fit_meta(&ip, 256. - 61., 12.).as_deref(),
+            Some("103.50.205.106")
+        );
+        // Too narrow for even the host.
+        assert_eq!(fit_meta(&ip, 120., 12.), None);
+        // Nothing to say when the host only repeats the name.
+        assert_eq!(fit_meta(&entry("web", "web", 22), 400., 12.), None);
     }
 
     fn conn(name: &str, group: Option<&str>, tags: &[&str]) -> Connection {

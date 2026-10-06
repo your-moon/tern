@@ -582,6 +582,7 @@ impl Render for Shell {
         if window.focused(cx).is_none() {
             window.focus(&self.focus, cx);
         }
+        self.sync_density(window);
         let t = self.theme;
         let infos = self.tab_infos(cx);
         let active_alias = infos.get(self.active).map(|i| i.alias.clone());
@@ -644,7 +645,7 @@ impl Render for Shell {
             .relative()
             .flex()
             .flex_col()
-            .bg(t.glass())
+            .bg(t.surface(wallpaper))
             .children(layers)
             .font_family(UI_FONT)
             .text_color(t.text)

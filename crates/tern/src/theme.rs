@@ -2,7 +2,9 @@
 // crates/ui/src/theme.rs (MIT).
 //! The Zeron Dark and Light palettes and layout tokens, values copied from zeron's source.
 
-use gpui::{Hsla, hsla, rgb};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use gpui::{Hsla, Pixels, hsla, px, rgb};
 use tern_term::TerminalTheme;
 
 use crate::themes::Scheme;
@@ -16,6 +18,49 @@ pub const SPACE_SM: f32 = 8.0;
 pub const UI_FONT: &str = "Geist";
 pub const MONO_FONT: &str = "Geist Mono";
 pub const CONTROL_RADIUS: f32 = 6.0;
+
+/// Whether the window is on a standard-density display (scale factor below 1.5) with sharper
+/// text on. Set once per frame by `Shell::render`, so moving the window to another monitor
+/// switches modes on the next frame; Retina never sees any of the helpers below change a value.
+static LOW_DPI: AtomicBool = AtomicBool::new(false);
+
+/// The scale factor under which a display counts as standard density.
+pub const LOW_DPI_BELOW: f32 = 1.5;
+
+pub fn set_low_dpi(on: bool) {
+    LOW_DPI.store(on, Ordering::Relaxed);
+}
+
+pub fn low_dpi() -> bool {
+    LOW_DPI.load(Ordering::Relaxed)
+}
+
+/// `v` rounded to a whole pixel at 1x, where a fraction puts glyph and icon edges on half
+/// pixels; untouched on Retina.
+pub fn snap(v: f32) -> f32 {
+    if low_dpi() { v.round() } else { v }
+}
+
+/// `snap` as `Pixels`.
+pub fn crisp(v: f32) -> Pixels {
+    px(snap(v))
+}
+
+/// An icon size that centres in `outer` on whole pixels: at 1x an odd gap between box and icon
+/// would leave the icon on a half pixel, so the icon grows by one.
+pub fn fit(outer: f32, size: f32) -> f32 {
+    if low_dpi() && ((outer - size).abs() % 2.0) > 0.5 {
+        size + 1.0
+    } else {
+        size
+    }
+}
+
+/// `retina` normally, `standard` on a 1x display: used for opacities that need a step more
+/// contrast where grayscale-only text is thin.
+pub fn by_dpi(retina: f32, standard: f32) -> f32 {
+    if low_dpi() { standard } else { retina }
+}
 
 const ANSI_DARK: [u32; 16] = [
     0x242424, 0xf87171, 0x4ade80, 0xfacc15, 0x60a5fa, 0xc084fc, 0x22d3ee, 0xd4d4d8, 0x52525b,
@@ -179,6 +224,16 @@ impl Theme {
     /// The shell surface as frost: the blurred desktop shows through at 1 - `GLASS_ALPHA`.
     pub fn glass(&self) -> Hsla {
         self.shell.opacity(GLASS_ALPHA)
+    }
+
+    /// The window fill: frost, except on a standard-density display with no wallpaper, where
+    /// the translucent fill lowers text contrast and the plain shell colour is used.
+    pub fn surface(&self, wallpaper: bool) -> Hsla {
+        if low_dpi() && !wallpaper {
+            self.shell
+        } else {
+            self.glass()
+        }
     }
 }
 

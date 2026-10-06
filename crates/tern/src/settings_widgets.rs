@@ -185,7 +185,7 @@ pub fn button(
         .min_h(px(32.))
         .px(px(10.))
         .py(px(5.))
-        .text_size(px(12.5))
+        .text_size(crate::theme::crisp(12.5))
         .cursor_pointer()
         .hover_fade(key, t.ink(0.06), t.ink(0.10))
         .text_color(t.text)

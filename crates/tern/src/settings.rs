@@ -53,6 +53,9 @@ pub struct Settings {
     pub appearance: AppearanceMode,
     /// The strip under the terminal: host, state, session time.
     pub show_status_line: bool,
+    /// On a standard-density (1x) display: whole-pixel sizes, 1 px icon strokes, an opaque
+    /// window fill and stronger muted text, since the text there is grayscale-only and thin.
+    pub sharp_text: bool,
     pub sidebar_width: f32,
     pub sidebar_collapsed: bool,
     pub terminal_font_size: f32,
@@ -123,6 +126,7 @@ impl Default for Settings {
         Self {
             appearance: AppearanceMode::System,
             show_status_line: true,
+            sharp_text: true,
             sidebar_width: SIDEBAR_DEFAULT,
             sidebar_collapsed: false,
             terminal_font_size: FONT_DEFAULT,
@@ -324,6 +328,7 @@ mod tests {
         let saved = Settings {
             appearance: AppearanceMode::Light,
             show_status_line: false,
+            sharp_text: false,
             sidebar_width: 312.0,
             sidebar_collapsed: true,
             terminal_font_size: 15.0,
@@ -395,6 +400,12 @@ mod tests {
         let loaded = Settings::load(&dir);
         assert_eq!(loaded.appearance, AppearanceMode::System);
         assert!(loaded.show_status_line);
+        assert!(
+            loaded.sharp_text,
+            "a file from before the toggle keeps sharp text on"
+        );
+        std::fs::write(dir.join(FILE_NAME), r#"{"sharpText":false}"#).unwrap();
+        assert!(!Settings::load(&dir).sharp_text);
         std::fs::write(dir.join(FILE_NAME), r#"{"appearance":"light"}"#).unwrap();
         assert_eq!(Settings::load(&dir).appearance, AppearanceMode::Light);
     }

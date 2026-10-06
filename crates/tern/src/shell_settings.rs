@@ -188,6 +188,7 @@ impl Shell {
                 )));
         let reduce = self.settings.reduce_motion;
         let show_status = self.settings.show_status_line;
+        let sharp = self.settings.sharp_text;
         let mut appearance_modes = div().flex().gap(px(6.));
         for (id, label, mode) in [
             ("appearance-system", "System", AppearanceMode::System),
@@ -232,6 +233,23 @@ impl Shell {
                             s.update_settings(|st| st.show_status_line = !st.show_status_line, cx)
                         }))
                         .child(w::toggle(&t, show_status, "status-line")),
+                ))
+                .child(w::row(
+                    &t,
+                    false,
+                    "Sharper text on standard displays",
+                    Some(
+                        "On 1x monitors: whole-pixel sizes, thinner icons, an opaque window and stronger muted text"
+                            .into(),
+                    ),
+                    div()
+                        .id("toggle-sharp-text")
+                        .switch("Sharper text on standard displays", sharp)
+                        .cursor_pointer()
+                        .on_click(cx.listener(|s, _, _, cx| {
+                            s.update_settings(|st| st.sharp_text = !st.sharp_text, cx)
+                        }))
+                        .child(w::toggle(&t, sharp, "sharp-text")),
                 ))
                 .child(w::row(
                     &t,

@@ -18,6 +18,10 @@ macro_rules! icon_assets {
 
         impl AssetSource for Assets {
             fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
+                if let Some(rest) = path.strip_prefix(ICONS_1X) {
+                    let source = self.load(&format!("icons/{rest}"))?;
+                    return Ok(source.map(|b| Cow::Owned(snap_strokes(&b))));
+                }
                 Ok(match path {
                     $(concat!("icons/", $file, ".svg") => Some(Cow::Borrowed(
                         include_bytes!(concat!("../assets/icons/", $file, ".svg")).as_slice(),
@@ -35,6 +39,32 @@ macro_rules! icon_assets {
             }
         }
     };
+}
+
+/// Path prefix of the 1x variant of every icon: the same SVG with its strokes snapped.
+const ICONS_1X: &str = "icons@1x/";
+
+/// Solar strokes are 1.25 to 1.75 wide, so at 1x each straddles two pixel rows and the icon
+/// blurs. Every width becomes 1, which lands on whole pixels at the sizes tern draws icons.
+fn snap_strokes(svg: &[u8]) -> Vec<u8> {
+    const KEY: &str = "stroke-width=\"";
+    let text = String::from_utf8_lossy(svg);
+    let mut out = String::with_capacity(text.len());
+    let mut rest: &str = &text;
+    while let Some(at) = rest.find(KEY) {
+        let value = at + KEY.len();
+        out.push_str(&rest[..value]);
+        rest = &rest[value..];
+        match rest.find('"') {
+            Some(end) => {
+                out.push('1');
+                rest = &rest[end..];
+            }
+            None => break,
+        }
+    }
+    out.push_str(rest);
+    out.into_bytes()
 }
 
 icon_assets!(
@@ -65,7 +95,15 @@ icon_assets!(
 );
 
 pub fn icon(path: &'static str) -> Svg {
-    svg().path(path).flex_none()
+    svg().path(variant(path)).flex_none()
+}
+
+/// The 1x variant of `path` on a standard-density display, `path` itself otherwise.
+fn variant(path: &'static str) -> SharedString {
+    match path.strip_prefix("icons/") {
+        Some(rest) if crate::theme::low_dpi() => format!("{ICONS_1X}{rest}").into(),
+        _ => path.into(),
+    }
 }
 
 /// zeron's sidebar glyph: a rounded frame with a panel 5.5 wide when the sidebar is open and
@@ -96,4 +134,30 @@ pub fn sidebar_glyph(open: bool, size: f32, color: Hsla) -> Div {
         .size(px(size))
         .child(frame)
         .child(panel)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strokes_snap_to_one_and_the_rest_is_untouched() {
+        let svg = br#"<svg stroke-width="1.5"><path d="M1.5 2" stroke-width="1.25"/><g stroke-width="1.75"/></svg>"#;
+        let got = String::from_utf8(snap_strokes(svg)).unwrap();
+        assert_eq!(
+            got,
+            r#"<svg stroke-width="1"><path d="M1.5 2" stroke-width="1"/><g stroke-width="1"/></svg>"#
+        );
+    }
+
+    #[test]
+    fn the_1x_path_serves_the_snapped_file() {
+        let a = Assets;
+        let plain = a.load(PLUS).unwrap().unwrap();
+        let sharp = a.load("icons@1x/plus.svg").unwrap().unwrap();
+        assert!(String::from_utf8_lossy(&plain).contains("1.75"));
+        assert!(!String::from_utf8_lossy(&sharp).contains("1.75"));
+        assert!(a.load("icons@1x/nope.svg").unwrap().is_none());
+    }
 }
