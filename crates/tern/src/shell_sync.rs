@@ -17,7 +17,7 @@ use tern_ssh::SecretString;
 use tern_sync::{Files, Gist, Plan, TokenSource};
 use tern_vault::{Vault, VaultError};
 
-use super::Shell;
+use super::{Shell, ToastKind};
 use crate::keeper::Keeper;
 use crate::settings_widgets as w;
 use crate::text_input::{InputColors, TextInput};
@@ -103,20 +103,19 @@ impl Shell {
             return;
         };
         let token = ui.token_input.read(cx).text().to_owned();
-        ui.message = Some(match tern_sync::save_token(&token) {
-            Ok(()) => (true, "Token saved in the Keychain.".into()),
-            Err(e) => (false, e.to_string()),
-        });
+        let saved = tern_sync::save_token(&token);
         ui.token_input.update(cx, |i, cx| i.set_text("", cx));
+        match saved {
+            Ok(()) => self.notify_toast(ToastKind::Positive, "GitHub token saved", cx),
+            Err(e) => self.notify_toast(ToastKind::Critical, e.to_string(), cx),
+        }
         self.refresh_token_source(cx);
     }
 
     fn forget_token(&mut self, cx: &mut Context<Self>) {
-        if let Some(ui) = self.sync_ui.as_mut() {
-            ui.message = Some(match tern_sync::forget_token() {
-                Ok(()) => (true, "Token removed from the Keychain.".into()),
-                Err(e) => (false, e.to_string()),
-            });
+        match tern_sync::forget_token() {
+            Ok(()) => self.notify_toast(ToastKind::Default, "GitHub token removed", cx),
+            Err(e) => self.notify_toast(ToastKind::Critical, e.to_string(), cx),
         }
         self.refresh_token_source(cx);
     }
@@ -135,15 +134,15 @@ impl Shell {
         let passphrase = Some(ui.pass_input.read(cx).text().to_owned()).filter(|p| !p.is_empty());
         let open = Keeper::take(cx);
         if open.is_none() && passphrase.is_none() {
-            ui.message = Some((
-                false,
-                "Enter the vault passphrase: it encrypts everything sent to GitHub.".into(),
-            ));
-            cx.notify();
+            self.notify_toast(
+                ToastKind::Critical,
+                "Enter the vault passphrase first: it encrypts what goes to GitHub",
+                cx,
+            );
             return;
         }
         ui.busy = true;
-        ui.message = Some((true, "Syncing…".into()));
+        ui.message = None;
         ui.conflict = false;
         cx.notify();
         let work =
@@ -160,22 +159,33 @@ impl Shell {
                 let pulled = matches!(result, Ok(Outcome::Pulled));
                 if let Some(ui) = s.sync_ui.as_mut() {
                     ui.busy = false;
-                    ui.message = Some(match &result {
-                        Ok(Outcome::UpToDate) => (true, "Already up to date.".into()),
-                        Ok(Outcome::Pushed) => (true, "Uploaded to GitHub.".into()),
-                        Ok(Outcome::Pulled) => (true, "Downloaded from GitHub.".into()),
-                        Ok(Outcome::Conflict) => (
+                    // A conflict needs a choice, so it stays on the page; the rest is feedback.
+                    ui.message = match &result {
+                        Ok(Outcome::Conflict) => Some((
                             false,
                             "This Mac and GitHub both changed since the last sync. Choose which \
                              one to keep."
                                 .into(),
-                        ),
-                        Err(e) => (false, e.clone()),
-                    });
+                        )),
+                        _ => None,
+                    };
                     ui.conflict = matches!(result, Ok(Outcome::Conflict));
                     if result.is_ok() {
                         ui.pass_input.update(cx, |i, cx| i.set_text("", cx));
                     }
+                }
+                match &result {
+                    Ok(Outcome::UpToDate) => {
+                        s.notify_toast(ToastKind::Default, "Already up to date", cx)
+                    }
+                    Ok(Outcome::Pushed) => {
+                        s.notify_toast(ToastKind::Positive, "Uploaded to GitHub", cx)
+                    }
+                    Ok(Outcome::Pulled) => {
+                        s.notify_toast(ToastKind::Positive, "Downloaded from GitHub", cx)
+                    }
+                    Ok(Outcome::Conflict) => {}
+                    Err(e) => s.notify_toast(ToastKind::Critical, e.clone(), cx),
                 }
                 if pulled {
                     s.reload_from_disk(cx);

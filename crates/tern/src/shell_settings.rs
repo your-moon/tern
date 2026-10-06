@@ -442,9 +442,11 @@ impl Shell {
         };
         let lock = w::button(&t, "vault-lock", "Lock now")
             .when(Keeper::len(cx).is_none(), |el| el.opacity(0.4))
-            .on_click(cx.listener(|_, _, _, cx| {
-                Keeper::lock(cx);
-                cx.notify();
+            .on_click(cx.listener(|s, _, _, cx| {
+                if Keeper::len(cx).is_some() {
+                    Keeper::lock(cx);
+                    s.notify_toast(super::ToastKind::Default, "Vault locked", cx);
+                }
             }));
         w::page_column()
             .child(w::page_header(&t, "Vault"))

@@ -10,7 +10,7 @@ use gpui::{
 use tern_ssh::SecretString;
 use tern_vault::{Key, Vault, VaultError};
 
-use super::Shell;
+use super::{Shell, Toast, ToastKind};
 use crate::connections::{self, Connection, Draft};
 use crate::keeper::Keeper;
 use crate::text_input::{InputColors, TextInput};
@@ -258,6 +258,11 @@ impl Shell {
             return cx.notify();
         }
         if password.is_empty() {
+            self.notify_toast(
+                ToastKind::Positive,
+                format!("Saved {}", draft.name.trim()),
+                cx,
+            );
             return self.close_form(window, cx);
         }
         if let Some(form) = self.form.as_mut() {
@@ -331,7 +336,10 @@ impl Shell {
                     Keeper::put(v, cx);
                 }
                 match result {
-                    Ok(()) => shell.close_form(window, cx),
+                    Ok(()) => {
+                        shell.notify_toast(ToastKind::Positive, "Password saved in the vault", cx);
+                        shell.close_form(window, cx);
+                    }
                     Err(e) => {
                         if let Some(form) = shell.form.as_mut() {
                             form.busy = false;
@@ -369,10 +377,32 @@ impl Shell {
         };
         match saved {
             Ok(()) => {
+                let removed = self.connections.get(ix).cloned();
                 self.connections = next;
                 self.refresh_hosts();
+                if let Some(c) = removed {
+                    let name = c.name.clone();
+                    self.toast(
+                        Toast::new(ToastKind::Default, format!("Removed {name}")).action(
+                            "Undo",
+                            move |s, _, cx| {
+                                let at = ix.min(s.connections.len());
+                                let mut next = s.connections.clone();
+                                next.insert(at, c.clone());
+                                if let Some(dir) = crate::settings::dir()
+                                    && connections::save(&dir, &next).is_ok()
+                                {
+                                    s.connections = next;
+                                    s.refresh_hosts();
+                                    cx.notify();
+                                }
+                            },
+                        ),
+                        cx,
+                    );
+                }
             }
-            Err(e) => self.error = Some(e),
+            Err(e) => self.notify_toast(ToastKind::Critical, e, cx),
         }
         cx.notify();
     }

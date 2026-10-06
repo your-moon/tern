@@ -36,6 +36,10 @@ actions!(
 mod settings_ui;
 #[path = "shell_sync.rs"]
 mod sync_ui;
+#[path = "shell_toast.rs"]
+mod toast;
+
+pub(crate) use toast::{Kind as ToastKind, Toast};
 #[path = "shell_themes.rs"]
 mod themes_ui;
 
@@ -91,6 +95,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
             record_notice: None,
             record_interceptor: None,
             sync_ui: None,
+            toasts: toast::Toasts::new(),
         };
         shell.refresh_hosts();
         cx.new(|_| shell)
@@ -129,6 +134,7 @@ pub struct Shell {
     record_notice: Option<String>,
     record_interceptor: Option<Subscription>,
     sync_ui: Option<sync_ui::SyncUi>,
+    toasts: toast::Toasts,
 }
 
 struct Tab {
@@ -184,7 +190,33 @@ impl Shell {
         let meta = self.settings.option_as_meta;
         let view = session.read(cx).view.clone();
         view.update(cx, |v, _| v.set_option_as_meta(meta));
-        let repaint = cx.observe(&session, |_, _, cx| cx.notify());
+        // A tab that is not in front can drop without anyone seeing its terminal; say so, with
+        // a way to get to it.
+        let mut last = Status::Connecting;
+        let repaint =
+            cx.observe(&session, move |shell, session, cx| {
+                let status = session.read(cx).status.clone();
+                if status == Status::Closed && last != Status::Closed {
+                    let ix = shell.tabs.iter().position(|t| t.session == session);
+                    if let Some(ix) =
+                        ix.filter(|ix| *ix != shell.active || shell.settings_page.is_some())
+                    {
+                        let alias = shell.tabs[ix].alias.clone();
+                        shell.toast(
+                            Toast::new(ToastKind::Critical, format!("{alias} disconnected"))
+                                .action("Show", move |s, window, cx| {
+                                    if let Some(ix) = s.tabs.iter().position(|t| t.alias == alias) {
+                                        s.settings_page = None;
+                                        s.activate_tab(ix, window, cx);
+                                    }
+                                }),
+                            cx,
+                        );
+                    }
+                }
+                last = status;
+                cx.notify();
+            });
         self.tabs.push(Tab {
             alias,
             session,
@@ -460,6 +492,7 @@ impl Render for Shell {
         let form = self.render_form(window, cx);
         let panel_bg = self.panel_background();
         let theme_picker = self.render_theme_picker(window, cx);
+        let toast = self.render_toast(window, cx);
         let sidebar_now = self.sidebar_now();
         if self.sidebar_tween.is_some() {
             if sidebar_now == self.sidebar_target() {
@@ -547,6 +580,7 @@ impl Render for Shell {
             })
             .when_some(form, |el, form| el.child(form))
             .when_some(theme_picker, |el, p| el.child(p))
+            .when_some(toast, |el, t| el.child(t))
             .when_some(self.picker.as_ref(), |el, p| {
                 el.child(picker::render(
                     p,
