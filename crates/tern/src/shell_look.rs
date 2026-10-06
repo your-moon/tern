@@ -17,14 +17,14 @@ impl Shell {
 
     /// Switches the palette when the chosen appearance (or the system's, for System) differs
     /// from the one showing, and restyles everything that holds a colour: open terminals, text
-    /// fields, the wallpaper render.
+    /// fields, the wallpaper tint.
     pub(crate) fn apply_appearance(&mut self, cx: &mut Context<Self>) {
         let light = self.settings.appearance.is_light(self.system_light);
         if light == self.theme.light {
             return;
         }
         self.theme = Theme::zeron(light);
-        self.refresh_accent(cx);
+        self.refresh_theme(cx);
         self.install_input_colors(cx);
         self.restyle_tabs(cx);
         cx.notify();
@@ -49,13 +49,8 @@ impl Shell {
     }
 
     pub(super) fn terminal_theme(&self, alias: &str) -> tern_term::TerminalTheme {
-        let mut theme = self
-            .theme
-            .terminal(self.settings.terminal_font_size, self.scheme_for(alias));
-        if self.has_wallpaper() {
-            theme.background_alpha = crate::theme::GLASS_ALPHA;
-        }
-        theme
+        self.theme
+            .terminal(self.settings.terminal_font_size, self.scheme_for(alias))
     }
 
     /// Re-applies font and scheme to every open terminal; each re-measures its cells and the

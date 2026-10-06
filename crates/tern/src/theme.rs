@@ -105,7 +105,7 @@ pub fn titlebar_content_start(fullscreen: bool) -> f32 {
     if fullscreen { 12.0 } else { 88.0 }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Theme {
     /// Whether this is the light palette.
     pub light: bool,
@@ -127,6 +127,9 @@ pub struct Theme {
     /// the panel's text show through unblurred.
     pub popup: Hsla,
     pub terminal_background: Hsla,
+    /// The wallpaper tint mixed into the surfaces, when theme colours from the wallpaper are
+    /// on (see `theme_tint`); terminal schemes are mixed with it too.
+    pub tint: Option<[u8; 3]>,
 }
 
 impl Theme {
@@ -156,6 +159,7 @@ impl Theme {
             hairline: hairline_for(true, 0.06),
             popup: hex(0xffffff),
             terminal_background: hex(0xfafafa),
+            tint: None,
         }
     }
 
@@ -175,6 +179,7 @@ impl Theme {
             hairline: hairline_for(false, 0.06),
             popup: hsla(0.0, 0.0, 0.09, 1.0),
             terminal_background: hex(0x090909),
+            tint: None,
         }
     }
 
@@ -203,6 +208,9 @@ impl Theme {
         for (slot, color) in t.ansi.iter_mut().zip(ansi) {
             *slot = hex(color);
         }
+        if let Some(tint) = self.tint {
+            crate::theme_tint::tint_terminal(&mut t, tint, self.light);
+        }
         t
     }
 
@@ -226,14 +234,10 @@ impl Theme {
         self.shell.opacity(GLASS_ALPHA)
     }
 
-    /// The window fill: frost, except on a standard-density display with no wallpaper, where
-    /// the translucent fill lowers text contrast and the plain shell colour is used.
-    pub fn surface(&self, wallpaper: bool) -> Hsla {
-        if low_dpi() && !wallpaper {
-            self.shell
-        } else {
-            self.glass()
-        }
+    /// The window fill: frost, except on a standard-density display, where the translucent
+    /// fill lowers text contrast and the plain shell colour is used.
+    pub fn surface(&self) -> Hsla {
+        if low_dpi() { self.shell } else { self.glass() }
     }
 }
 

@@ -1,7 +1,7 @@
 // CubicBezier and the crossfade timing are zeron's (crates/ui/src/motion.rs WALLPAPER_CROSSFADE,
 // MIT); the history and contrast guard follow crates/ui/src/settings/wallpaper.rs (MIT).
-//! The window wallpaper: loading it off the UI thread, drawing it behind everything with a
-//! crossfade on change, keeping terminal text readable over it, and the Settings controls.
+//! The wallpaper: loading it off the UI thread, drawing it as the hero of the empty view with a
+//! crossfade on change, taking the window's colours from it, and the Settings controls.
 
 use crate::a11y::Accessible as _;
 use std::path::{Path, PathBuf};
@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use gpui::AppContext as _;
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    AnyElement, Context, FontWeight, Hsla, InteractiveElement, IntoElement, ParentElement,
+    AnyElement, Context, FontWeight, InteractiveElement, IntoElement, ParentElement,
     StatefulInteractiveElement, Styled, Window, div, px,
 };
 
@@ -19,21 +19,19 @@ use super::toast::CubicBezier;
 use crate::settings_widgets as w;
 use crate::theme::Theme;
 use crate::wallpaper::{self, Prepared};
-use crate::wallpaper_colors;
 use crate::wallpaper_fx::Effect;
 
 /// zeron `WALLPAPER_CROSSFADE`: an immediate attack with a short, soft landing.
 pub const CROSSFADE: Duration = Duration::from_millis(180);
 const CROSSFADE_CURVE: CubicBezier = CubicBezier::new(1.0 / 3.0, 1.0, 2.0 / 3.0, 1.0);
-/// WCAG contrast terminal text keeps over the wallpaper.
-pub const TEXT_CONTRAST: f32 = 4.5;
-/// Share of a text/background pair's own contrast the wallpaper may not take away.
-const KEEP: f32 = 0.85;
+/// zeron `NEW_THREAD_BACKGROUND_VIEWPORT_RATIO` / `_MAX_HEIGHT` (crates/ui/src/shell.rs:1064-1065):
+/// the hero is this share of the window's height, up to this many pixels.
+const HERO_VIEWPORT_RATIO: f32 = 0.72;
+const HERO_MAX_HEIGHT: f32 = 760.0;
 
-/// The contrast a pair must keep over the wallpaper: 85% of what it has without one, capped at
-/// WCAG 4.5 (a pair that starts above 4.5/0.85 only has to stay at 4.5).
-fn guard_target(base: f32) -> f32 {
-    (base * KEEP).min(TEXT_CONTRAST)
+/// zeron `new_thread_background_height` (shell.rs:1322).
+pub(crate) fn hero_height(viewport_height: f32) -> f32 {
+    (viewport_height.max(0.0) * HERO_VIEWPORT_RATIO).min(HERO_MAX_HEIGHT)
 }
 
 /// What the window should be showing: a file with an effect.
@@ -66,18 +64,6 @@ pub(super) struct State {
     pub(super) error: Option<String>,
 }
 
-/// `0xRRGGBB` of a colour.
-fn rgb_u32(color: Hsla) -> u32 {
-    let c = gpui::Rgba::from(color);
-    let ch = |v: f32| (v * 255.0).round().clamp(0.0, 255.0) as u32;
-    ch(c.r) << 16 | ch(c.g) << 8 | ch(c.b)
-}
-
-fn rgb3(color: Hsla) -> [u8; 3] {
-    let v = rgb_u32(color);
-    [(v >> 16) as u8, (v >> 8) as u8, v as u8]
-}
-
 impl Shell {
     /// The wallpaper to draw: the chosen file, if it is still there.
     pub(crate) fn active_wallpaper(&self) -> Option<&str> {
@@ -95,11 +81,6 @@ impl Shell {
         })
     }
 
-    /// Whether a wallpaper is on screen, which makes the terminal's own fill translucent.
-    pub(crate) fn has_wallpaper(&self) -> bool {
-        self.wp.shown.is_some()
-    }
-
     /// Starts rendering whatever the settings now ask for. Called every frame; cheap when
     /// nothing changed.
     pub(super) fn sync_wallpaper(&mut self, cx: &mut Context<Self>) {
@@ -111,7 +92,7 @@ impl Shell {
                 self.wp.fade = None;
                 // The accent is restored outside this frame: it restyles the open terminals.
                 cx.spawn(async move |this, cx| {
-                    this.update(cx, |s, cx| s.refresh_accent(cx)).ok();
+                    this.update(cx, |s, cx| s.refresh_theme(cx)).ok();
                 })
                 .detach();
             }
@@ -170,72 +151,84 @@ impl Shell {
                 self.wp.failed = Some(want);
             }
         }
-        self.refresh_accent(cx);
+        self.refresh_theme(cx);
         self.restyle_tabs(cx);
         cx.notify();
     }
 
-    /// Sets the accent from the wallpaper when asked to, else back to tern's own, and restyles
-    /// open terminals when it changed.
-    pub(super) fn refresh_accent(&mut self, cx: &mut Context<Self>) {
-        let tinted = self
+    /// Rebuilds the palette: tern's own, or leaning toward the wallpaper's dominant colour when
+    /// asked to. Restyles open terminals and text fields when it changed.
+    pub(super) fn refresh_theme(&mut self, cx: &mut Context<Self>) {
+        let base = Theme::zeron(self.theme.light);
+        let tint = self
             .settings
             .wallpaper_theme_colors
             .then(|| self.wp.shown.as_ref().and_then(|s| s.prepared.accent))
-            .flatten()
-            .map(|color| {
-                let [r, g, b] =
-                    wallpaper_colors::accent_for(color, rgb3(self.theme.terminal_background));
-                crate::theme::hex(u32::from(r) << 16 | u32::from(g) << 8 | u32::from(b))
-            });
-        let accent = tinted.unwrap_or_else(|| Theme::zeron(self.theme.light).accent);
-        if accent != self.theme.accent {
-            self.theme.accent = accent;
+            .flatten();
+        let next = tint.map_or(base, |color| base.tinted(color));
+        if next != self.theme {
+            self.theme = next;
             self.install_input_colors(cx);
             self.restyle_tabs(cx);
             cx.notify();
         }
     }
 
-    /// The opacity the wallpaper may have: the user's, held down where it would wash out text
-    /// drawn over it — the active terminal's, the shell's, and its muted secondary text (the
-    /// weakest pair). Each may lose at most `KEEP` of its own contrast, and never needs more than
-    /// WCAG 4.5, measured against the brightest (or darkest) part of the image.
-    pub(crate) fn wallpaper_opacity_cap(&self) -> Option<f32> {
-        let shown = self.wp.shown.as_ref()?;
-        let alias = self.tabs.get(self.active).map_or("", |t| t.alias.as_str());
-        let term = self.terminal_theme(alias);
-        let t = self.theme;
-        let pairs = [
-            (term.foreground, term.background),
-            (t.text, t.shell),
-            (t.muted, t.shell),
-        ];
-        Some(
-            pairs
-                .into_iter()
-                .map(|(fg, bg)| {
-                    let (fg, bg) = (rgb_u32(fg), rgb_u32(bg));
-                    let target = guard_target(crate::wallpaper_fx::contrast_ratio(fg, bg));
-                    wallpaper::safe_opacity(&shown.prepared.sample, fg, bg, target, 1.0)
-                })
-                .fold(1.0, f32::min),
-        )
+    /// The hero for the empty view, with its height. The picture is the empty view's only: with
+    /// a tab or the Settings page open nothing sits behind the content.
+    pub(super) fn empty_view_hero(
+        &mut self,
+        panel: gpui::Hsla,
+        window: &mut Window,
+    ) -> Option<(AnyElement, f32)> {
+        if self.tabs.get(self.active).is_some() || self.settings_page.is_some() {
+            return None;
+        }
+        let height = hero_height(f32::from(window.viewport_size().height));
+        self.wallpaper_hero(height, panel, window)
+            .map(|el| (el, height))
     }
 
-    fn wallpaper_opacity(&self) -> f32 {
-        let user = self.settings.wallpaper_opacity;
-        self.wallpaper_opacity_cap()
-            .map_or(user, |cap| user.min(cap))
+    /// The hero: the picture across the top of the empty view, at full strength and fading into
+    /// the panel colour `panel` along its height (zeron feathers it with an alpha mask; gpui
+    /// 0.3.8 has none, so a gradient to the opaque panel colour does the same). `None` without a
+    /// wallpaper. The crossfade layers sit inside it.
+    pub(super) fn wallpaper_hero(
+        &mut self,
+        height: f32,
+        panel: gpui::Hsla,
+        window: &mut Window,
+    ) -> Option<AnyElement> {
+        let layers = self.wallpaper_layers(window);
+        if layers.is_empty() {
+            return None;
+        }
+        let panel = panel.opacity(1.0);
+        Some(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .w_full()
+                .h(px(height))
+                .overflow_hidden()
+                .children(layers)
+                .child(div().absolute().inset_0().bg(gpui::linear_gradient(
+                    180.0,
+                    gpui::linear_color_stop(panel.opacity(0.0), 0.0),
+                    gpui::linear_color_stop(panel, 1.0),
+                )))
+                .into_any_element(),
+        )
     }
 
     /// The picture layers, back to front: the one being replaced at full strength, with the new
     /// one fading in over it.
-    pub(super) fn wallpaper_layers(&mut self, window: &mut Window) -> Vec<AnyElement> {
+    fn wallpaper_layers(&mut self, window: &mut Window) -> Vec<AnyElement> {
         let Some(shown) = self.wp.shown.as_ref() else {
             return Vec::new();
         };
-        let opacity = self.wallpaper_opacity();
+        let opacity = self.settings.wallpaper_hero_opacity;
         let current = shown.prepared.image.clone();
         let progress = self.wp.fade.as_ref().and_then(|fade| {
             let t = fade.since.elapsed().as_secs_f32() / CROSSFADE.as_secs_f32();
@@ -328,7 +321,10 @@ impl Shell {
             "Image",
             Some(match &self.wp.error {
                 Some(e) => e.clone().into(),
-                None => format!("{current} · PNG, JPEG or WebP, copied into tern's folder").into(),
+                None => format!(
+                    "{current} · shown at the top of the empty view; the window takes its colours"
+                )
+                .into(),
             }),
             div().flex().gap(px(6.)).child(choose).child(remove),
         ));
@@ -373,23 +369,13 @@ impl Shell {
                     })),
             );
         }
-        let pct = (self.settings.wallpaper_opacity * 100.0).round();
+        let pct = (self.settings.wallpaper_hero_opacity * 100.0).round();
         let (minus, value, plus) = w::stepper(&t, "wallpaper-opacity", format!("{pct:.0}%"));
         let step = |delta: f32| {
             move |s: &mut Shell, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Shell>| {
-                s.update_settings(|st| st.wallpaper_opacity += delta, cx)
+                s.update_settings(|st| st.wallpaper_hero_opacity += delta, cx)
             }
         };
-        let cap_note = self
-            .wallpaper_opacity_cap()
-            .filter(|cap| *cap < self.settings.wallpaper_opacity)
-            .map(|cap| {
-                format!(
-                    "Held to {:.0}% so terminal text stays readable (WCAG {TEXT_CONTRAST})",
-                    cap * 100.0
-                )
-                .into()
-            });
         let on = self.settings.wallpaper_theme_colors;
         card.child(w::row(
             &t,
@@ -402,7 +388,7 @@ impl Shell {
             &t,
             false,
             "Visibility",
-            cap_note,
+            Some("Of the picture at the top of the empty view".into()),
             div()
                 .flex()
                 .items_center()
@@ -415,7 +401,9 @@ impl Shell {
             &t,
             false,
             "Theme colours from wallpaper",
-            Some("Tint the accent with the image's dominant colour".into()),
+            Some(
+                "Surfaces, accent and hover washes lean toward the image's dominant colour".into(),
+            ),
             div()
                 .id("toggle-wallpaper-colours")
                 .switch("Theme colours from wallpaper", on)
@@ -425,7 +413,7 @@ impl Shell {
                         |st| st.wallpaper_theme_colors = !st.wallpaper_theme_colors,
                         cx,
                     );
-                    s.refresh_accent(cx);
+                    s.refresh_theme(cx);
                 }))
                 .child(w::toggle(&t, on, "wallpaper-colours")),
         ))
@@ -474,32 +462,14 @@ mod tests {
     }
 
     #[test]
-    fn rgb_round_trips() {
-        assert_eq!(rgb3(crate::theme::hex(0x12_34_56)), [0x12, 0x34, 0x56]);
-        assert_eq!(rgb_u32(crate::theme::hex(0xFF_FF_FF)), 0xFF_FF_FF);
-    }
-
-    #[test]
-    fn terminal_text_keeps_wcag_aa_over_the_wallpaper() {
-        assert_eq!(TEXT_CONTRAST, 4.5);
+    fn hero_is_zerons_share_of_the_window_up_to_its_cap() {
+        assert_eq!(hero_height(500.0), 360.0);
+        assert_eq!(hero_height(2000.0), 760.0);
+        assert_eq!(hero_height(-5.0), 0.0);
     }
 
     #[test]
     fn crossfade_matches_zerons_180_ms() {
         assert_eq!(CROSSFADE, Duration::from_millis(180));
-    }
-}
-
-#[cfg(test)]
-mod guard_tests {
-    use super::guard_target;
-
-    #[test]
-    fn keeps_most_of_weak_contrast_and_caps_strong_at_wcag() {
-        // Muted text at 4.0 must keep 3.4; it never asks for more than it had.
-        assert!((guard_target(4.0) - 3.4).abs() < 1e-4);
-        // Body text at 15:1 only has to stay readable at WCAG AA.
-        assert!((guard_target(15.0) - 4.5).abs() < 1e-4);
-        assert!(guard_target(2.0) < 2.0);
     }
 }

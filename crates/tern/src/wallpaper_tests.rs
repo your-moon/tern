@@ -106,10 +106,6 @@ fn prepare_renders_once_then_reuses_the_cached_image() {
         "scanlines changed the pixels"
     );
     assert!(first.accent.is_some());
-    assert_eq!(
-        first.sample.rgba.len(),
-        (first.sample.width * first.sample.height * 4) as usize
-    );
 
     // Swap the cached file for a solid one: a second call that reads it back proves the
     // effect was not rendered again.
@@ -118,16 +114,8 @@ fn prepare_renders_once_then_reuses_the_cached_image() {
         .unwrap();
     let second = prepare(&src, Effect::Scanlines, false, &dir).unwrap();
     assert_eq!(second.image, first.image);
-    assert!(
-        second
-            .sample
-            .rgba
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .all(|p| p[0] == 255)
-    );
-    assert_ne!(second.sample.rgba, first.sample.rgba);
+    let kept = image::open(&second.image).unwrap().to_rgba8();
+    assert!(kept.as_chunks::<4>().0.iter().all(|p| p[0] == 255));
 }
 
 #[test]
@@ -239,16 +227,4 @@ fn different_images_with_the_same_file_name_do_not_overwrite_each_other() {
     assert_ne!(a, b);
     assert_eq!(image::open(&a).unwrap().width(), 8);
     assert_eq!(image::open(&b).unwrap().width(), 9);
-}
-
-#[test]
-fn guard_caps_a_bright_wallpaper_under_light_text() {
-    let dir = temp("guard");
-    let white = dir.join("white.png");
-    RgbaImage::from_pixel(16, 16, image::Rgba([255, 255, 255, 255]))
-        .save(&white)
-        .unwrap();
-    let p = prepare(&white, Effect::None, false, &dir).unwrap();
-    let capped = safe_opacity(&p.sample, 0xE8E8EA, 0x060606, 4.5, 1.0);
-    assert!(capped < 0.5, "{capped}");
 }

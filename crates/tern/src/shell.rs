@@ -474,7 +474,14 @@ impl Shell {
             .collect()
     }
 
-    fn panel_content(&self, cx: &mut Context<Self>) -> AnyElement {
+    /// The main panel's content: the active tab's panes, or the empty view, which carries the
+    /// wallpaper `hero` (already clipped and faded) above its text.
+    fn panel_content(
+        &self,
+        hero: Option<(AnyElement, f32)>,
+        panel_bg: gpui::Hsla,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         if let Some(tab) = self.tabs.get(self.active) {
             return self.render_panes(tab, cx);
         }
@@ -504,19 +511,31 @@ impl Shell {
             ),
             None => ("No session open".into(), None),
         };
+        // Over the picture the text sits below its upper part, on a plate of the panel colour,
+        // so it never depends on what the picture holds.
+        let hero_height = hero.as_ref().map(|(_, h)| *h);
         div()
             .size_full()
+            .relative()
             .flex()
             .flex_col()
             .items_center()
-            .justify_center()
+            .when(hero_height.is_none(), |el| el.justify_center())
+            .when_some(hero_height, |el, h| el.pt(px(h * 0.5)))
             .gap(px(16.))
+            .children(hero.map(|(el, _)| el))
             .child(
                 div()
                     .flex()
                     .flex_col()
                     .items_center()
                     .gap(px(4.))
+                    .when(hero_height.is_some(), |el| {
+                        el.px(px(20.))
+                            .py(px(12.))
+                            .rounded(px(12.))
+                            .bg(panel_bg.opacity(0.85))
+                    })
                     .child(div().text_size(px(15.)).text_color(t.text).child(title))
                     .when_some(detail, |el, d| {
                         el.child(div().text_sm().text_color(t.muted).child(d))
@@ -595,15 +614,8 @@ impl Render for Shell {
         let snippet_picker = self.render_snippet_picker(window, cx);
         let snippet_form = self.render_snippet_form(window, cx);
         self.sync_wallpaper(cx);
-        let wallpaper = self.has_wallpaper();
-        let has_tab = !self.tabs.is_empty();
         let panel_bg = self.panel_background();
-        let panel_bg = if wallpaper {
-            panel_bg.opacity(crate::theme::GLASS_ALPHA)
-        } else {
-            panel_bg
-        };
-        let layers = self.wallpaper_layers(window);
+        let hero = self.empty_view_hero(panel_bg, window);
         let status_line = self.render_status_line(panel_bg, cx);
         let theme_picker = self.render_theme_picker(window, cx);
         let toast = self.render_toast(window, cx);
@@ -630,8 +642,7 @@ impl Render for Shell {
             .relative()
             .flex()
             .flex_col()
-            .bg(t.surface(wallpaper))
-            .children(layers)
+            .bg(t.surface())
             .font_family(UI_FONT)
             .text_color(t.text)
             .on_action(cx.listener(|s, _: &CloseTab, w, cx| s.close_pane_or_tab(w, cx)))
@@ -741,13 +752,17 @@ impl Render for Shell {
                             .rounded(px(PANEL_RADIUS))
                             .border_1()
                             .border_color(t.border)
-                            // With a wallpaper the terminal view paints its own translucent
-                            // fill; a second one here would stack.
-                            .when(!(wallpaper && has_tab), |el| el.bg(panel_bg))
+                            .bg(panel_bg)
+                            .relative()
                             .overflow_hidden()
                             .flex()
                             .flex_col()
-                            .child(div().flex_1().min_h_0().child(self.panel_content(cx)))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_h_0()
+                                    .child(self.panel_content(hero, panel_bg, cx)),
+                            )
                             .when_some(status_line, |el, line| el.child(line)),
                     )
                     .children(handle)

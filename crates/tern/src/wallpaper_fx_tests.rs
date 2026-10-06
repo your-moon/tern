@@ -1,6 +1,6 @@
-//! Behaviour of each wallpaper effect and of the contrast guard, beyond zeron's own tests.
+//! Behaviour of each wallpaper effect , beyond zeron's own tests.
 
-use crate::wallpaper_fx::{Effect, Guard, render, safe_opacity};
+use crate::wallpaper_fx::{Effect, render};
 
 fn solid(w: u32, h: u32, rgb: [u8; 3]) -> Vec<u8> {
     (0..w * h)
@@ -78,100 +78,6 @@ fn light_scanlines_lift_toward_white() {
 fn short_buffer_is_returned_untouched() {
     let src = vec![1, 2, 3, 4];
     assert_eq!(render(src.clone(), 8, 8, Effect::Dither, false), src);
-}
-
-#[test]
-fn opacity_is_monotonic_in_image_brightness() {
-    let (text, bg) = (0xE8E8EA, 0x060606);
-    let at = |v: u8| {
-        safe_opacity(
-            &solid(8, 8, [v, v, v]),
-            8,
-            8,
-            Guard {
-                text_rgb: text,
-                background_rgb: bg,
-                region: 1.0,
-                min_contrast: 4.5,
-                max_opacity: 1.0,
-            },
-        )
-    };
-    let (a, b, c) = (at(80), at(160), at(255));
-    assert!(a >= b && b >= c, "{a} {b} {c}");
-    assert!(c < a);
-}
-
-#[test]
-fn safe_opacity_never_exceeds_the_cap_and_judges_the_bright_tail() {
-    let (text, bg) = (0xE8E8EA, 0x060606);
-    let capped = safe_opacity(
-        &solid(8, 8, [0, 0, 0]),
-        8,
-        8,
-        Guard {
-            text_rgb: text,
-            background_rgb: bg,
-            region: 1.0,
-            min_contrast: 4.5,
-            max_opacity: 0.4,
-        },
-    );
-    assert!((capped - 0.4).abs() < 1e-6);
-    // A lone white pixel is below the 95th-percentile tail and must not count; four rows must.
-    let whiten = |img: &mut [u8], rows: usize| {
-        for p in img.as_chunks_mut::<4>().0.iter_mut().take(rows * 10) {
-            p[..3].copy_from_slice(&[255, 255, 255]);
-        }
-    };
-    let mut img = solid(10, 10, [0, 0, 0]);
-    img[..3].copy_from_slice(&[255, 255, 255]);
-    let few = safe_opacity(
-        &img.clone(),
-        10,
-        10,
-        Guard {
-            text_rgb: text,
-            background_rgb: bg,
-            region: 1.0,
-            min_contrast: 4.5,
-            max_opacity: 1.0,
-        },
-    );
-    whiten(&mut img, 4);
-    let many = safe_opacity(
-        &img,
-        10,
-        10,
-        Guard {
-            text_rgb: text,
-            background_rgb: bg,
-            region: 1.0,
-            min_contrast: 4.5,
-            max_opacity: 1.0,
-        },
-    );
-    assert!((few - 1.0).abs() < 1e-6, "{few}");
-    assert!(many < 0.9, "{many}");
-}
-
-#[test]
-fn degenerate_input_gives_zero_opacity() {
-    assert_eq!(
-        safe_opacity(
-            &[],
-            0,
-            0,
-            Guard {
-                text_rgb: 0xFF_FFFF,
-                background_rgb: 0,
-                region: 1.0,
-                min_contrast: 4.5,
-                max_opacity: 1.0
-            }
-        ),
-        0.0
-    );
 }
 
 #[test]

@@ -15,10 +15,10 @@ pub const SIDEBAR_DEFAULT: f32 = 256.0;
 pub const FONT_MIN: f32 = 8.0;
 pub const FONT_MAX: f32 = 32.0;
 pub const FONT_DEFAULT: f32 = 13.0;
-/// How strongly the wallpaper shows through the frosted window.
-pub const WALLPAPER_OPACITY_MIN: f32 = 0.1;
-pub const WALLPAPER_OPACITY_MAX: f32 = 1.0;
-pub const WALLPAPER_OPACITY_DEFAULT: f32 = 0.3;
+/// How strongly the wallpaper hero shows at the top of the empty view.
+pub const WALLPAPER_HERO_OPACITY_MIN: f32 = 0.1;
+pub const WALLPAPER_HERO_OPACITY_MAX: f32 = 1.0;
+pub const WALLPAPER_HERO_OPACITY_DEFAULT: f32 = 1.0;
 /// The idle lock choices in minutes; 0 is off.
 pub const VAULT_LOCK_CHOICES: [u32; 5] = [0, 5, 15, 30, 60];
 pub const VAULT_LOCK_DEFAULT: u32 = 15;
@@ -71,15 +71,16 @@ pub struct Settings {
     pub terminal_theme: Option<String>,
     /// Per-host scheme by host alias, as Termius does per host.
     pub host_themes: BTreeMap<String, String>,
-    /// Image (png, jpeg, webp) drawn behind the whole window; `None` is the plain frost.
+    /// Image (png, jpeg, webp) shown as the hero of the empty view and tinting the window's
+    /// colours; `None` is the plain frost.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wallpaper: Option<String>,
-    pub wallpaper_opacity: f32,
+    pub wallpaper_hero_opacity: f32,
     /// Artwork treatment applied to the wallpaper once and cached.
     pub wallpaper_effect: crate::wallpaper_fx::Effect,
     /// Recent wallpapers (copies in tern's folder), newest first.
     pub wallpaper_history: Vec<String>,
-    /// Tint the accent with the wallpaper's dominant colour.
+    /// Take the window's surfaces, accent and washes from the wallpaper's dominant colour.
     pub wallpaper_theme_colors: bool,
     /// A git remote to sync through (any host git can reach); `None` uses a GitHub gist.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -137,10 +138,10 @@ impl Default for Settings {
             terminal_theme: None,
             host_themes: BTreeMap::new(),
             wallpaper: None,
-            wallpaper_opacity: WALLPAPER_OPACITY_DEFAULT,
+            wallpaper_hero_opacity: WALLPAPER_HERO_OPACITY_DEFAULT,
             wallpaper_effect: crate::wallpaper_fx::Effect::None,
             wallpaper_history: Vec::new(),
-            wallpaper_theme_colors: false,
+            wallpaper_theme_colors: true,
             sync_remote: None,
             cursor_style: CursorStyle::Block,
             cursor_blink: false,
@@ -196,11 +197,11 @@ impl Settings {
         self.scrollback_lines = self.scrollback_lines.clamp(SCROLLBACK_MIN, SCROLLBACK_MAX);
         self.wallpaper_history
             .truncate(crate::wallpaper::HISTORY_LIMIT);
-        self.wallpaper_opacity = clamp_or(
-            self.wallpaper_opacity,
-            WALLPAPER_OPACITY_MIN,
-            WALLPAPER_OPACITY_MAX,
-            WALLPAPER_OPACITY_DEFAULT,
+        self.wallpaper_hero_opacity = clamp_or(
+            self.wallpaper_hero_opacity,
+            WALLPAPER_HERO_OPACITY_MIN,
+            WALLPAPER_HERO_OPACITY_MAX,
+            WALLPAPER_HERO_OPACITY_DEFAULT,
         );
         if !VAULT_LOCK_CHOICES.contains(&self.vault_lock_minutes) {
             self.vault_lock_minutes = VAULT_LOCK_DEFAULT;
@@ -309,17 +310,23 @@ mod tests {
     }
 
     #[test]
-    fn wallpaper_opacity_is_clamped() {
+    fn wallpaper_hero_opacity_is_clamped() {
         let low = Settings {
-            wallpaper_opacity: 0.0,
+            wallpaper_hero_opacity: 0.0,
             ..Settings::default()
         };
-        assert_eq!(low.clamped().wallpaper_opacity, WALLPAPER_OPACITY_MIN);
+        assert_eq!(
+            low.clamped().wallpaper_hero_opacity,
+            WALLPAPER_HERO_OPACITY_MIN
+        );
         let nan = Settings {
-            wallpaper_opacity: f32::NAN,
+            wallpaper_hero_opacity: f32::NAN,
             ..Settings::default()
         };
-        assert_eq!(nan.clamped().wallpaper_opacity, WALLPAPER_OPACITY_DEFAULT);
+        assert_eq!(
+            nan.clamped().wallpaper_hero_opacity,
+            WALLPAPER_HERO_OPACITY_DEFAULT
+        );
     }
 
     #[test]
@@ -339,10 +346,10 @@ mod tests {
             terminal_theme: Some("Dracula".into()),
             host_themes: BTreeMap::from([("grape".into(), "Nord".into())]),
             wallpaper: Some("/tmp/w.png".into()),
-            wallpaper_opacity: 0.5,
+            wallpaper_hero_opacity: 0.5,
             wallpaper_effect: crate::wallpaper_fx::Effect::Halftone,
             wallpaper_history: vec!["/tmp/w.png".into(), "/tmp/v.png".into()],
-            wallpaper_theme_colors: true,
+            wallpaper_theme_colors: false,
             sync_remote: Some("git@github.com:me/tern-sync.git".into()),
             cursor_style: CursorStyle::Bar,
             cursor_blink: true,

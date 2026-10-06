@@ -34,6 +34,7 @@ mod tabs;
 mod tabs_store;
 mod text_input;
 mod theme;
+mod theme_tint;
 mod themes;
 mod titlebar;
 mod wallpaper;

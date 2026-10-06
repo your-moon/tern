@@ -7,7 +7,7 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use image::{DynamicImage, ImageFormat, RgbaImage};
+use image::{ImageFormat, RgbaImage};
 
 use crate::wallpaper_colors;
 use crate::wallpaper_fx::{self, Effect};
@@ -16,8 +16,6 @@ use crate::wallpaper_fx::{self, Effect};
 pub const HISTORY_LIMIT: usize = 8;
 /// Longest edge of the rendered artwork; larger sources are scaled down to it.
 const MAX_EDGE: u32 = 1600;
-/// Longest edge of the thumbnail the contrast guard samples.
-const SAMPLE_EDGE: u32 = 160;
 /// Rendered files kept in the cache; the rest are removed, oldest first.
 const CACHE_KEEP: usize = 6;
 /// Bumped when an effect's output changes, so stale cache files are not reused.
@@ -107,31 +105,6 @@ pub struct Prepared {
     pub image: PathBuf,
     /// The wallpaper's dominant colour.
     pub accent: Option<[u8; 3]>,
-    /// A small RGBA thumbnail of the rendered image, for the contrast guard.
-    pub sample: Sample,
-}
-
-#[derive(Debug, Clone)]
-pub struct Sample {
-    pub rgba: Vec<u8>,
-    pub width: u32,
-    pub height: u32,
-}
-
-/// The highest opacity the artwork may have so text in `text` over `surface` keeps `contrast`.
-pub fn safe_opacity(sample: &Sample, text: u32, surface: u32, contrast: f32, cap: f32) -> f32 {
-    wallpaper_fx::safe_opacity(
-        &sample.rgba,
-        sample.width,
-        sample.height,
-        wallpaper_fx::Guard {
-            text_rgb: text,
-            background_rgb: surface,
-            region: 1.0,
-            min_contrast: contrast,
-            max_opacity: cap,
-        },
-    )
 }
 
 fn cache_name(source: &Path, len: u64, effect: Effect, light: bool) -> String {
@@ -167,32 +140,19 @@ pub fn prepare(
         wallpaper_colors::extract(decoded.thumbnail(64, 64).to_rgba8().pixels().map(|p| p.0));
     let dir = cache(config);
     let path = dir.join(cache_name(source, bytes.len() as u64, effect, light));
-    let rendered = match image::open(&path) {
-        Ok(cached) => cached.to_rgba8(),
-        Err(_) => {
-            let rgba = decoded.to_rgba8();
-            let (w, h) = rgba.dimensions();
-            let out = wallpaper_fx::render(rgba.into_raw(), w, h, effect, light);
-            let out = RgbaImage::from_raw(w, h, out).ok_or("Wallpaper effect lost pixels")?;
-            std::fs::create_dir_all(&dir).map_err(|e| format!("Cannot create {dir:?}: {e}"))?;
-            out.save_with_format(&path, ImageFormat::Png)
-                .map_err(|e| format!("Cannot cache the wallpaper: {e}"))?;
-            trim_cache(&dir, &path);
-            out
-        }
-    };
-    let small = DynamicImage::ImageRgba8(rendered)
-        .thumbnail(SAMPLE_EDGE, SAMPLE_EDGE)
-        .to_rgba8();
-    let (width, height) = small.dimensions();
+    if image::open(&path).is_err() {
+        let rgba = decoded.to_rgba8();
+        let (w, h) = rgba.dimensions();
+        let out = wallpaper_fx::render(rgba.into_raw(), w, h, effect, light);
+        let out = RgbaImage::from_raw(w, h, out).ok_or("Wallpaper effect lost pixels")?;
+        std::fs::create_dir_all(&dir).map_err(|e| format!("Cannot create {dir:?}: {e}"))?;
+        out.save_with_format(&path, ImageFormat::Png)
+            .map_err(|e| format!("Cannot cache the wallpaper: {e}"))?;
+        trim_cache(&dir, &path);
+    }
     Ok(Prepared {
         image: path,
         accent,
-        sample: Sample {
-            rgba: small.into_raw(),
-            width,
-            height,
-        },
     })
 }
 
