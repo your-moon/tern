@@ -112,6 +112,12 @@ impl TextInput {
         cx.notify();
     }
 
+    /// Selects everything, so typing replaces the text (as a rename field does in Finder).
+    pub fn select_everything(&mut self, cx: &mut Context<Self>) {
+        self.selected_range = 0..self.content.len();
+        cx.notify();
+    }
+
     /// Byte offset in `content` → byte offset in what is drawn (one dot per character when
     /// masked).
     fn shown_offset(&self, offset: usize) -> usize {

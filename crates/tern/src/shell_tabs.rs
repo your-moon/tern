@@ -33,6 +33,7 @@ impl Shell {
         let input = cx.new(|cx| {
             let mut input = TextInput::new(tab.alias.clone(), false, colors, cx);
             input.set_text(current, cx);
+            input.select_everything(cx);
             input
         });
         window.focus(&gpui::Focusable::focus_handle(input.read(cx), cx), cx);
