@@ -7,9 +7,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 const FILE_NAME: &str = "recent.json";
-/// What is kept on disk; the sidebar shows fewer ([`SIDEBAR_SHOWN`]).
+/// What is kept on disk.
 pub const CAP: usize = 20;
-pub const SIDEBAR_SHOWN: usize = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {

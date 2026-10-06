@@ -22,9 +22,6 @@ use crate::tabs::{self, TabInfo};
 use crate::text_input::TextInput;
 use crate::theme::Theme;
 
-pub const SAVED: &str = "Saved";
-pub const RECENT: &str = "Recent";
-
 /// `hosts[i]` is `connections[i].entry()`: the sidebar lists tern's own connections only.
 pub struct SidebarState<'a> {
     pub hosts: &'a [HostEntry],
@@ -32,10 +29,8 @@ pub struct SidebarState<'a> {
     pub open: &'a [TabInfo],
     pub active_alias: Option<&'a str>,
     pub width: f32,
-    pub collapsed: &'a [&'static str],
     pub collapsed_groups: &'a [String],
     /// Indices into `hosts`, newest first, already limited to what the section shows.
-    pub recent: &'a [usize],
     pub query: &'a str,
     pub search: &'a Entity<TextInput>,
 }
@@ -135,37 +130,11 @@ pub fn render(
             );
         }
     } else {
-        if !s.recent.is_empty() {
-            let collapsed = s.collapsed.contains(&RECENT);
-            list = list.child(section_header(
-                "recent-header",
-                RECENT.into(),
-                collapsed,
-                false,
-                t,
-                cx,
-                |shell, cx| shell.toggle_section(RECENT, cx),
-            ));
-            if !collapsed {
-                let mut body = div().pt(px(4.)).flex().flex_col().gap(px(2.));
-                for &ix in s.recent {
-                    body = body.child(one("recent", ix, false, cx));
-                }
-                list = list.child(body);
-            }
-        }
+        // One list: tern's connections, ungrouped first, then each group under its own header.
+        // No Recent (it repeated these rows) and no wrapper section around them; recency orders
+        // the ⌘K picker instead.
         if !s.hosts.is_empty() {
-            let collapsed = s.collapsed.contains(&SAVED);
-            list = list.child(section_header(
-                "saved-header",
-                SAVED.into(),
-                collapsed,
-                false,
-                t,
-                cx,
-                |shell, cx| shell.toggle_section(SAVED, cx),
-            ));
-            if !collapsed {
+            {
                 let layout = layout(s.connections);
                 let mut body = div().pt(px(4.)).flex().flex_col().gap(px(2.));
                 for &ix in &layout.ungrouped {

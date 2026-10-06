@@ -160,7 +160,6 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 toasts: toast::Toasts::new(),
                 tab_scroll: gpui::ScrollHandle::new(),
                 context_menu: None,
-                collapsed_sections: Vec::new(),
                 hostlist: hostlist::HostList::new(&theme, recent, cx),
                 snippets: snippets_ui::SnippetsUi::load(),
                 import: None,
@@ -254,7 +253,6 @@ pub struct Shell {
     toasts: toast::Toasts,
     tab_scroll: gpui::ScrollHandle,
     context_menu: Option<menu::ContextMenu>,
-    collapsed_sections: Vec<&'static str>,
     hostlist: hostlist::HostList,
     snippets: snippets_ui::SnippetsUi,
     import: Option<import_ui::ImportSheet>,
@@ -411,15 +409,6 @@ impl Shell {
             .iter()
             .map(|c| c.entry_in(&self.connections))
             .collect();
-    }
-
-    pub(crate) fn toggle_section(&mut self, name: &'static str, cx: &mut Context<Self>) {
-        if let Some(at) = self.collapsed_sections.iter().position(|n| *n == name) {
-            self.collapsed_sections.remove(at);
-        } else {
-            self.collapsed_sections.push(name);
-        }
-        cx.notify();
     }
 
     /// Focus back to the active terminal, or the window when there is none.
@@ -597,7 +586,6 @@ impl Render for Shell {
         let active_alias = infos.get(self.active).map(|i| i.alias.clone());
         let strip = tabs::strip(&infos, self.active, &self.tab_scroll, &t, cx);
         let query = self.search_query(cx);
-        let recent_rows = self.recent_indices();
         let sidebar = sidebar::render(
             &sidebar::SidebarState {
                 hosts: &self.hosts,
@@ -605,9 +593,7 @@ impl Render for Shell {
                 open: &infos,
                 active_alias: active_alias.as_deref(),
                 width: self.settings.sidebar_width,
-                collapsed: &self.collapsed_sections,
                 collapsed_groups: &self.hostlist.collapsed_groups,
-                recent: &recent_rows,
                 query: &query,
                 search: &self.hostlist.search,
             },

@@ -112,16 +112,6 @@ impl Shell {
         }
     }
 
-    /// Indices into `hosts` of the sidebar's Recent section, newest first.
-    pub(super) fn recent_indices(&self) -> Vec<usize> {
-        self.hostlist
-            .recent
-            .aliases()
-            .filter_map(|a| self.hosts.iter().position(|h| h.alias == a))
-            .take(recent::SIDEBAR_SHOWN)
-            .collect()
-    }
-
     /// Hosts the ⌘K picker lists for its current query, in order: the ranked matches, or on
     /// an empty query the recents first.
     pub fn picker_matches(&self) -> Vec<usize> {
