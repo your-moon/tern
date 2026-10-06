@@ -405,7 +405,11 @@ impl Shell {
     }
 
     fn refresh_hosts(&mut self) {
-        self.hosts = self.connections.iter().map(Connection::entry).collect();
+        self.hosts = self
+            .connections
+            .iter()
+            .map(|c| c.entry_in(&self.connections))
+            .collect();
     }
 
     pub(crate) fn toggle_section(&mut self, name: &'static str, cx: &mut Context<Self>) {

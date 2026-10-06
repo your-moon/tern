@@ -12,8 +12,9 @@ use tern_ssh::SecretString;
 use tern_vault::{Key, Vault, VaultError};
 
 use super::{Shell, Toast, ToastKind};
-use crate::connections::{self, Connection, Draft};
+use crate::connections::{self, Connection, DEFAULT_KEEP_ALIVE, Draft};
 use crate::keeper::Keeper;
+use crate::settings_widgets::toggle;
 use crate::sidebar;
 use crate::text_input::{InputColors, TextInput};
 use crate::theme::Theme;
@@ -28,9 +29,14 @@ pub(super) struct ConnectionForm {
     key: Entity<TextInput>,
     group: Entity<TextInput>,
     tags: Entity<TextInput>,
-    /// Kept from an import; the form has no field for it.
+    proxy_jump: Entity<TextInput>,
+    keep_alive: Entity<TextInput>,
+    forward_agent: bool,
+    /// Kept from an import; the form has no field for these.
     proxy_command: Option<String>,
     vault_key: Entity<TextInput>,
+    agent_socket: Option<String>,
+    forwards: Vec<String>,
     password: Entity<TextInput>,
     vault_pass: Entity<TextInput>,
     vault_repeat: Entity<TextInput>,
@@ -57,6 +63,8 @@ impl ConnectionForm {
             &self.key,
             &self.group,
             &self.tags,
+            &self.proxy_jump,
+            &self.keep_alive,
             &self.vault_key,
             &self.password,
             &self.vault_pass,
@@ -95,15 +103,9 @@ impl Shell {
             })
         };
         let d = draft.unwrap_or(Connection {
-            name: String::new(),
-            host: String::new(),
             port: 22,
             user: std::env::var("USER").unwrap_or_default(),
-            identity_file: None,
-            group: None,
-            tags: Vec::new(),
-            proxy_command: None,
-            vault_key: None,
+            ..Connection::default()
         });
         let password_hint = if editing.is_some() {
             "Unchanged"
@@ -123,12 +125,21 @@ impl Shell {
             ),
             group: field("none", false, d.group.unwrap_or_default()),
             tags: field("comma separated, e.g. eu, db", false, d.tags.join(", ")),
+            proxy_jump: field("bastion, or user@host:port (optional)", false, d.proxy_jump),
+            keep_alive: field(
+                "30",
+                false,
+                d.keep_alive.unwrap_or(DEFAULT_KEEP_ALIVE).to_string(),
+            ),
+            forward_agent: d.forward_agent,
             proxy_command: d.proxy_command,
             vault_key: field(
                 "Name of a key in the vault (optional)",
                 false,
                 d.vault_key.unwrap_or_default(),
             ),
+            agent_socket: d.agent_socket,
+            forwards: d.forwards,
             password: field(password_hint, true, String::new()),
             vault_pass: field("Vault passphrase", true, String::new()),
             vault_repeat: field("Repeat vault passphrase", true, String::new()),
@@ -190,6 +201,8 @@ impl Shell {
             &form.key,
             &form.group,
             &form.tags,
+            &form.proxy_jump,
+            &form.keep_alive,
             &form.vault_key,
             &form.password,
         ];
@@ -248,6 +261,10 @@ impl Shell {
             group: read(&form.group, cx),
             tags: read(&form.tags, cx),
             vault_key: read(&form.vault_key, cx),
+            proxy_jump: read(&form.proxy_jump, cx),
+            forward_agent: form.forward_agent,
+            keep_alive: read(&form.keep_alive, cx),
+            forwards: form.forwards.clone(),
         };
         let editing = form.editing;
         let others: Vec<&str> = self
@@ -257,9 +274,10 @@ impl Shell {
             .filter(|(ix, _)| Some(*ix) != editing)
             .map(|(_, c)| c.name.as_str())
             .collect();
-        let connection = match connections::validate(&draft, &others) {
+        let connection = match connections::validate(&draft, &others, &self.connections) {
             Ok(c) => Connection {
                 proxy_command: form.proxy_command.clone(),
+                agent_socket: form.agent_socket.clone(),
                 ..c
             },
             Err(e) => {
@@ -496,6 +514,37 @@ impl Shell {
             .child(row("Group", &form.group, t))
             .child(groups)
             .child(row("Tags", &form.tags, t))
+            .child(row("Jump host", &form.proxy_jump, t))
+            .child(
+                div()
+                    .flex()
+                    .items_end()
+                    .gap(px(10.))
+                    .child(div().w(px(160.)).child(row(
+                        "Keep-alive (seconds, 0 = off)",
+                        &form.keep_alive,
+                        t,
+                    )))
+                    .child(
+                        div()
+                            .id("form-forward-agent")
+                            .h(px(30.))
+                            .flex_1()
+                            .flex()
+                            .items_center()
+                            .justify_end()
+                            .gap(px(8.))
+                            .cursor_pointer()
+                            .on_click(cx.listener(|shell, _, _, cx| {
+                                if let Some(form) = shell.form.as_mut() {
+                                    form.forward_agent = !form.forward_agent;
+                                }
+                                cx.notify();
+                            }))
+                            .child(div().text_sm().child("Forward SSH agent"))
+                            .child(toggle(t, form.forward_agent, "form-forward-agent")),
+                    ),
+            )
             .child(row("Vault key", &form.vault_key, t))
             .child(row("Password", &form.password, t));
         match step {

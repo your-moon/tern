@@ -5,6 +5,7 @@ mod connections;
 #[cfg(debug_assertions)]
 mod devkeys;
 mod fonts;
+mod forward_spec;
 mod hover;
 mod icons;
 mod keeper;
