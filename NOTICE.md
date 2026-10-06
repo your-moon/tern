@@ -31,3 +31,9 @@ artwork and resized. `crates/tern/assets/wallpapers`:
 | heart-of-the-andes.jpg | Frederic Edwin Church, *Heart of the Andes* | 10481 |
 | wheat-field.jpg | Vincent van Gogh, *Wheat Field with Cypresses* | 436535 |
 | fontainebleau-morning.jpg | Théodore Rousseau, *An Early Summer Morning in the Forest of Fontainebleau* | 437517 |
+
+## App icon
+
+The tern silhouette in `packaging/macos/icon.svg` (and `site/assets/icon.svg`) is "Sterna" by
+Sharon Wegner-Larsen, from PhyloPic, dedicated to the public domain (CC0 1.0):
+https://www.phylopic.org/images/f164783d-3bab-45f3-9885-c1b382202369

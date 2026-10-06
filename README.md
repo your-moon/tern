@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="packaging/macos/icon.svg" width="128" alt="tern icon: a white tern seen from below, pointing right like a shell prompt, on black">
+  <img src="packaging/macos/icon.svg" width="128" alt="tern icon: a white tern in flight on deep navy">
 </p>
 
 <h1 align="center">tern</h1>
