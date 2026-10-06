@@ -2,13 +2,17 @@
 //! the remote, and login questions are answered in the terminal itself (see `login.rs`).
 
 use gpui::{App, AppContext, Context, Entity, Subscription, Task, WeakEntity, Window};
+use std::time::{Duration, Instant};
+
 use tern_ssh::{
-    ConnectSpec, InputError, MemoryKey, SecretString, SessionEvent, SessionHandle, TermSize,
+    ConnectSpec, Disconnect, InputError, MemoryKey, SecretString, SessionEvent, SessionHandle,
+    TermSize,
 };
 use tern_term::{Terminal, TerminalEvent, TerminalView};
 
 use crate::keeper::Keeper;
 use crate::login::Login;
+use crate::reconnect::{self, Backoff, Key};
 use crate::runtime::SshRuntime;
 use crate::session_log::{self, SessionLog};
 use tern_term::TerminalTheme;
@@ -47,6 +51,12 @@ impl Status {
     }
 }
 
+struct Retry {
+    reason: &'static str,
+    at: Instant,
+    _tick: Task<()>,
+}
+
 pub struct Session {
     pub status: Status,
     /// When the current connection came up, and when it ended; the status line shows the
@@ -80,6 +90,11 @@ pub struct Session {
     auto_log: bool,
     size: TermSize,
     login: Option<Login>,
+    /// Set once a connection reached the shell; only then does a drop retry by itself.
+    ever_connected: bool,
+    backoff: Backoff,
+    /// A countdown to the next automatic dial; dropping it cancels the dial.
+    retry: Option<Retry>,
     _session_events: Task<()>,
     _terminal_events: Subscription,
 }
@@ -145,6 +160,9 @@ impl Session {
                 auto_log,
                 size,
                 login: None,
+                ever_connected: false,
+                backoff: Backoff::default(),
+                retry: None,
                 _session_events: task,
                 _terminal_events: subscription,
             };
@@ -267,6 +285,7 @@ impl Session {
     }
 
     pub fn reconnect(&mut self, cx: &mut Context<Self>) {
+        self.retry = None;
         self.show(b"\r\n", cx);
         if self.auto_log && self.log.is_none() {
             self.start_auto_log();
@@ -317,11 +336,15 @@ impl Session {
                 self.status = Status::Connected;
                 self.connected_at = Some(std::time::Instant::now());
                 self.ended_at = None;
+                self.ever_connected = true;
+                self.backoff.reset();
                 self.offer_save(cx);
                 cx.notify();
             }
             SessionEvent::Closed {
-                exit_status, error, ..
+                exit_status,
+                error,
+                reason,
             } => {
                 self.status = Status::Closed;
                 self.ended_at = Some(std::time::Instant::now());
@@ -331,6 +354,9 @@ impl Session {
                 self.typed = None;
                 self.tried.clear();
                 self.asked.clear();
+                if reconnect::should_retry(&reason, self.ever_connected) {
+                    return self.schedule_retry(&reason, cx);
+                }
                 let reason = match (error, exit_status) {
                     (Some(e), _) => e,
                     (None, Some(code)) => format!("exit status {code}"),
@@ -358,10 +384,77 @@ impl Session {
         }
     }
 
+    /// Counts down to the next dial, redrawing one line in the terminal every second.
+    fn schedule_retry(&mut self, reason: &Disconnect, cx: &mut Context<Self>) {
+        let delay = self.backoff.next_delay();
+        let label = reconnect::label(reason);
+        let at = Instant::now() + delay;
+        tracing::info!(
+            reason = label,
+            delay_secs = delay.as_secs(),
+            "session_retry_scheduled"
+        );
+        let tick = cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor().timer(Duration::from_secs(1)).await;
+                let due = this
+                    .update(cx, |s, cx| {
+                        if Instant::now() >= at {
+                            s.reconnect(cx);
+                            return true;
+                        }
+                        s.draw_countdown(cx);
+                        false
+                    })
+                    .unwrap_or(true);
+                if due {
+                    break;
+                }
+            }
+        });
+        self.retry = Some(Retry {
+            reason: label,
+            at,
+            _tick: tick,
+        });
+        self.show(b"\r\n", cx);
+        self.draw_countdown(cx);
+        cx.notify();
+    }
+
+    fn draw_countdown(&self, cx: &mut Context<Self>) {
+        let Some(retry) = &self.retry else { return };
+        let left = retry.at.saturating_duration_since(Instant::now());
+        // Round up so the line never says 0s while still waiting.
+        let secs = left.as_millis().div_ceil(1000) as u64;
+        let line = reconnect::notice(retry.reason, secs);
+        self.show(format!("\r\x1b[2K\x1b[2m{line}\x1b[0m").as_bytes(), cx);
+    }
+
+    /// The window came back to the front (wake from sleep, network returned): do not make a
+    /// waiting tab sit out its backoff.
+    pub fn nudge(&mut self, cx: &mut Context<Self>) {
+        if self.retry.is_some() {
+            self.reconnect(cx);
+        }
+    }
+
     fn on_terminal_event(&mut self, event: &TerminalEvent, cx: &mut Context<Self>) {
         match event {
             TerminalEvent::Output(bytes) if self.status.is_dormant() => {
-                if wants_reconnect(bytes) {
+                if self.retry.is_some() {
+                    match reconnect::key(bytes) {
+                        Key::RetryNow => self.reconnect(cx),
+                        Key::Stop => {
+                            self.retry = None;
+                            self.show(
+                                b"\r\n\x1b[2mStopped. Press Enter to reconnect\x1b[0m\r\n",
+                                cx,
+                            );
+                        }
+                        Key::Other => {}
+                    }
+                } else if wants_reconnect(bytes) {
                     self.reconnect(cx);
                 }
             }
@@ -477,7 +570,7 @@ mod tests {
             identity_files: Vec::new(),
             proxy_command: None,
             known_hosts: None,
-            memory_keys: Vec::new(),
+            ..Default::default()
         };
         assert_eq!(forget_key_command(&spec), "ssh-keygen -R '[10.0.0.5]:2222'");
         spec.port = 22;

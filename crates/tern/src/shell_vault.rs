@@ -523,6 +523,7 @@ mod tests {
             user: None,
             identity_files: Vec::new(),
             proxy_command: None,
+            ..Default::default()
         }
     }
 

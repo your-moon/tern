@@ -16,6 +16,7 @@ mod motion;
 mod pane;
 mod picker;
 mod recent;
+mod reconnect;
 mod runtime;
 mod session;
 mod session_log;
