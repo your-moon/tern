@@ -34,6 +34,6 @@ artwork and resized. `crates/tern/assets/wallpapers`:
 
 ## App icon
 
-The tern silhouette in `packaging/macos/icon.svg` (and `site/assets/icon.svg`) is "Sterna" by
-Sharon Wegner-Larsen, from PhyloPic, dedicated to the public domain (CC0 1.0):
-https://www.phylopic.org/images/f164783d-3bab-45f3-9885-c1b382202369
+The bird in `packaging/macos/icon.svg` (and `site/assets/icon.svg`) is the "bird" glyph from
+Material Design Icons by Pictogrammers, Apache-2.0:
+https://pictogrammers.com/library/mdi/icon/bird/
