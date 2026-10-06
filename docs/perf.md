@@ -52,3 +52,12 @@ Baseline, set by the second row: **49 MB footprint / 87 MB RSS**. Measured on an
 macOS 26.6.2, with the screen locked, so no frames were being composited. A connected tab
 costs about 5 MB over an empty window. phys_footprint_peak reached 153 MB during start-up
 and connection; that transient is not explained yet (likely shader and font atlas set-up).
+
+## 2026-10-06 — 0.1.0 release build, wallpaper on
+
+| Build | Scene | Result |
+| --- | --- | --- |
+| 0.1.0 release (`/Applications/tern.app`) | window open, Great Wave wallpaper (full window + blurred backdrop), no session, idle 12 s | 83 MB phys_footprint · 127 MB RSS · 186 MB footprint peak |
+
+The start-up peak (F7) is the wallpaper: the picture is decoded at full size, then scaled,
+blurred and cached (`wallpaper.rs` `prepare`), and the decode buffers are freed after.

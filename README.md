@@ -19,7 +19,7 @@
 - **Passwords that stay out of the way.** Logins come from your SSH key, your password manager (`gopass show -o …`), or tern's encrypted vault. At a `sudo` prompt, **⌘\\** types the password for you.
 - **Built for real work.** Split panes, find in scrollback, clickable links, snippets, SFTP file browser, port forwards, ProxyJump, agent forwarding, broadcast input, session logs, and automatic reconnect.
 - **Your setup, backed up.** Hosts, snippets and settings sync to a private Git repository you own, encrypted end to end.
-- **Native and light.** Under 100 MB with a connected session. It reads crisp on 1080p monitors, and sits on frosted glass over a wallpaper of your choice.
+- **Native and light.** About 85 MB in Activity Monitor with a wallpaper showing (measured, [docs/perf.md](docs/perf.md)). It reads crisp on 1080p monitors, and sits on frosted glass over a wallpaper of your choice.
 
 <p align="center">
   <img src="docs/screenshots/terminal.jpg" alt="A session on web-01 running htop, with the status line showing Connected, 1 ms and session time" width="900">
