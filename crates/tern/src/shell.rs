@@ -49,6 +49,15 @@ pub(crate) use themes_ui::ThemeTarget;
 
 #[path = "shell_connections.rs"]
 mod connections_ui;
+#[path = "shell_hostlist.rs"]
+mod hostlist;
+#[path = "shell_import.rs"]
+mod import_ui;
+#[path = "shell_snippets.rs"]
+mod snippets_ui;
+
+pub(crate) use hostlist::FocusHostSearch;
+pub(crate) use snippets_ui::ToggleSnippets;
 
 pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
     let bounds = Bounds::centered(None, size(px(1320.), px(880.)), cx);
@@ -65,6 +74,9 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
         app_id: Some("tern".into()),
         ..Default::default()
     };
+    let recent = settings::dir()
+        .map(|d| crate::recent::Recent::load(&d))
+        .unwrap_or_default();
     let (connections, store_error) = match settings::dir().map(|d| connections::load(&d)) {
         Some(Ok(list)) => (list, None),
         Some(Err(e)) => {
@@ -74,36 +86,41 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
         None => (Vec::new(), None),
     };
     let window = cx.open_window(options, |_, cx| {
-        let mut shell = Shell {
-            focus: cx.focus_handle(),
-            settings: settings::dir()
-                .map(|d| Settings::load(&d))
-                .unwrap_or_default(),
-            theme: Theme::zeron_dark(),
-            hosts: Vec::new(),
-            ssh_hosts: tern_ssh::load_ssh_config_hosts(),
-            connections,
-            store_error,
-            form: None,
-            confirm_delete: None,
-            tabs: Vec::new(),
-            active: 0,
-            error: None,
-            picker: None,
-            sidebar_tween: None,
-            settings_page: None,
-            theme_picker: None,
-            recording: None,
-            record_notice: None,
-            record_interceptor: None,
-            sync_ui: None,
-            toasts: toast::Toasts::new(),
-            tab_scroll: gpui::ScrollHandle::new(),
-            context_menu: None,
-            collapsed_sections: Vec::new(),
-        };
-        shell.refresh_hosts();
-        cx.new(|_| shell)
+        cx.new(|cx| {
+            let theme = Theme::zeron_dark();
+            let mut shell = Shell {
+                focus: cx.focus_handle(),
+                settings: settings::dir()
+                    .map(|d| Settings::load(&d))
+                    .unwrap_or_default(),
+                theme,
+                hosts: Vec::new(),
+                connections,
+                store_error,
+                form: None,
+                confirm_delete: None,
+                tabs: Vec::new(),
+                active: 0,
+                error: None,
+                picker: None,
+                sidebar_tween: None,
+                settings_page: None,
+                theme_picker: None,
+                recording: None,
+                record_notice: None,
+                record_interceptor: None,
+                sync_ui: None,
+                toasts: toast::Toasts::new(),
+                tab_scroll: gpui::ScrollHandle::new(),
+                context_menu: None,
+                collapsed_sections: Vec::new(),
+                hostlist: hostlist::HostList::new(&theme, recent, cx),
+                snippets: snippets_ui::SnippetsUi::load(),
+                import: None,
+            };
+            shell.refresh_hosts();
+            shell
+        })
     })?;
     window.update(cx, |shell, window, cx| {
         crate::motion::apply(shell.settings.reduce_motion, cx);
@@ -124,10 +141,8 @@ pub struct Shell {
     focus: FocusHandle,
     settings: Settings,
     theme: Theme,
-    /// What the sidebar and picker list: tern's connections, then `~/.ssh/config` hosts that
-    /// no connection replaces.
+    /// What the sidebar and picker list: tern's own connections, in `hosts.json` order.
     hosts: Vec<HostEntry>,
-    ssh_hosts: Vec<HostEntry>,
     connections: Vec<Connection>,
     /// Set when `hosts.json` exists but cannot be read; saving is refused so it is not lost.
     store_error: Option<String>,
@@ -149,6 +164,9 @@ pub struct Shell {
     tab_scroll: gpui::ScrollHandle,
     context_menu: Option<menu::ContextMenu>,
     collapsed_sections: Vec<&'static str>,
+    hostlist: hostlist::HostList,
+    snippets: snippets_ui::SnippetsUi,
+    import: Option<import_ui::ImportSheet>,
 }
 
 struct Tab {
@@ -161,6 +179,7 @@ impl Shell {
     /// Switches to the host's tab if it has one, reconnecting it when closed; otherwise opens
     /// a new tab.
     pub fn connect_host(&mut self, host: HostEntry, window: &mut Window, cx: &mut Context<Self>) {
+        self.record_recent(&host.alias);
         if let Some(ix) = self.tabs.iter().position(|tab| tab.alias == host.alias) {
             let session = self.tabs[ix].session.clone();
             session.update(cx, |s, cx| {
@@ -402,32 +421,7 @@ impl Shell {
     }
 
     fn refresh_hosts(&mut self) {
-        let mut hosts: Vec<HostEntry> = self.connections.iter().map(Connection::entry).collect();
-        hosts.extend(
-            self.ssh_hosts
-                .iter()
-                .filter(|h| !self.connections.iter().any(|c| c.name == h.alias))
-                .filter(|h| !self.settings.hidden_hosts.contains(&h.alias))
-                .cloned(),
-        );
-        self.hosts = hosts;
-    }
-
-    /// Removes a `~/.ssh/config` host from tern's list (the file is never written), with Undo.
-    pub(crate) fn hide_host(&mut self, alias: String, cx: &mut Context<Self>) {
-        self.update_settings(|s| s.hidden_hosts.push(alias.clone()), cx);
-        self.refresh_hosts();
-        self.toast(
-            Toast::new(ToastKind::Default, format!("Removed {alias} from the list"))
-                .action("Undo", move |s, _, cx| s.unhide_host(&alias, cx)),
-            cx,
-        );
-    }
-
-    pub(crate) fn unhide_host(&mut self, alias: &str, cx: &mut Context<Self>) {
-        self.update_settings(|s| s.hidden_hosts.retain(|h| h != alias), cx);
-        self.refresh_hosts();
-        cx.notify();
+        self.hosts = self.connections.iter().map(Connection::entry).collect();
     }
 
     pub(crate) fn toggle_section(&mut self, name: &'static str, cx: &mut Context<Self>) {
@@ -488,7 +482,7 @@ impl Shell {
             .collect()
     }
 
-    fn panel_content(&self, cx: &App) -> AnyElement {
+    fn panel_content(&self, cx: &mut Context<Self>) -> AnyElement {
         if let Some(tab) = self.tabs.get(self.active) {
             return tab.session.read(cx).view.clone().into_any_element();
         }
@@ -514,7 +508,7 @@ impl Shell {
             Some(e) => ("Could not open that".into(), Some(e.clone().into())),
             None if self.hosts.is_empty() => (
                 "No hosts yet".into(),
-                Some("Add a connection, or hosts from ~/.ssh/config appear here".into()),
+                Some("Add a connection, or copy your hosts over from ~/.ssh/config".into()),
             ),
             None => ("No session open".into(), None),
         };
@@ -536,6 +530,28 @@ impl Shell {
                         el.child(div().text_sm().text_color(t.muted).child(d))
                     }),
             )
+            .when(self.hosts.is_empty(), |el| {
+                el.child(
+                    div()
+                        .flex()
+                        .gap(px(8.))
+                        .child(
+                            connections_ui::button("empty-main-new", "New connection", true, &t)
+                                .on_click(
+                                    cx.listener(|s, _, w, cx| s.open_form(None, None, w, cx)),
+                                ),
+                        )
+                        .child(
+                            connections_ui::button(
+                                "empty-main-import",
+                                "Import from ~/.ssh/config…",
+                                false,
+                                &t,
+                            )
+                            .on_click(cx.listener(|s, _, w, cx| s.open_import(w, cx))),
+                        ),
+                )
+            })
             .child(
                 div()
                     .flex()
@@ -563,21 +579,28 @@ impl Render for Shell {
         let infos = self.tab_infos(cx);
         let active_alias = infos.get(self.active).map(|i| i.alias.clone());
         let strip = tabs::strip(&infos, self.active, &self.tab_scroll, &t, cx);
+        let query = self.search_query(cx);
+        let recent_rows = self.recent_indices();
         let sidebar = sidebar::render(
             &sidebar::SidebarState {
                 hosts: &self.hosts,
-                editable: sidebar::Editable {
-                    count: self.connections.len(),
-                },
+                connections: &self.connections,
                 open: &infos,
                 active_alias: active_alias.as_deref(),
                 width: self.settings.sidebar_width,
                 collapsed: &self.collapsed_sections,
+                collapsed_groups: &self.hostlist.collapsed_groups,
+                recent: &recent_rows,
+                query: &query,
+                search: &self.hostlist.search,
             },
             &t,
             cx,
         );
         let form = self.render_form(window, cx);
+        let import = self.render_import(window, cx);
+        let snippet_picker = self.render_snippet_picker(window, cx);
+        let snippet_form = self.render_snippet_form(window, cx);
         let panel_bg = self.panel_background();
         let theme_picker = self.render_theme_picker(window, cx);
         let toast = self.render_toast(window, cx);
@@ -609,6 +632,8 @@ impl Render for Shell {
             }))
             .on_action(cx.listener(|s, a: &ActivateTab, w, cx| s.activate_tab(a.0, w, cx)))
             .on_action(cx.listener(|s, _: &ToggleHostPicker, w, cx| s.toggle_picker(w, cx)))
+            .on_action(cx.listener(|s, _: &FocusHostSearch, w, cx| s.focus_search(w, cx)))
+            .on_action(cx.listener(|s, _: &ToggleSnippets, w, cx| s.toggle_snippet_picker(w, cx)))
             .on_action(cx.listener(|s, _: &ToggleSidebar, _, cx| s.toggle_sidebar(cx)))
             .on_action(cx.listener(|s, _: &NewConnection, w, cx| s.open_form(None, None, w, cx)))
             .on_action(cx.listener(|s, _: &OpenSettings, w, cx| s.toggle_settings(w, cx)))
@@ -680,6 +705,9 @@ impl Render for Shell {
                     .into_any_element(),
             })
             .when_some(form, |el, form| el.child(form))
+            .when_some(import, |el, i| el.child(i))
+            .when_some(snippet_picker, |el, p| el.child(p))
+            .when_some(snippet_form, |el, f| el.child(f))
             .when_some(theme_picker, |el, p| el.child(p))
             .when_some(context_menu, |el, m| el.child(m))
             .when_some(toast, |el, t| el.child(t))
@@ -687,6 +715,8 @@ impl Render for Shell {
                 el.child(picker::render(
                     p,
                     &self.hosts,
+                    &self.picker_matches(),
+                    &self.recent_aliases(),
                     window.viewport_size(),
                     &t,
                     cx,

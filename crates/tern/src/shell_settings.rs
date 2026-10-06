@@ -21,17 +21,19 @@ pub(crate) enum Section {
     Terminal,
     Shortcuts,
     Connections,
+    Snippets,
     Vault,
     Sync,
     About,
 }
 
 impl Section {
-    const ALL: [Section; 7] = [
+    const ALL: [Section; 8] = [
         Section::Appearance,
         Section::Terminal,
         Section::Shortcuts,
         Section::Connections,
+        Section::Snippets,
         Section::Vault,
         Section::Sync,
         Section::About,
@@ -43,6 +45,7 @@ impl Section {
             Section::Terminal => "Terminal",
             Section::Shortcuts => "Shortcuts",
             Section::Connections => "Connections",
+            Section::Snippets => "Snippets",
             Section::Vault => "Vault",
             Section::Sync => "Sync",
             Section::About => "About",
@@ -55,6 +58,7 @@ impl Section {
             Section::Terminal => crate::icons::TERMINAL,
             Section::Shortcuts => crate::icons::KEYBOARD,
             Section::Connections => crate::icons::SERVER,
+            Section::Snippets => crate::icons::TERMINAL,
             Section::Vault => crate::icons::KEY,
             Section::Sync => crate::icons::CLOUD,
             Section::About => crate::icons::INFO,
@@ -67,6 +71,7 @@ impl Section {
             Section::Terminal => "nav-terminal",
             Section::Shortcuts => "nav-shortcuts",
             Section::Connections => "nav-connections",
+            Section::Snippets => "nav-snippets",
             Section::Vault => "nav-vault",
             Section::Sync => "nav-sync",
             Section::About => "nav-about",
@@ -135,6 +140,7 @@ impl Shell {
             Section::Terminal => self.terminal_page(cx),
             Section::Shortcuts => self.shortcuts_page(cx),
             Section::Connections => self.connections_page(cx),
+            Section::Snippets => self.snippets_page(cx),
             Section::Vault => self.vault_page(cx),
             Section::Sync => self.sync_page(cx),
             Section::About => about_page(&t),
@@ -430,38 +436,33 @@ impl Shell {
                     .items_center()
                     .justify_between()
                     .child(w::page_header(&t, "Connections"))
-                    .child(w::button(&t, "settings-new", "New connection").on_click(
-                        cx.listener(|s, _, window, cx| s.open_form(None, None, window, cx)),
-                    )),
+                    .child(
+                        div()
+                            .flex()
+                            .gap(px(6.))
+                            .child(
+                                w::button(&t, "settings-import", "Import from ~/.ssh/config…")
+                                    .on_click(
+                                        cx.listener(|s, _, window, cx| s.open_import(window, cx)),
+                                    ),
+                            )
+                            .child(w::button(&t, "settings-new", "New connection").on_click(
+                                cx.listener(|s, _, window, cx| s.open_form(None, None, window, cx)),
+                            )),
+                    ),
             )
             .child(w::page_subtitle(
                 &t,
                 format!(
-                    "{} in tern · {} from ~/.ssh/config, read-only",
-                    self.connections.len(),
-                    self.ssh_hosts.len()
+                    "{} saved in tern. Import copies hosts out of ~/.ssh/config once; \
+                     it is never read or written afterwards.",
+                    self.connections.len()
                 ),
             ))
             .when_some(self.store_error.clone(), |el, e| {
                 el.child(w::page_subtitle(&t, e).text_color(t.danger))
             })
             .child(w::section(&t, "Saved in tern", list))
-            .when(!self.settings.hidden_hosts.is_empty(), |el| {
-                let mut hidden = w::card(&t);
-                for (ix, alias) in self.settings.hidden_hosts.iter().enumerate() {
-                    let alias = alias.clone();
-                    let show = alias.clone();
-                    hidden = hidden.child(w::row(
-                        &t,
-                        ix == 0,
-                        alias,
-                        Some("From ~/.ssh/config".into()),
-                        w::button(&t, ("unhide", ix), "Show again")
-                            .on_click(cx.listener(move |s, _, _, cx| s.unhide_host(&show, cx))),
-                    ));
-                }
-                el.child(w::section(&t, "Removed from the list", hidden))
-            })
     }
 
     fn vault_page(&self, cx: &mut Context<Self>) -> gpui::Div {

@@ -1,6 +1,7 @@
 // Adapted from zeron crates/ui/src/shell/command_palette.rs (palette card, header, footer,
 // overlay) and crates/engine/src/repos.rs (nucleo ranking) (MIT).
-//! ⌘K host picker: type to fuzzy-filter `~/.ssh/config` hosts, Enter connects.
+//! ⌘K host picker: type to fuzzy-filter tern's connections, Enter connects. An empty query
+//! lists recents first; text that matches nothing connects as a typed target.
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
@@ -78,12 +79,46 @@ pub fn classify(event: &KeyDownEvent) -> Key {
 
 /// Indices into `hosts` that match `query`, best first. An empty query keeps config order.
 /// Each host is matched as "alias user@hostname", so either the name or the address finds it.
+#[cfg(test)]
 pub fn rank(query: &str, hosts: &[HostEntry]) -> Vec<usize> {
     let labels: Vec<String> = hosts
         .iter()
         .map(|host| format!("{} {}", host.alias, sidebar::address(host)))
         .collect();
     rank_labels(query, &labels)
+}
+
+/// What the picker lists: the ranked matches for a query; with none typed, the recent hosts
+/// (newest first) and then everyone else in list order. `labels[i]` and `aliases[i]` describe
+/// host `i`.
+pub fn order(query: &str, labels: &[String], aliases: &[&str], recent: &[&str]) -> Vec<usize> {
+    if !query.trim().is_empty() {
+        return rank_named(query, aliases, labels);
+    }
+    let mut out: Vec<usize> = recent
+        .iter()
+        .filter_map(|r| aliases.iter().position(|a| a == r))
+        .collect();
+    let rest: Vec<usize> = (0..labels.len()).filter(|i| !out.contains(i)).collect();
+    out.extend(rest);
+    out
+}
+
+/// Hosts whose name matches come first (best first), then the ones that only match through
+/// their address, group or tags, so a tag never outranks a host named for the query.
+pub fn rank_named<N: AsRef<str>, L: AsRef<str>>(
+    query: &str,
+    names: &[N],
+    labels: &[L],
+) -> Vec<usize> {
+    let mut out = rank_labels(query, names);
+    let by_name = out.clone();
+    out.extend(
+        rank_labels(query, labels)
+            .into_iter()
+            .filter(|ix| !by_name.contains(ix)),
+    );
+    out
 }
 
 /// Fuzzy-ranks any labels: indices of the matches, best first, input order on an empty
@@ -120,7 +155,8 @@ impl Shell {
             return;
         }
         cx.stop_propagation();
-        let matches = rank(&self.picker_query(), self.hosts());
+        let matches = self.picker_matches();
+        let query = self.picker_query();
         let Some(picker) = self.picker_mut() else {
             return;
         };
@@ -144,8 +180,14 @@ impl Shell {
                     .get(picker.active)
                     .map(|&ix| self.hosts()[ix].clone());
                 self.close_picker(window, cx);
-                if let Some(host) = chosen {
-                    self.connect_host(host, window, cx);
+                match chosen {
+                    Some(host) => self.connect_host(host, window, cx),
+                    // Nothing listed matches: treat the text as a target, so `user@host:port`
+                    // and `~/.ssh/config` aliases that were never imported still connect.
+                    None if !query.trim().is_empty() => {
+                        self.connect_target(query.trim(), window, cx)
+                    }
+                    None => {}
                 }
                 return;
             }
@@ -157,18 +199,19 @@ impl Shell {
 }
 
 /// Results list height: zeron's `palette_results_height`.
-fn results_height(viewport: Size<Pixels>) -> f32 {
+pub(crate) fn results_height(viewport: Size<Pixels>) -> f32 {
     (f32::from(viewport.height) - 180.0).clamp(100.0, 360.0)
 }
 
 pub fn render(
     picker: &Picker,
     hosts: &[HostEntry],
+    matches: &[usize],
+    recent: &[String],
     viewport: Size<Pixels>,
     t: &Theme,
     cx: &mut Context<Shell>,
 ) -> AnyElement {
-    let matches = rank(&picker.query, hosts);
     let active = picker.active.min(matches.len().saturating_sub(1));
     let rows = matches.iter().enumerate().map(|(row, &ix)| {
         let host = &hosts[ix];
@@ -204,6 +247,10 @@ pub fn render(
                     .text_xs()
                     .text_color(t.muted)
                     .child(SharedString::from(sidebar::address(host))),
+            )
+            .when(
+                picker.query.is_empty() && recent.contains(&host.alias),
+                |el| el.child(div().text_xs().text_color(t.faint).child("Recent")),
             )
     });
     let query: SharedString = if picker.query.is_empty() {
@@ -263,6 +310,15 @@ pub fn render(
                 .gap(px(2.))
                 .children(rows)
                 .when(matches.is_empty(), |el| {
+                    let text: SharedString = if picker.query.trim().is_empty() {
+                        "No hosts yet. Add one with the + in the sidebar.".into()
+                    } else {
+                        format!(
+                            "No hosts match. Enter connects to \"{}\".",
+                            picker.query.trim()
+                        )
+                        .into()
+                    };
                     el.child(
                         div()
                             .py(px(24.))
@@ -270,7 +326,7 @@ pub fn render(
                             .justify_center()
                             .text_sm()
                             .text_color(t.muted)
-                            .child("No hosts match"),
+                            .child(text),
                     )
                 }),
         )
@@ -304,7 +360,7 @@ pub fn render(
     .into_any_element()
 }
 
-fn kbd(keys: SharedString, t: &Theme) -> impl IntoElement + use<> {
+pub(crate) fn kbd(keys: SharedString, t: &Theme) -> impl IntoElement + use<> {
     div()
         .px(px(5.))
         .rounded(px(4.))
@@ -314,7 +370,7 @@ fn kbd(keys: SharedString, t: &Theme) -> impl IntoElement + use<> {
         .child(keys)
 }
 
-fn hint(keys: &'static str, label: &'static str, t: &Theme) -> impl IntoElement + use<> {
+pub(crate) fn hint(keys: &'static str, label: &'static str, t: &Theme) -> impl IntoElement + use<> {
     div()
         .flex()
         .items_center()
@@ -325,7 +381,7 @@ fn hint(keys: &'static str, label: &'static str, t: &Theme) -> impl IntoElement 
 
 #[cfg(test)]
 mod tests {
-    use super::rank;
+    use super::{order, rank};
     use tern_ssh::HostEntry;
 
     fn host(alias: &str, host_name: &str) -> HostEntry {
@@ -374,5 +430,18 @@ mod tests {
             host("strong-b", "10.0.0.2"),
         ];
         assert_eq!(rank("strong", &hosts), vec![1, 0]);
+    }
+
+    #[test]
+    fn an_empty_query_lists_recents_first_then_the_rest_in_order() {
+        let hosts = hosts();
+        let labels: Vec<String> = hosts.iter().map(|h| h.alias.clone()).collect();
+        let aliases: Vec<&str> = hosts.iter().map(|h| h.alias.as_str()).collect();
+        // newest first; "gone" no longer exists and is skipped
+        let recent = ["tino_charge", "gone", "grape"];
+        assert_eq!(order("", &labels, &aliases, &recent), vec![3, 0, 1, 2]);
+        assert_eq!(order("", &labels, &aliases, &[]), vec![0, 1, 2, 3]);
+        // A query ignores recency and ranks.
+        assert_eq!(order("stb", &labels, &aliases, &recent), vec![1]);
     }
 }

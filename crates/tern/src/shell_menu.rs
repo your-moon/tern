@@ -12,7 +12,6 @@ use gpui::{
 use tern_ssh::{ConnectSpec, HostEntry};
 
 use super::{Shell, ThemeTarget};
-use crate::connections::Connection;
 use crate::icons::{self, icon};
 use crate::session::Status;
 
@@ -60,11 +59,11 @@ pub(super) struct ContextMenu {
 }
 
 impl Shell {
-    /// Right-click on a host row. `editable` is its index among tern's own connections.
+    /// Right-click on a host row; `editable` is its index among tern's connections.
     pub(crate) fn open_host_menu(
         &mut self,
         host: &HostEntry,
-        editable: Option<usize>,
+        editable: usize,
         position: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
@@ -78,37 +77,20 @@ impl Shell {
             s.open_new_tab(&fresh, w, cx)
         }));
         items.push(Item::Separator);
-        match editable {
-            Some(ix) => items.push(action(icons::PEN, "Edit…", move |s, w, cx| {
-                let draft = s.connection(ix);
-                s.open_form(Some(ix), draft, w, cx);
-            })),
-            None => {
-                let draft = Connection::from_entry(host);
-                items.push(action(
-                    icons::COPY,
-                    "Duplicate to edit…",
-                    move |s, w, cx| s.open_form(None, Some(draft.clone()), w, cx),
-                ));
-            }
-        }
+        items.push(action(icons::PEN, "Edit…", move |s, w, cx| {
+            let draft = s.connection(editable);
+            s.open_form(Some(editable), draft, w, cx);
+        }));
         let theme_alias = alias.clone();
         items.push(action(icons::PALETTE, "Theme…", move |s, w, cx| {
             s.open_theme_picker(ThemeTarget::Host(theme_alias.clone()), w, cx)
         }));
         items.push(Item::Separator);
-        match editable {
-            // The menu is already a deliberate second step, so remove at once; Undo covers it.
-            Some(ix) => items.push(destructive(icons::TRASH, "Remove", move |s, _, cx| {
-                s.confirm_delete = Some(ix);
-                s.delete_connection(ix, cx);
-            })),
-            None => items.push(destructive(
-                icons::EYE_CLOSED,
-                "Remove from list",
-                move |s, _, cx| s.hide_host(alias.clone(), cx),
-            )),
-        }
+        // The menu is already a deliberate second step, so remove at once; Undo covers it.
+        items.push(destructive(icons::TRASH, "Remove", move |s, _, cx| {
+            s.confirm_delete = Some(editable);
+            s.delete_connection(editable, cx);
+        }));
         self.context_menu = Some(ContextMenu { position, items });
         cx.notify();
     }

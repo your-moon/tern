@@ -17,6 +17,8 @@ const FILE_NAME: &str = "keymap.json";
 #[serde(rename_all = "camelCase")]
 pub enum ShortcutId {
     HostPicker,
+    SearchHosts,
+    Snippets,
     NewConnection,
     Settings,
     ToggleSidebar,
@@ -29,8 +31,10 @@ pub enum ShortcutId {
 }
 
 impl ShortcutId {
-    pub const ALL: [ShortcutId; 10] = [
+    pub const ALL: [ShortcutId; 12] = [
         ShortcutId::HostPicker,
+        ShortcutId::SearchHosts,
+        ShortcutId::Snippets,
         ShortcutId::NewConnection,
         ShortcutId::Settings,
         ShortcutId::ToggleSidebar,
@@ -45,6 +49,8 @@ impl ShortcutId {
     pub fn label(self) -> &'static str {
         match self {
             ShortcutId::HostPicker => "Open host picker",
+            ShortcutId::SearchHosts => "Search hosts",
+            ShortcutId::Snippets => "Snippets",
             ShortcutId::NewConnection => "New connection",
             ShortcutId::Settings => "Open settings",
             ShortcutId::ToggleSidebar => "Toggle sidebar",
@@ -60,6 +66,8 @@ impl ShortcutId {
     pub fn default_combo(self) -> &'static str {
         match self {
             ShortcutId::HostPicker => "cmd-k",
+            ShortcutId::SearchHosts => "cmd-shift-f",
+            ShortcutId::Snippets => "cmd-shift-s",
             ShortcutId::NewConnection => "cmd-n",
             ShortcutId::Settings => "cmd-,",
             ShortcutId::ToggleSidebar => "cmd-b",
@@ -80,6 +88,8 @@ impl ShortcutId {
         use crate::tabs::{CloseTab, NextTab, PrevTab};
         match self {
             ShortcutId::HostPicker => Box::new(crate::picker::ToggleHostPicker),
+            ShortcutId::SearchHosts => Box::new(crate::shell::FocusHostSearch),
+            ShortcutId::Snippets => Box::new(crate::shell::ToggleSnippets),
             ShortcutId::NewConnection => Box::new(NewConnection),
             ShortcutId::Settings => Box::new(OpenSettings),
             ShortcutId::ToggleSidebar => Box::new(ToggleSidebar),
@@ -324,6 +334,23 @@ mod tests {
         assert!(k.refusal(ShortcutId::Settings, "cmd-q").is_some());
         k.set(ShortcutId::HostPicker, "cmd-k");
         assert!(k.0.is_empty());
+    }
+
+    #[test]
+    fn no_two_defaults_share_a_chord_or_take_a_reserved_one() {
+        let mut seen = std::collections::BTreeSet::new();
+        for id in ShortcutId::ALL {
+            assert!(seen.insert(id.default_combo()), "{id:?} repeats a chord");
+            assert!(
+                !RESERVED.contains(&id.default_combo()),
+                "{id:?} is reserved"
+            );
+        }
+        assert_eq!(
+            Keymap::default().combo(ShortcutId::SearchHosts),
+            "cmd-shift-f"
+        );
+        assert_eq!(Keymap::default().combo(ShortcutId::Snippets), "cmd-shift-s");
     }
 
     #[test]

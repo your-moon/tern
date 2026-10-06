@@ -21,6 +21,15 @@ pub struct Connection {
     /// A private key path; `None` tries ssh-agent and the default keys, as `ssh` does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity_file: Option<String>,
+    /// The folder it is listed under in the sidebar; `None` lists it with the ungrouped.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    /// Free labels the sidebar search also matches.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    /// Copied from `~/.ssh/config` on import; the form does not edit it, so an edit keeps it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy_command: Option<String>,
 }
 
 impl Connection {
@@ -32,7 +41,7 @@ impl Connection {
             port: self.port,
             user: Some(self.user.clone()),
             identity_files: self.identity_file.iter().map(|p| expand_home(p)).collect(),
-            proxy_command: None,
+            proxy_command: self.proxy_command.clone(),
         }
     }
 
@@ -47,6 +56,9 @@ impl Connection {
                 .identity_files
                 .first()
                 .map(|p| p.display().to_string()),
+            group: None,
+            tags: Vec::new(),
+            proxy_command: entry.proxy_command.clone(),
         }
     }
 }
@@ -118,6 +130,20 @@ pub struct Draft {
     pub port: String,
     pub user: String,
     pub identity_file: String,
+    pub group: String,
+    /// Comma separated, as typed.
+    pub tags: String,
+}
+
+/// `"prod, web ,,prod"` → `["prod", "web"]`: trimmed, no blanks, no repeats, first spelling kept.
+pub fn parse_tags(text: &str) -> Vec<String> {
+    let mut tags: Vec<String> = Vec::new();
+    for tag in text.split(',').map(str::trim).filter(|t| !t.is_empty()) {
+        if !tags.iter().any(|t| t.eq_ignore_ascii_case(tag)) {
+            tags.push(tag.to_owned());
+        }
+    }
+    tags
 }
 
 /// Checks a draft. `others` are the names of the other tern connections (not the one being
@@ -160,6 +186,11 @@ pub fn validate(draft: &Draft, others: &[&str]) -> Result<Connection, String> {
         port,
         user: user.to_owned(),
         identity_file,
+        group: Some(draft.group.trim())
+            .filter(|g| !g.is_empty())
+            .map(str::to_owned),
+        tags: parse_tags(&draft.tags),
+        proxy_command: None,
     })
 }
 
@@ -175,6 +206,8 @@ mod tests {
             port: port.into(),
             user: user.into(),
             identity_file: String::new(),
+            group: String::new(),
+            tags: String::new(),
         }
     }
 
@@ -262,5 +295,45 @@ mod tests {
         assert_eq!((c.name.as_str(), c.user.as_str()), ("grape", "root"));
         assert_eq!(c.identity_file.as_deref(), Some("/k/id"));
         assert_eq!(c.entry().host_name, "203.0.113.40");
+        assert_eq!(c.entry().proxy_command, None);
+    }
+
+    /// A `hosts.json` written before groups and tags existed must load unchanged, and saving
+    /// it back must not invent the new fields.
+    #[test]
+    fn an_old_hosts_file_without_group_or_tags_loads_and_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = r#"{
+  "version": 1,
+  "connections": [
+    { "name": "web", "host": "10.0.0.5", "port": 2222, "user": "deploy", "identityFile": "~/k" },
+    { "name": "db", "host": "10.0.0.6", "port": 22, "user": "root" }
+  ]
+}"#;
+        std::fs::write(dir.path().join(FILE_NAME), old).unwrap();
+        let list = load(dir.path()).unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].port, 2222);
+        assert_eq!(list[0].identity_file.as_deref(), Some("~/k"));
+        assert!(list.iter().all(|c| c.group.is_none() && c.tags.is_empty()));
+        save(dir.path(), &list).unwrap();
+        let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
+        assert!(!text.contains("group") && !text.contains("tags"), "{text}");
+        assert_eq!(load(dir.path()).unwrap(), list);
+    }
+
+    #[test]
+    fn group_and_tags_survive_a_round_trip_and_are_cleaned() {
+        let mut d = draft("web", "h", "", "u");
+        d.group = "  Production ".into();
+        d.tags = "eu, web ,,EU,db".into();
+        let c = validate(&d, &[]).unwrap();
+        assert_eq!(c.group.as_deref(), Some("Production"));
+        assert_eq!(c.tags, vec!["eu", "web", "db"]);
+        let dir = tempfile::tempdir().unwrap();
+        save(dir.path(), std::slice::from_ref(&c)).unwrap();
+        assert_eq!(load(dir.path()).unwrap(), vec![c]);
+        let blank = validate(&draft("web", "h", "", "u"), &[]).unwrap();
+        assert_eq!((blank.group, blank.tags), (None, Vec::new()));
     }
 }

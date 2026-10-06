@@ -13,6 +13,7 @@ use tern_vault::{Key, Vault, VaultError};
 use super::{Shell, Toast, ToastKind};
 use crate::connections::{self, Connection, Draft};
 use crate::keeper::Keeper;
+use crate::sidebar;
 use crate::text_input::{InputColors, TextInput};
 use crate::theme::Theme;
 
@@ -24,6 +25,10 @@ pub(super) struct ConnectionForm {
     port: Entity<TextInput>,
     user: Entity<TextInput>,
     key: Entity<TextInput>,
+    group: Entity<TextInput>,
+    tags: Entity<TextInput>,
+    /// Kept from an import; the form has no field for it.
+    proxy_command: Option<String>,
     password: Entity<TextInput>,
     vault_pass: Entity<TextInput>,
     vault_repeat: Entity<TextInput>,
@@ -48,6 +53,8 @@ impl ConnectionForm {
             &self.port,
             &self.user,
             &self.key,
+            &self.group,
+            &self.tags,
             &self.password,
             &self.vault_pass,
             &self.vault_repeat,
@@ -90,6 +97,9 @@ impl Shell {
             port: 22,
             user: std::env::var("USER").unwrap_or_default(),
             identity_file: None,
+            group: None,
+            tags: Vec::new(),
+            proxy_command: None,
         });
         let password_hint = if editing.is_some() {
             "Unchanged"
@@ -107,6 +117,9 @@ impl Shell {
                 false,
                 d.identity_file.unwrap_or_default(),
             ),
+            group: field("none", false, d.group.unwrap_or_default()),
+            tags: field("comma separated, e.g. eu, db", false, d.tags.join(", ")),
+            proxy_command: d.proxy_command,
             password: field(password_hint, true, String::new()),
             vault_pass: field("Vault passphrase", true, String::new()),
             vault_repeat: field("Repeat vault passphrase", true, String::new()),
@@ -166,6 +179,8 @@ impl Shell {
             &form.port,
             &form.user,
             &form.key,
+            &form.group,
+            &form.tags,
             &form.password,
         ];
         if step != VaultStep::None {
@@ -220,6 +235,8 @@ impl Shell {
             port: read(&form.port, cx),
             user: read(&form.user, cx),
             identity_file: read(&form.key, cx),
+            group: read(&form.group, cx),
+            tags: read(&form.tags, cx),
         };
         let editing = form.editing;
         let others: Vec<&str> = self
@@ -230,7 +247,10 @@ impl Shell {
             .map(|(_, c)| c.name.as_str())
             .collect();
         let connection = match connections::validate(&draft, &others) {
-            Ok(c) => c,
+            Ok(c) => Connection {
+                proxy_command: form.proxy_command.clone(),
+                ..c
+            },
             Err(e) => {
                 form.error = Some(e);
                 return cx.notify();
@@ -421,6 +441,32 @@ impl Shell {
         } else {
             "New connection"
         };
+        // Existing groups, one click to reuse a spelling instead of typing it again.
+        let groups = div().flex().flex_wrap().gap(px(6.)).children(
+            sidebar::group_names(&self.connections)
+                .into_iter()
+                .enumerate()
+                .map(|(n, name)| {
+                    let pick = name.clone();
+                    div()
+                        .id(("group-chip", n))
+                        .px(px(8.))
+                        .py(px(2.))
+                        .rounded(px(6.))
+                        .text_xs()
+                        .text_color(t.muted)
+                        .bg(t.row_hover)
+                        .cursor_pointer()
+                        .hover(|s| s.bg(t.row_active))
+                        .on_click(cx.listener(move |shell, _, _, cx| {
+                            if let Some(form) = shell.form.as_ref() {
+                                let group = form.group.clone();
+                                group.update(cx, |i, cx| i.set_text(pick.clone(), cx));
+                            }
+                        }))
+                        .child(SharedString::from(name))
+                }),
+        );
         let mut body = div()
             .flex()
             .flex_col()
@@ -437,6 +483,9 @@ impl Shell {
             )
             .child(row("User", &form.user, t))
             .child(row("Key file", &form.key, t))
+            .child(row("Group", &form.group, t))
+            .child(groups)
+            .child(row("Tags", &form.tags, t))
             .child(row("Password", &form.password, t));
         match step {
             VaultStep::None => {}
@@ -521,7 +570,11 @@ impl Shell {
     }
 }
 
-fn row(label: &'static str, input: &Entity<TextInput>, t: &Theme) -> impl IntoElement + use<> {
+pub(super) fn row(
+    label: &'static str,
+    input: &Entity<TextInput>,
+    t: &Theme,
+) -> impl IntoElement + use<> {
     div()
         .flex()
         .flex_col()
@@ -543,13 +596,13 @@ fn row(label: &'static str, input: &Entity<TextInput>, t: &Theme) -> impl IntoEl
         )
 }
 
-fn note(text: &'static str, t: &Theme) -> impl IntoElement + use<> {
+pub(super) fn note(text: &'static str, t: &Theme) -> impl IntoElement + use<> {
     div().text_xs().text_color(t.muted).child(text)
 }
 
-fn button(
+pub(super) fn button(
     id: &'static str,
-    label: &'static str,
+    label: impl Into<SharedString>,
     primary: bool,
     t: &Theme,
 ) -> gpui::Stateful<gpui::Div> {
@@ -568,5 +621,5 @@ fn button(
                 .text_color(t.text)
                 .hover(|s| s.bg(t.row_active))
         })
-        .child(label)
+        .child(label.into())
 }

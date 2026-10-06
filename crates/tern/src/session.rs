@@ -194,6 +194,17 @@ impl Session {
         }
     }
 
+    /// Types `text` into the remote as the keyboard would: a newline is Enter (CR), so a
+    /// snippet runs only when it ends with one. False when nothing could take it (not
+    /// connected, or a login question is open and would swallow it).
+    pub fn insert_text(&self, text: &str) -> bool {
+        if self.status != Status::Connected || self.login.is_some() {
+            return false;
+        }
+        self.send(text.replace("\r\n", "\r").replace('\n', "\r").into_bytes());
+        true
+    }
+
     fn send(&self, bytes: Vec<u8>) {
         match self.handle.write(bytes) {
             Ok(()) | Err(InputError::Closed) => {}

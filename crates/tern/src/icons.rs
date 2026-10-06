@@ -43,7 +43,6 @@ icon_assets!(
     (CLOSE, "close"),
     (PEN, "pen"),
     (TRASH, "trash-bin-minimalistic"),
-    (COPY, "copy"),
     (PALETTE, "sun"),
     (TERMINAL, "terminal"),
     (SERVER, "remote-server"),
@@ -55,7 +54,7 @@ icon_assets!(
     (CHEVRON_RIGHT, "alt-arrow-right"),
     (CHEVRON_LEFT, "alt-arrow-left"),
     (MORE, "more-horizontal"),
-    (EYE_CLOSED, "eye-closed"),
+    (SEARCH, "magnifer"),
 );
 
 pub fn icon(path: &'static str) -> Svg {

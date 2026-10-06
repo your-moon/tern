@@ -48,10 +48,10 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 | S4 | SFTP file browser, drag and drop upload | No file transfer |
 | S5 | Auto-reconnect after network drop or sleep | Manual Enter only |
 | S6 | Keep-alive interval per host | Fixed 30 s |
-| S7 | Host groups / folders and tags | Flat list; poor with many hosts |
-| S8 | Search in the sidebar | Only the ⌘K picker filters |
-| S9 | Recent hosts | No history |
-| S10 | Snippets (saved commands) | Termius core feature |
+| ✓ S7 | Host groups / folders and tags | Flat list; poor with many hosts |
+| ✓ S8 | Search in the sidebar | Only the ⌘K picker filters |
+| ✓ S9 | Recent hosts | No history |
+| ✓ S10 | Snippets (saved commands) | Termius core feature |
 | S11 | Mosh / serial / telnet | SSH only (out of scope unless asked) |
 
 ## 4. Vault and keys

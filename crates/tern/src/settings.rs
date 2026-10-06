@@ -31,8 +31,6 @@ pub struct Settings {
     pub terminal_theme: Option<String>,
     /// Per-host scheme by host alias, as Termius does per host.
     pub host_themes: BTreeMap<String, String>,
-    /// `~/.ssh/config` hosts the user removed from tern's list; the file itself is untouched.
-    pub hidden_hosts: Vec<String>,
     /// A git remote to sync through (any host git can reach); `None` uses a GitHub gist.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sync_remote: Option<String>,
@@ -48,7 +46,6 @@ impl Default for Settings {
             option_as_meta: true,
             terminal_theme: None,
             host_themes: BTreeMap::new(),
-            hidden_hosts: Vec::new(),
             sync_remote: None,
         }
     }
@@ -143,7 +140,6 @@ mod tests {
             option_as_meta: false,
             terminal_theme: Some("Dracula".into()),
             host_themes: BTreeMap::from([("grape".into(), "Nord".into())]),
-            hidden_hosts: vec!["old-box".into()],
             sync_remote: Some("git@github.com:me/tern-sync.git".into()),
         };
         saved.save(&dir).unwrap();
@@ -171,6 +167,24 @@ mod tests {
         let loaded = Settings::load(&dir);
         assert!(loaded.sidebar_collapsed);
         assert_eq!(loaded.sidebar_width, SIDEBAR_DEFAULT);
+    }
+
+    /// `hiddenHosts` was the old "Remove from list" for `~/.ssh/config` hosts; files that still
+    /// carry it must load, and saving drops it.
+    #[test]
+    fn a_settings_file_with_the_retired_hidden_hosts_still_loads() {
+        let dir = temp_dir("hidden");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(FILE_NAME),
+            r#"{"sidebarWidth":300,"hiddenHosts":["old-box"]}"#,
+        )
+        .unwrap();
+        let loaded = Settings::load(&dir);
+        assert_eq!(loaded.sidebar_width, 300.0);
+        loaded.save(&dir).unwrap();
+        let text = std::fs::read_to_string(dir.join(FILE_NAME)).unwrap();
+        assert!(!text.contains("hiddenHosts"), "{text}");
     }
 
     #[test]
