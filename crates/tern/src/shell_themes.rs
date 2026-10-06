@@ -15,7 +15,7 @@ use gpui::{
 use super::Shell;
 use crate::picker::{Key, classify, rank_labels};
 use crate::theme::hex;
-use crate::themes::{self, Scheme};
+use crate::theme::themes::{self, Scheme};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ThemeTarget {

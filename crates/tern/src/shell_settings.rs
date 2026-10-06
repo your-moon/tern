@@ -136,7 +136,7 @@ impl Shell {
             .min_h_0()
             .flex()
             .child(self.side_tile(
-                super::frame_ui::snap(self.settings.sidebar_width, self.frame.scale),
+                super::look::snap(self.settings.sidebar_width, self.frame.scale),
                 nav,
             ))
             // The page is the body's main tile, so it carries the same tint as every other
@@ -254,7 +254,7 @@ impl Shell {
                         self.settings
                             .terminal_theme
                             .clone()
-                            .unwrap_or_else(|| crate::themes::default_name(t.light).to_owned()),
+                            .unwrap_or_else(|| crate::theme::themes::default_name(t.light).to_owned()),
                     )
                     .on_click(cx.listener(|s, _, window, cx| {
                         s.open_theme_picker(super::ThemeTarget::Default, window, cx)

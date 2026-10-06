@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn a_tinted_scheme_keeps_its_text_readable() {
-        let scheme = crate::themes::find("Dracula").unwrap();
+        let scheme = crate::theme::themes::find("Dracula").unwrap();
         for base in palettes() {
             for color in WALLPAPERS {
                 let term = base.tinted(color).terminal(13.0, Some(scheme));

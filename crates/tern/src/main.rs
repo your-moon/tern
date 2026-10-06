@@ -9,13 +9,11 @@ mod forward_spec;
 mod hover;
 mod icons;
 mod keeper;
-mod keychain;
 mod keymap;
 mod login;
 mod password_command;
 mod picker;
 mod platform;
-mod recent;
 mod reconnect;
 mod session;
 mod session_log;
@@ -32,8 +30,6 @@ mod tabs_store;
 mod text_input;
 mod theme;
 mod theme_tint;
-mod themes;
-mod vault_cli;
 mod vault_pin;
 mod wallpaper;
 mod wallpaper_fx;
@@ -79,7 +75,7 @@ fn main() {
             eprintln!("{text}");
             std::process::exit(2);
         }
-        Cli::VaultInit => match vault_cli::init(std::io::stdin().lock()) {
+        Cli::VaultInit => match vault_pin::init(std::io::stdin().lock()) {
             Ok(text) => {
                 println!("{text}");
                 return;

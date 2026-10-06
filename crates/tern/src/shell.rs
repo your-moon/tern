@@ -49,8 +49,6 @@ mod forwards_ui;
 mod sftp_ui;
 pub(crate) use forwards_ui::FillPassword;
 pub(crate) use sftp_ui::ToggleSftp;
-#[path = "shell_frame.rs"]
-mod frame_ui;
 #[path = "shell_wallpaper_gallery.rs"]
 mod gallery_ui;
 #[path = "shell_look.rs"]
@@ -59,8 +57,6 @@ mod look;
 mod menu;
 #[path = "shell_open.rs"]
 mod open;
-#[path = "shell_panes.rs"]
-mod panes_ui;
 #[path = "shell_settings.rs"]
 mod settings_ui;
 #[path = "shell_sync.rs"]
@@ -120,7 +116,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
         ..Default::default()
     };
     let recent = settings::dir()
-        .map(|d| crate::recent::Recent::load(&d))
+        .map(|d| hostlist::Recent::load(&d))
         .unwrap_or_default();
     let (connections, store_error) = match settings::dir().map(|d| connections::load(&d)) {
         Some(Ok(list)) => (list, None),
@@ -172,7 +168,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 snippets: snippets_ui::SnippetsUi::load(),
                 import: None,
                 wp: wallpaper_ui::State::default(),
-                frame: frame_ui::FrameState::default(),
+                frame: look::FrameState::default(),
                 system_light: false,
                 _clock: None,
             };
@@ -265,7 +261,7 @@ pub struct Shell {
     snippets: snippets_ui::SnippetsUi,
     import: Option<import_ui::ImportSheet>,
     wp: wallpaper_ui::State,
-    frame: frame_ui::FrameState,
+    frame: look::FrameState,
     /// Whether macOS is in its light appearance; what `Appearance: System` follows.
     system_light: bool,
     _clock: Option<gpui::Task<()>>,
@@ -349,7 +345,7 @@ impl Shell {
         if self.settings.sidebar_collapsed {
             0.0
         } else {
-            frame_ui::snap(self.settings.sidebar_width, self.frame.scale)
+            look::snap(self.settings.sidebar_width, self.frame.scale)
         }
     }
 
@@ -359,7 +355,7 @@ impl Shell {
             .and_then(|tween| tween.sample(std::time::Instant::now()))
             .map_or_else(
                 || self.sidebar_target(),
-                |w| frame_ui::snap(w, self.frame.scale),
+                |w| look::snap(w, self.frame.scale),
             )
     }
 
@@ -371,7 +367,7 @@ impl Shell {
 
     /// Live drag: follows the pointer without writing the file on every move.
     fn on_sidebar_drag(&mut self, x: f32, cx: &mut Context<Self>) {
-        self.settings.sidebar_width = frame_ui::snap(chrome::dragged_width(x), self.frame.scale);
+        self.settings.sidebar_width = look::snap(chrome::dragged_width(x), self.frame.scale);
         self.settings.sidebar_collapsed = false;
         self.sidebar_tween = None;
         cx.notify();
