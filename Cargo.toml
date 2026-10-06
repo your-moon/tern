@@ -21,6 +21,7 @@ image = { version = "0.25.10", default-features = false, features = ["png", "jpe
 ssh-key = { version = "=0.7.0-rc.11", default-features = false, features = ["ed25519", "std"] }
 rand = { version = "0.10", features = ["thread_rng"] }
 security-framework = "3"
+keyring = { version = "3", default-features = false }
 
 russh-sftp = "3.0.1"
 # Local-time dates in the file browser.

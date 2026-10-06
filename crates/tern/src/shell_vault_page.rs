@@ -347,7 +347,7 @@ impl Shell {
             .child(w::row(
                 &t,
                 false,
-                "Unlock with the macOS Keychain",
+                format!("Unlock with the {}", crate::keychain::STORE_NAME),
                 Some(
                     "Stores the vault passphrase in your login Keychain and opens the vault at launch"
                         .into(),

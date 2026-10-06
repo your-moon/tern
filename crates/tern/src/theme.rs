@@ -9,6 +9,10 @@ use tern_term::TerminalTheme;
 
 use crate::themes::Scheme;
 
+/// Whether the window can blur the desktop behind it (macOS vibrancy). Windows and Linux
+/// compositors differ too much, so there the window is opaque.
+pub const BLURS_BEHIND: bool = cfg!(target_os = "macos");
+
 /// Window frost over the blurred desktop (zeron `Theme::GLASS_ALPHA`, macOS).
 pub const GLASS_ALPHA: f32 = 0.80;
 pub const TITLEBAR_HEIGHT: f32 = 38.0;
@@ -240,9 +244,14 @@ impl Theme {
     }
 
     /// The window fill: frost, except on a standard-density display, where the translucent
-    /// fill lowers text contrast and the plain shell colour is used.
+    /// fill lowers text contrast and the plain shell colour is used. Only macOS blurs what is
+    /// behind the window; elsewhere the window is opaque, so the shell colour it is.
     pub fn surface(&self) -> Hsla {
-        if low_dpi() { self.shell } else { self.glass() }
+        if low_dpi() || !BLURS_BEHIND {
+            self.shell
+        } else {
+            self.glass()
+        }
     }
 }
 

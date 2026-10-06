@@ -109,7 +109,11 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
             traffic_light_position: Some(point(px(14.), px(14.))),
         }),
         app_owns_titlebar_drag: true,
-        window_background: WindowBackgroundAppearance::Blurred,
+        window_background: if crate::theme::BLURS_BEHIND {
+            WindowBackgroundAppearance::Blurred
+        } else {
+            WindowBackgroundAppearance::Opaque
+        },
         app_id: Some("tern".into()),
         ..Default::default()
     };

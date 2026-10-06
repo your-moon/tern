@@ -34,7 +34,16 @@ pub fn bindings() -> Vec<KeyBinding> {
     ];
     for slot in 0..9 {
         b.push(KeyBinding::new(
-            &format!("cmd-{}", slot + 1),
+            // Alt+1..9 off macOS: plain Ctrl+digit is the shell's, and Super is the desktop's.
+            &format!(
+                "{}-{}",
+                if cfg!(target_os = "macos") {
+                    "cmd"
+                } else {
+                    "alt"
+                },
+                slot + 1
+            ),
             ActivateTab(slot),
             None,
         ));

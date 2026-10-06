@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=tern
+GenericName=SSH Terminal
+Comment=A fast, low-memory SSH terminal
+Exec=tern
+Icon=tern
+Terminal=false
+Categories=Network;RemoteAccess;TerminalEmulator;
+Keywords=ssh;terminal;sftp;
+StartupWMClass=tern

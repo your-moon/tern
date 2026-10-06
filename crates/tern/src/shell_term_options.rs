@@ -165,8 +165,11 @@ impl Shell {
                     true,
                     "Log every session",
                     Some(
-                        "New tabs write plain text to ~/Library/Logs/tern/sessions; or start one from a tab's menu"
-                            .into(),
+                        format!(
+                            "New tabs write plain text to {}/sessions; or start one from a tab's menu",
+                            crate::settings::log_dir_label()
+                        )
+                        .into(),
                     ),
                     log_all,
                 )),
@@ -213,7 +216,11 @@ impl Shell {
                     &t,
                     true,
                     "Scrollback",
-                    Some("Lines kept per terminal; ⌘F searches them".into()),
+                    Some(if cfg!(target_os = "macos") {
+                        "Lines kept per terminal; ⌘F searches them"
+                    } else {
+                        "Lines kept per terminal; Ctrl+Shift+F searches them"
+                    }.into()),
                     scrollback,
                 )),
             ))

@@ -125,6 +125,25 @@ impl ProxyReason {
     }
 }
 
+/// The ProxyCommand wrapped in the platform shell: `sh -c` on Unix, `cmd /C` on Windows.
+fn proxy_shell(cmd: &str) -> tokio::process::Command {
+    #[cfg(unix)]
+    {
+        let mut shell = tokio::process::Command::new("sh");
+        shell.arg("-c").arg(cmd);
+        shell
+    }
+    #[cfg(windows)]
+    {
+        /// `CREATE_NO_WINDOW`: no console window flashes up for a GUI app.
+        const NO_WINDOW: u32 = 0x0800_0000;
+        let mut shell = tokio::process::Command::new("cmd");
+        // `raw_arg`: cmd parses its own command line, so Rust's quoting must not touch it.
+        shell.arg("/C").raw_arg(cmd).creation_flags(NO_WINDOW);
+        shell
+    }
+}
+
 /// ProxyCommand transport: the child's stdio is the byte stream.
 fn spawn_proxy(
     cmd: &str,
@@ -136,9 +155,8 @@ fn spawn_proxy(
     ),
     Failure,
 > {
-    let mut child = tokio::process::Command::new("sh")
-        .arg("-c")
-        .arg(cmd)
+    let mut shell = proxy_shell(cmd);
+    let mut child = shell
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())

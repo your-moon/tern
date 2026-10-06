@@ -53,7 +53,7 @@ impl Shell {
     /// nothing behind the window may show).
     pub(super) fn sync_frame(&mut self, window: &mut Window) {
         self.frame.scale = window.scale_factor();
-        let blurred = !self.has_wallpaper();
+        let blurred = crate::theme::BLURS_BEHIND && !self.has_wallpaper();
         if self.frame.blurred != Some(blurred) {
             self.frame.blurred = Some(blurred);
             window.set_background_appearance(if blurred {

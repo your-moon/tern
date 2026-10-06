@@ -278,7 +278,7 @@ impl Session {
         self.log.is_some()
     }
 
-    /// Starts writing this session's output to a new file under `~/Library/Logs/tern/sessions`.
+    /// Starts writing this session's output to a new file under `sessions` in the log directory.
     ///
     /// # Errors
     ///

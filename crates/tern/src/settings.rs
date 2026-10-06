@@ -238,13 +238,75 @@ impl Settings {
     }
 }
 
-/// `$TERN_CONFIG_DIR` when set (test runs keep their settings apart from the real ones),
-/// else `~/Library/Application Support/tern`; `None` when there is no home directory.
+/// `$TERN_CONFIG_DIR` when set (test runs keep their settings apart from the real ones), else
+/// the platform's config directory: `~/Library/Application Support/tern` on macOS,
+/// `%APPDATA%\tern` on Windows, `$XDG_CONFIG_HOME/tern` (default `~/.config/tern`) on Linux.
+/// `None` when there is no such directory.
 pub fn dir() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("TERN_CONFIG_DIR") {
         return Some(PathBuf::from(dir));
     }
+    platform_dir()
+}
+
+#[cfg(target_os = "macos")]
+fn platform_dir() -> Option<PathBuf> {
     std::env::home_dir().map(|home| home.join("Library/Application Support/tern"))
+}
+
+#[cfg(target_os = "windows")]
+fn platform_dir() -> Option<PathBuf> {
+    std::env::var_os("APPDATA")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| std::env::home_dir().map(|home| home.join("AppData").join("Roaming")))
+        .map(|base| base.join("tern"))
+}
+
+/// Where tern's logs go: `~/Library/Logs/tern` on macOS, `%LOCALAPPDATA%\tern\logs` on
+/// Windows, `$XDG_STATE_HOME/tern` (default `~/.local/state/tern`) on Linux.
+pub fn log_dir() -> Option<PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        std::env::home_dir().map(|home| home.join("Library/Logs/tern"))
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var_os("LOCALAPPDATA")
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .or_else(|| std::env::home_dir().map(|home| home.join("AppData").join("Local")))
+            .map(|base| base.join("tern").join("logs"))
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        std::env::var_os("XDG_STATE_HOME")
+            .map(PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .or_else(|| std::env::home_dir().map(|home| home.join(".local").join("state")))
+            .map(|base| base.join("tern"))
+    }
+}
+
+/// [`log_dir`] as the settings page shows it.
+pub fn log_dir_label() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "~/Library/Logs/tern"
+    } else if cfg!(target_os = "windows") {
+        "%LOCALAPPDATA%\\tern\\logs"
+    } else {
+        "~/.local/state/tern"
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn platform_dir() -> Option<PathBuf> {
+    // The XDG spec: a relative $XDG_CONFIG_HOME is invalid and ignored.
+    std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| std::env::home_dir().map(|home| home.join(".config")))
+        .map(|base| base.join("tern"))
 }
 
 fn clamp_or(value: f32, min: f32, max: f32, default: f32) -> f32 {

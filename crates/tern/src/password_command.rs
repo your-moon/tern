@@ -97,6 +97,7 @@ impl Failure {
 
 /// `PATH` for the command: a GUI app launched from Finder gets a minimal one without
 /// Homebrew, where gopass lives.
+#[cfg(unix)]
 fn command_path(inherited: Option<&str>, home: Option<&str>) -> String {
     let mut parts = vec!["/opt/homebrew/bin".to_owned(), "/usr/local/bin".to_owned()];
     if let Some(home) = home {
@@ -128,15 +129,33 @@ fn secret_from(mut out: Vec<u8>) -> Option<SecretString> {
     }
 }
 
-/// Runs `command` with `/bin/sh -c` and returns what it printed as the password. Blocks for
-/// up to `timeout`, so call it off the UI thread. Never logs stdout.
+/// The command wrapped in the platform shell: `/bin/sh -c` on Unix, with a `PATH` that finds
+/// Homebrew; `cmd /C` on Windows, with the inherited `PATH`.
+fn shell_command(command: &str) -> Command {
+    #[cfg(unix)]
+    {
+        let home = std::env::var("HOME").ok();
+        let path = command_path(std::env::var("PATH").ok().as_deref(), home.as_deref());
+        let mut cmd = Command::new("/bin/sh");
+        cmd.arg("-c").arg(command).env("PATH", path);
+        cmd
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt as _;
+        /// `CREATE_NO_WINDOW`: no console window flashes up for a GUI app.
+        const NO_WINDOW: u32 = 0x0800_0000;
+        let mut cmd = Command::new("cmd");
+        // `raw_arg`: cmd parses its own command line, so Rust's quoting must not touch it.
+        cmd.arg("/C").raw_arg(command).creation_flags(NO_WINDOW);
+        cmd
+    }
+}
+
+/// Runs `command` with `/bin/sh -c` (`cmd /C` on Windows) and returns what it printed as the
+/// password. Blocks for up to `timeout`, so call it off the UI thread. Never logs stdout.
 pub fn run(command: &str, timeout: Duration) -> Result<SecretString, Failure> {
-    let home = std::env::var("HOME").ok();
-    let path = command_path(std::env::var("PATH").ok().as_deref(), home.as_deref());
-    let mut child = Command::new("/bin/sh")
-        .arg("-c")
-        .arg(command)
-        .env("PATH", path)
+    let mut child = shell_command(command)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

@@ -268,7 +268,15 @@ impl Shell {
                     &t,
                     true,
                     "Font size",
-                    Some(format!("{FONT_MIN:.0}–{FONT_MAX:.0} pt · ⌘= ⌘− ⌘0").into()),
+                    Some(
+                        format!(
+                            "{FONT_MIN:.0}–{FONT_MAX:.0} pt · {} {} {}",
+                            crate::keymap::primary_hint("="),
+                            crate::keymap::primary_hint("−"),
+                            crate::keymap::primary_hint("0"),
+                        )
+                        .into(),
+                    ),
                     font,
                 )),
             ))
@@ -327,8 +335,13 @@ impl Shell {
             .child(w::page_header(&t, "Shortcuts"))
             .child(w::page_subtitle(
                 &t,
-                "Click a shortcut, then press the new keys. Esc cancels, ⌫ unbinds. Keys without \
-                 ⌘, ⌃ or ⌥ always go to the remote shell.",
+                if cfg!(target_os = "macos") {
+                    "Click a shortcut, then press the new keys. Esc cancels, ⌫ unbinds. Keys without \
+                     ⌘, ⌃ or ⌥ always go to the remote shell."
+                } else {
+                    "Click a shortcut, then press the new keys. Esc cancels, Backspace unbinds. \
+                     Keys without Ctrl or Alt always go to the remote shell."
+                },
             ))
             .when_some(self.record_notice.clone(), |el, notice| {
                 el.child(w::page_subtitle(&t, notice).text_color(t.danger))
@@ -343,21 +356,37 @@ impl Shell {
                         true,
                         "Switch to tab 1–9",
                         None,
-                        div().text_sm().text_color(t.muted).child("⌘1 … ⌘9"),
+                        div().text_sm().text_color(t.muted).child(if cfg!(target_os = "macos") {
+                            "⌘1 … ⌘9"
+                        } else {
+                            "Alt+1 … Alt+9"
+                        }),
                     ))
                     .child(w::row(
                         &t,
                         false,
                         "Next / previous tab",
                         None,
-                        div().text_sm().text_color(t.muted).child("⌃Tab  ⌃⇧Tab"),
+                        div().text_sm().text_color(t.muted).child(if cfg!(target_os = "macos") {
+                            "⌃Tab  ⌃⇧Tab"
+                        } else {
+                            "Ctrl+Tab  Ctrl+Shift+Tab"
+                        }),
                     ))
                     .child(w::row(
                         &t,
                         false,
-                        "Quit, hide, minimise",
+                        if cfg!(target_os = "macos") {
+                            "Quit, hide, minimise"
+                        } else {
+                            "Quit"
+                        },
                         None,
-                        div().text_sm().text_color(t.muted).child("⌘Q  ⌘H  ⌘M"),
+                        div().text_sm().text_color(t.muted).child(if cfg!(target_os = "macos") {
+                            "⌘Q  ⌘H  ⌘M"
+                        } else {
+                            "Ctrl+Shift+Q"
+                        }),
                     )),
             ))
     }
@@ -534,7 +563,7 @@ impl Shell {
                         &t,
                         false,
                         "Logs",
-                        Some("~/Library/Logs/tern".into()),
+                        Some(crate::settings::log_dir_label().into()),
                         div(),
                     )),
             ))

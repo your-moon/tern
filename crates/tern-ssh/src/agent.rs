@@ -8,6 +8,10 @@ use std::path::{Path, PathBuf};
 use russh::Channel;
 use russh::client::Msg;
 
+/// Where the Windows OpenSSH agent service listens.
+#[cfg(windows)]
+pub(crate) const WINDOWS_AGENT_PIPE: &str = r"\\.\pipe\openssh-ssh-agent";
+
 /// The agent socket to forward for a spec that asks for forwarding: its own path, else
 /// `$SSH_AUTH_SOCK`.
 pub(crate) fn socket_for(wanted: bool, explicit: Option<&Path>) -> Option<PathBuf> {
@@ -18,6 +22,9 @@ pub(crate) fn socket_for(wanted: bool, explicit: Option<&Path>) -> Option<PathBu
         .map(Path::to_path_buf)
         .or_else(|| std::env::var_os("SSH_AUTH_SOCK").map(PathBuf::from))
         .filter(|p| !p.as_os_str().is_empty());
+    // Windows OpenSSH's agent has no environment variable: it is always on this pipe.
+    #[cfg(windows)]
+    let found = found.or_else(|| Some(PathBuf::from(WINDOWS_AGENT_PIPE)));
     if found.is_none() {
         tracing::warn!("ssh_agent_forward_skipped: no SSH_AUTH_SOCK");
     }
@@ -68,8 +75,21 @@ pub(crate) async fn bridge(channel: Channel<Msg>, socket: PathBuf) {
     }
 }
 
-#[cfg(not(unix))]
-pub(crate) async fn bridge(_channel: Channel<Msg>, _socket: PathBuf) {}
+/// The same, over a Windows named pipe (the OpenSSH agent service).
+#[cfg(windows)]
+pub(crate) async fn bridge(channel: Channel<Msg>, socket: PathBuf) {
+    use tokio::net::windows::named_pipe::ClientOptions;
+    match ClientOptions::new().open(&socket) {
+        Ok(mut agent) => {
+            let mut ch = channel.into_stream();
+            let _ = tokio::io::copy_bidirectional(&mut agent, &mut ch).await;
+        }
+        Err(e) => {
+            tracing::debug!(pipe = %socket.display(), error = %e, "ssh_agent_connect_failed");
+            let _ = channel.close().await;
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

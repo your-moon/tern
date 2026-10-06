@@ -1,4 +1,5 @@
 //! tern: a fast, low-memory SSH terminal.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod a11y;
 mod connections;
@@ -19,6 +20,7 @@ mod password_command;
 mod picker;
 mod recent;
 mod reconnect;
+mod reveal;
 mod runtime;
 mod session;
 mod session_log;
@@ -146,10 +148,10 @@ fn main() {
         });
 }
 
-/// A panic is also written to `~/Library/Logs/tern/panic.log` with a backtrace: launched from
+/// A panic is also written to `panic.log` in the log directory (`settings::log_dir`) with a backtrace: launched from
 /// Finder or the Dock, tern has no terminal, and a Rust panic leaves no macOS crash report.
 fn log_panics() {
-    let Some(dir) = std::env::home_dir().map(|h| h.join("Library/Logs/tern")) else {
+    let Some(dir) = settings::log_dir() else {
         return;
     };
     let previous = std::panic::take_hook();
@@ -180,7 +182,7 @@ fn log_panics() {
 
 /// Structured JSON logs on stderr, filtered by `TERN_LOG` (default `info`).
 /// Structured JSON logs on stderr and, so that a tern started from Finder or the Dock still
-/// leaves a record, in `~/Library/Logs/tern/tern.log` (daily files, a week kept). Filtered by
+/// leaves a record, in `tern.log` in `settings::log_dir` (daily files, a week kept). Filtered by
 /// `TERN_LOG` (default `info`). The returned guard flushes the file on exit.
 fn init_logging() -> Option<tracing_appender::non_blocking::WorkerGuard> {
     use tracing_subscriber::layer::SubscriberExt as _;
@@ -190,17 +192,15 @@ fn init_logging() -> Option<tracing_appender::non_blocking::WorkerGuard> {
         .json()
         .with_current_span(true)
         .with_writer(std::io::stderr);
-    let (file, guard) = match std::env::home_dir()
-        .map(|h| h.join("Library/Logs/tern"))
-        .and_then(|dir| {
-            tracing_appender::rolling::Builder::new()
-                .rotation(tracing_appender::rolling::Rotation::DAILY)
-                .filename_prefix("tern")
-                .filename_suffix("log")
-                .max_log_files(7)
-                .build(dir)
-                .ok()
-        }) {
+    let (file, guard) = match settings::log_dir().and_then(|dir| {
+        tracing_appender::rolling::Builder::new()
+            .rotation(tracing_appender::rolling::Rotation::DAILY)
+            .filename_prefix("tern")
+            .filename_suffix("log")
+            .max_log_files(7)
+            .build(dir)
+            .ok()
+    }) {
         Some(appender) => {
             let (writer, guard) = tracing_appender::non_blocking(appender);
             (

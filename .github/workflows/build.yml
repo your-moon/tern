@@ -1,0 +1,102 @@
+name: build
+# Builds, tests and packages tern on macOS, Linux and Windows. The signed, notarised macOS dmg
+# is made locally by scripts/release.sh; here macOS is built and tested only.
+on:
+  push:
+    branches: [main, cross-platform]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: write
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macos-arm64, os: macos-14, target: aarch64-apple-darwin }
+          - { name: linux-x86_64, os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, arch: x86_64 }
+          - { name: linux-aarch64, os: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu, arch: aarch64 }
+          - { name: windows-x86_64, os: windows-latest, target: x86_64-pc-windows-msvc }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake clang pkg-config \
+            libasound2-dev libfontconfig-dev libssl-dev libzstd-dev \
+            libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libx11-xcb-dev libxcb1-dev libxcb-xkb-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libvulkan-dev libdbus-1-dev
+      - name: Version
+        id: version
+        shell: bash
+        run: echo "version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)" >> "$GITHUB_OUTPUT"
+      - name: Build
+        run: cargo build --release -p tern --target ${{ matrix.target }}
+      - name: Test
+        run: cargo test --workspace --target ${{ matrix.target }}
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          name="tern-${{ steps.version.outputs.version }}-linux-${{ matrix.arch }}"
+          mkdir -p "dist/$name"
+          cp "target/${{ matrix.target }}/release/tern" "dist/$name/tern"
+          cp packaging/linux/tern.desktop "dist/$name/tern.desktop"
+          cp packaging/linux/tern.png "dist/$name/tern.png"
+          cp LICENSE README.md "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+          echo "ASSET=dist/$name.tar.gz" >> "$GITHUB_ENV"
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "tern-${{ steps.version.outputs.version }}-windows-x86_64"
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/tern.exe" "dist/tern.exe"
+          Copy-Item LICENSE, README.md dist/
+          Compress-Archive -Path dist/tern.exe, dist/LICENSE, dist/README.md -DestinationPath "dist/$name.zip" -Force
+          "ASSET=dist/$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Upload the build
+        if: runner.os != 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tern-${{ matrix.name }}
+          path: ${{ env.ASSET }}
+          if-no-files-found: error
+  attach:
+    name: attach to release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          # release.yml creates the release from the same tag; wait for it.
+          for _ in $(seq 1 60); do
+            gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 && break
+            sleep 10
+          done
+          gh release upload "$GITHUB_REF_NAME" assets/* --clobber

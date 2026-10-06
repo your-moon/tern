@@ -23,7 +23,6 @@ base64 = "0.22"
 chrono.workspace = true
 ureq.workspace = true
 image.workspace = true
-security-framework.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread"] }
 tracing = "0.1"
 tracing-appender = "0.2"
@@ -31,6 +30,7 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 strip-ansi-escapes = "0.2.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+security-framework.workspace = true
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSWorkspace", "NSAccessibility"] }
 
 [dev-dependencies]
@@ -38,3 +38,20 @@ tempfile = "3"
 
 [lints]
 workspace = true
+
+# Off macOS the vault passphrase lives in the platform credential store through `keyring`:
+# Windows Credential Manager, or the Secret Service (GNOME Keyring, KWallet) on Linux.
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { workspace = true, features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { workspace = true, features = ["sync-secret-service", "crypto-rust", "vendored"] }
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
+winresource = "0.1"
+
+# gpui_platform turns both Linux backends off by default; without one `application()` panics.
+[target.'cfg(target_os = "linux")'.dependencies.gpui_platform]
+package = "gpui-pre-platform"
+version = "=0.3.8"
+features = ["wayland", "x11"]
