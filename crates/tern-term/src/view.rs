@@ -13,9 +13,10 @@ use alacritty_terminal::index::{Column, Line, Point as GridPoint};
 use alacritty_terminal::term::TermMode;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    App, ClipboardItem, Context, Entity, FocusHandle, Focusable, InteractiveElement, IntoElement,
-    KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
-    Render, ScrollDelta, ScrollWheelEvent, Styled, Subscription, Task, TouchPhase, Window, div, px,
+    Animation, AnimationExt as _, App, ClipboardItem, Context, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, ParentElement, Pixels, Render, ScrollDelta, ScrollWheelEvent, Styled,
+    Subscription, Task, TouchPhase, Window, div, px,
 };
 
 use crate::element::TerminalElement;
@@ -24,7 +25,7 @@ use crate::links::Link;
 use crate::mappings::keys::keystroke_bytes;
 use crate::mappings::mouse::{alt_scroll, mouse_button_report, mouse_moved_report, scroll_report};
 use crate::options::TerminalOptions;
-use crate::terminal::{SelectionType, Side, Terminal};
+use crate::terminal::{SelectionType, Side, Terminal, TerminalEvent};
 use crate::theme::TerminalTheme;
 
 /// Inner padding of the grid area.
@@ -77,6 +78,11 @@ pub struct TerminalView {
     cursor_on: bool,
     last_input: Instant,
     _blink_task: Task<()>,
+    /// Counts bells, so each flash restarts its fade animation.
+    bell_seq: usize,
+    bell_active: bool,
+    bell_task: Option<Task<()>>,
+    _bell_subscription: Subscription,
     _subscription: Subscription,
 }
 
@@ -105,6 +111,11 @@ impl TerminalView {
             this.hover_link = None;
             cx.notify();
         });
+        let bell_subscription = cx.subscribe(&terminal, |this, _, event: &TerminalEvent, cx| {
+            if this.options.flashes_on(event) {
+                this.flash(cx);
+            }
+        });
         Self {
             terminal,
             option_as_meta: true,
@@ -122,6 +133,10 @@ impl TerminalView {
             cursor_on: true,
             last_input: Instant::now(),
             _blink_task: Self::blink_loop(cx),
+            bell_seq: 0,
+            bell_active: false,
+            bell_task: None,
+            _bell_subscription: bell_subscription,
             _subscription: subscription,
         }
     }
@@ -574,6 +589,14 @@ impl Render for TerminalView {
                 .child(div().text_color(theme.ansi[8]).child(status))
         });
         let linking = self.hover_link.is_some();
+        let bell = self.bell_active.then(|| {
+            let wash = self.terminal.read(cx).theme().foreground;
+            div().absolute().size_full().bg(wash).with_animation(
+                ("bell", self.bell_seq),
+                Animation::new(Duration::from_millis(BELL_FLASH_MS)),
+                |overlay, t| overlay.opacity(BELL_PEAK_OPACITY * (1.0 - t)),
+            )
+        });
         div()
             .id("tern-terminal")
             .size_full()
@@ -600,6 +623,7 @@ impl Render for TerminalView {
             )
             .child(TerminalElement::new(cx.entity(), focused))
             .children(find_bar)
+            .children(bell)
     }
 }
 
@@ -673,6 +697,8 @@ pub fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
 #[path = "view_tests.rs"]
 mod tests;
 
+mod bell;
 mod cursor;
 mod find_links;
+use bell::{BELL_FLASH_MS, BELL_PEAK_OPACITY};
 use find_links::{find_status, is_find_chord};

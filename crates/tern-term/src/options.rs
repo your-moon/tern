@@ -5,7 +5,7 @@
 
 use alacritty_terminal::vte::ansi::{CursorShape, CursorStyle};
 
-use crate::terminal::SCROLLBACK_LINES;
+use crate::terminal::{SCROLLBACK_LINES, TerminalEvent};
 
 /// The cursor drawn until the remote picks its own with DECSCUSR.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -48,6 +48,9 @@ pub struct TerminalOptions {
     /// Middle-click pastes the clipboard (when the remote is not taking mouse
     /// reports).
     pub middle_click_paste: bool,
+    /// Flash the view on BEL. The `Bell` event is emitted either way, so the
+    /// app can bounce the Dock regardless.
+    pub visual_bell: bool,
 }
 
 impl Default for TerminalOptions {
@@ -58,11 +61,17 @@ impl Default for TerminalOptions {
             scrollback_lines: SCROLLBACK_LINES,
             copy_on_select: false,
             middle_click_paste: false,
+            visual_bell: false,
         }
     }
 }
 
 impl TerminalOptions {
+    /// Whether `event` should flash the view.
+    pub(crate) fn flashes_on(&self, event: &TerminalEvent) -> bool {
+        self.visual_bell && matches!(event, TerminalEvent::Bell)
+    }
+
     /// Whether releasing the mouse should copy: copy-on-select is on, it was
     /// the left button, the press turned into a real selection gesture (a plain
     /// click that only focused the view does not count), and a selection exists.
@@ -89,6 +98,17 @@ mod tests {
         );
         assert!(!on.copies_on_release(true, false, true), "focusing click");
         assert!(!on.copies_on_release(true, true, false), "nothing selected");
+    }
+
+    #[test]
+    fn only_a_bell_flashes_and_only_when_enabled() {
+        let on = TerminalOptions {
+            visual_bell: true,
+            ..TerminalOptions::default()
+        };
+        assert!(on.flashes_on(&TerminalEvent::Bell));
+        assert!(!on.flashes_on(&TerminalEvent::TitleChanged("x".into())));
+        assert!(!TerminalOptions::default().flashes_on(&TerminalEvent::Bell));
     }
 
     #[test]
