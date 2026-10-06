@@ -1,52 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <!-- tern app icon master: a tern in flight that is also the ">" of a shell prompt, with an amber
-       cursor, on the macOS 824 px squircle. Rendered to tern.icns by scripts/make-icon.sh. -->
-  <defs>
-    <clipPath id="tile"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#262d42"/>
-      <stop offset="1" stop-color="#0b0e17"/>
-    </linearGradient>
-    <radialGradient id="glow" cx="0.5" cy="0.47" r="0.5">
-      <stop offset="0" stop-color="#5b6cff" stop-opacity="0.22"/>
-      <stop offset="1" stop-color="#5b6cff" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.14"/>
-      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="bird" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#dfe3ff"/>
-    </linearGradient>
-    <linearGradient id="cursor" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffc56b"/>
-      <stop offset="1" stop-color="#ff9f43"/>
-    </linearGradient>
-    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="10"/>
-      <feOffset dy="12"/>
-      <feComponentTransfer><feFuncA type="linear" slope="0.4"/></feComponentTransfer>
-      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="bloom" x="-50%" y="-200%" width="200%" height="500%">
-      <feGaussianBlur stdDeviation="14"/>
-    </filter>
-  </defs>
-  <g clip-path="url(#tile)">
-    <rect x="100" y="100" width="824" height="824" fill="url(#bg)"/>
-    <rect x="100" y="100" width="824" height="824" fill="url(#glow)"/>
-    <rect x="100" y="100" width="824" height="824" fill="url(#sheen)"/>
+  <!-- tern app icon master: a tern seen from below (swept wings, forked tail), pointing right like a
+       shell prompt; flat white on near-black, on the macOS 824 px squircle. Rendered to tern.icns
+       by scripts/make-icon.sh. -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#0b0b0d"/>
+  <rect x="101" y="101" width="822" height="822" rx="184" fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="2"/>
+  <g fill="#ffffff">
+    <path d="M 650 500 Q 560 300 300 236 Q 420 360 520 506 Z"/>
+    <path d="M 650 524 Q 560 724 300 788 Q 420 664 520 518 Z"/>
+    <path d="M 430 512 Q 560 474 744 512 Q 560 550 430 512 Z"/>
+    <path d="M 470 506 L 286 430 L 300 446 L 452 518 Z"/>
+    <path d="M 470 518 L 286 594 L 300 578 L 452 506 Z"/>
   </g>
-  <rect x="101" y="101" width="822" height="822" rx="184" fill="none" stroke="#ffffff" stroke-opacity="0.12" stroke-width="2"/>
-  <!-- The tern, flying right: two swept wings meet at the head, so the bird reads as ">". -->
-  <g filter="url(#shadow)" fill="url(#bird)">
-    <path d="M 668 500 C 600 440 470 350 268 262 C 410 372 500 450 556 512 Z"/>
-    <path d="M 668 524 C 600 584 470 674 268 762 C 410 652 500 574 556 512 Z"/>
-    <path d="M 540 496 C 600 488 650 492 690 502 L 742 512 L 690 522 C 650 532 600 536 540 528 Z"/>
-    <path d="M 548 500 L 420 470 L 470 512 L 420 554 L 548 524 Z"/>
-  </g>
-  <!-- The cursor. -->
-  <rect x="640" y="700" width="140" height="40" rx="10" fill="#ffad4d" opacity="0.55" filter="url(#bloom)"/>
-  <rect x="640" y="700" width="140" height="40" rx="10" fill="url(#cursor)"/>
 </svg>
