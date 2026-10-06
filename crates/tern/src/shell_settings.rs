@@ -135,8 +135,10 @@ impl Shell {
             .flex_1()
             .min_h_0()
             .flex()
-            .children(self.frost(super::wallpaper_ui::Region::Settings))
-            .child(nav)
+            .child(self.side_tile(
+                super::frame_ui::snap(self.settings.sidebar_width, self.frame.scale),
+                nav,
+            ))
             .child(
                 div()
                     .id("settings-scroll")

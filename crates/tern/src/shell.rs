@@ -47,6 +47,8 @@ mod forwards_ui;
 mod sftp_ui;
 pub(crate) use forwards_ui::FillPassword;
 pub(crate) use sftp_ui::ToggleSftp;
+#[path = "shell_frame.rs"]
+mod frame_ui;
 #[path = "shell_look.rs"]
 mod look;
 #[path = "shell_menu.rs"]
@@ -163,6 +165,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 snippets: snippets_ui::SnippetsUi::load(),
                 import: None,
                 wp: wallpaper_ui::State::default(),
+                frame: frame_ui::FrameState::default(),
                 system_light: false,
                 _clock: None,
             };
@@ -256,6 +259,7 @@ pub struct Shell {
     snippets: snippets_ui::SnippetsUi,
     import: Option<import_ui::ImportSheet>,
     wp: wallpaper_ui::State,
+    frame: frame_ui::FrameState,
     /// Whether macOS is in its light appearance; what `Appearance: System` follows.
     system_light: bool,
     _clock: Option<gpui::Task<()>>,
@@ -339,7 +343,7 @@ impl Shell {
         if self.settings.sidebar_collapsed {
             0.0
         } else {
-            self.settings.sidebar_width
+            frame_ui::snap(self.settings.sidebar_width, self.frame.scale)
         }
     }
 
@@ -347,7 +351,10 @@ impl Shell {
     fn sidebar_now(&self) -> f32 {
         self.sidebar_tween
             .and_then(|tween| tween.sample(std::time::Instant::now()))
-            .unwrap_or_else(|| self.sidebar_target())
+            .map_or_else(
+                || self.sidebar_target(),
+                |w| frame_ui::snap(w, self.frame.scale),
+            )
     }
 
     pub fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
@@ -358,7 +365,7 @@ impl Shell {
 
     /// Live drag: follows the pointer without writing the file on every move.
     fn on_sidebar_drag(&mut self, x: f32, cx: &mut Context<Self>) {
-        self.settings.sidebar_width = pane::dragged_width(x);
+        self.settings.sidebar_width = frame_ui::snap(pane::dragged_width(x), self.frame.scale);
         self.settings.sidebar_collapsed = false;
         self.sidebar_tween = None;
         cx.notify();
@@ -584,6 +591,8 @@ impl Render for Shell {
             window.focus(&self.focus, cx);
         }
         self.sync_density(window);
+        self.sync_wallpaper(cx);
+        self.sync_frame(window);
         let t = self.theme;
         let infos = self.tab_infos(cx);
         let active_alias = infos.get(self.active).map(|i| i.alias.clone());
@@ -610,10 +619,9 @@ impl Render for Shell {
         let import = self.render_import(window, cx);
         let snippet_picker = self.render_snippet_picker(window, cx);
         let snippet_form = self.render_snippet_form(window, cx);
-        self.sync_wallpaper(cx);
         let panel_bg = self.panel_background();
         let hero = self.empty_view_hero(panel_bg, window);
-        let layers = self.fill_layers(window);
+        let layers = self.backdrop();
         let status_line = self.render_status_line(self.veil(panel_bg), cx);
         let theme_picker = self.render_theme_picker(window, cx);
         let toast = self.render_toast(window, cx);
@@ -723,7 +731,7 @@ impl Render for Shell {
                 window.is_fullscreen(),
                 !self.settings.sidebar_collapsed,
                 strip,
-                self.frost(wallpaper_ui::Region::Titlebar),
+                self.tile_tint(t.shell),
                 cx,
             ))
             .child(match self.settings_page {
@@ -733,24 +741,9 @@ impl Render for Shell {
                     .min_h_0()
                     .flex()
                     .relative()
-                    // Clip a fixed-width sidebar instead of reflowing it, so rows do not
-                    // re-wrap at every frame of the collapse.
+                    .child(self.side_tile(sidebar_now, sidebar))
                     .child(
-                        div()
-                            .flex_none()
-                            .h_full()
-                            .w(px(sidebar_now.round()))
-                            .overflow_hidden()
-                            .children(self.frost(wallpaper_ui::Region::Sidebar))
-                            .child(sidebar),
-                    )
-                    .child(
-                        self.main_panel(sidebar_now)
-                            .relative()
-                            .overflow_hidden()
-                            .flex()
-                            .flex_col()
-                            .child(self.main_backdrop(panel_bg))
+                        self.main_tile(panel_bg)
                             .child(
                                 div()
                                     .flex_1()

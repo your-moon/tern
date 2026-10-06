@@ -123,7 +123,6 @@ impl Theme {
 
         let accent = accent_for(color, surfaces[2]);
         self.accent = from_rgb(accent);
-        self.border = self.accent.opacity(0.14);
         if self.light {
             // A white wash would vanish on a light surface.
             self.row_hover = self.accent.opacity(0.09);
@@ -186,6 +185,18 @@ mod tests {
         assert_eq!(rgb_of(theme.faint), rgb_of(base.faint));
         // While muted text, which has to reach 4.5, is already past it.
         assert!(contrast_ratio(pack(rgb_of(theme.muted)), pack(rgb_of(theme.shell))) >= 4.49);
+    }
+
+    /// Separators stay neutral whatever the wallpaper's colour; only interactive states lean.
+    #[test]
+    fn borders_are_never_tinted() {
+        for light in [false, true] {
+            let base = Theme::zeron(light);
+            for color in WALLPAPERS {
+                assert_eq!(base.tinted(color).border, base.border);
+                assert_eq!(base.tinted(color).hairline, base.hairline);
+            }
+        }
     }
 
     /// The stock palettes already clear 4.5 under every wallpaper, so the test above cannot see a

@@ -194,12 +194,14 @@ impl Settings {
 
     /// Widths into their legal range; NaN or infinity back to the default.
     pub fn clamped(mut self) -> Self {
+        // Whole points are whole device pixels at 1x and 2x; the shell snaps the rest.
         self.sidebar_width = clamp_or(
             self.sidebar_width,
             SIDEBAR_MIN,
             SIDEBAR_MAX,
             SIDEBAR_DEFAULT,
-        );
+        )
+        .round();
         self.terminal_font_size =
             clamp_or(self.terminal_font_size, FONT_MIN, FONT_MAX, FONT_DEFAULT);
         self.scrollback_lines = self.scrollback_lines.clamp(SCROLLBACK_MIN, SCROLLBACK_MAX);
@@ -459,6 +461,22 @@ mod tests {
         assert_eq!(at(9000.0), SIDEBAR_MAX);
         assert_eq!(at(300.0), 300.0);
         assert_eq!(at(f32::NAN), SIDEBAR_DEFAULT);
+    }
+
+    #[test]
+    fn width_is_stored_in_whole_points() {
+        let at = |w: f32| {
+            Settings {
+                sidebar_width: w,
+                ..Settings::default()
+            }
+            .clamped()
+            .sidebar_width
+        };
+        assert_eq!(at(300.4), 300.0);
+        assert_eq!(at(300.6), 301.0);
+        // Rounding must not push a width out of range.
+        assert_eq!(at(SIDEBAR_MAX + 0.4), SIDEBAR_MAX);
     }
 
     #[test]
