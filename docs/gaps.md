@@ -16,10 +16,10 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 | ✓ L6 | Titlebar controls | None next to the traffic lights | Sidebar toggle, back/forward, + |
 | ✓ L7 | Menus | Text only | 16 px icon per item, submenu chevrons |
 | ✓ L8 | Settings nav | Text only | Icon per section |
-| L9 | Light appearance | Dark only | Light, dark, follow system |
+| ✓ L9 | Light appearance | Dark only | Light, dark, follow system |
 | L10 | Empty states | Text and shortcuts | Illustration-free but iconised, with primary action buttons |
 | ✓ W1 | Wallpaper (asked 2026-10-06) | — | zeron's wallpaper: image, effects, visibility, colours from the image, contrast guard |
-| L11 | Status | Dot only | Status line under the panel (zeron: checkout, branch, usage) — tern: host, latency, session time |
+| ✓ L11 | Status | Dot only | Status line under the panel (zeron: checkout, branch, usage) — tern: host, latency, session time |
 
 ## 2. Terminal
 
@@ -93,4 +93,4 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 | ✓ P1 | Signed, notarised .app with an icon (ad-hoc signed; notarising needs TERN_SIGN_ID + TERN_NOTARY_PROFILE) | Runs from Terminal only; not in Dock or Spotlight |
 | ✓ P2 | Auto-update | Manual cargo install |
 | ✓ P3 | Homebrew cask | No one-line install |
-| P4 | Accessibility (VoiceOver labels) | Unlabelled controls |
+| ✓ P4 | Accessibility (VoiceOver labels) | Unlabelled controls |
