@@ -31,6 +31,8 @@ pub struct Settings {
     pub terminal_theme: Option<String>,
     /// Per-host scheme by host alias, as Termius does per host.
     pub host_themes: BTreeMap<String, String>,
+    /// `~/.ssh/config` hosts the user removed from tern's list; the file itself is untouched.
+    pub hidden_hosts: Vec<String>,
 }
 
 impl Default for Settings {
@@ -43,6 +45,7 @@ impl Default for Settings {
             option_as_meta: true,
             terminal_theme: None,
             host_themes: BTreeMap::new(),
+            hidden_hosts: Vec::new(),
         }
     }
 }
@@ -136,6 +139,7 @@ mod tests {
             option_as_meta: false,
             terminal_theme: Some("Dracula".into()),
             host_themes: BTreeMap::from([("grape".into(), "Nord".into())]),
+            hidden_hosts: vec!["old-box".into()],
         };
         saved.save(&dir).unwrap();
         assert_eq!(Settings::load(&dir), saved);

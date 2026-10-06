@@ -173,10 +173,17 @@ fn actions(
             ),
         RowKind::SshConfig => {
             let draft = crate::connections::Connection::from_entry(host);
-            bar.child(icon_button(("duplicate", ix), "⧉", t).on_click(cx.listener(
+            let hide = host.alias.clone();
+            bar.child(icon_button(("duplicate", ix), "✎", t).on_click(cx.listener(
                 move |shell, _, window, cx| {
                     cx.stop_propagation();
                     shell.open_form(None, Some(draft.clone()), window, cx);
+                },
+            )))
+            .child(icon_button(("hide", ix), "×", t).on_click(cx.listener(
+                move |shell, _, _, cx| {
+                    cx.stop_propagation();
+                    shell.hide_host(hide.clone(), cx);
                 },
             )))
         }

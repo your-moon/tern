@@ -420,6 +420,22 @@ impl Shell {
                 el.child(w::page_subtitle(&t, e).text_color(t.danger))
             })
             .child(w::section(&t, "Saved in tern", list))
+            .when(!self.settings.hidden_hosts.is_empty(), |el| {
+                let mut hidden = w::card(&t);
+                for (ix, alias) in self.settings.hidden_hosts.iter().enumerate() {
+                    let alias = alias.clone();
+                    let show = alias.clone();
+                    hidden = hidden.child(w::row(
+                        &t,
+                        ix == 0,
+                        alias,
+                        Some("From ~/.ssh/config".into()),
+                        w::button(&t, ("unhide", ix), "Show again")
+                            .on_click(cx.listener(move |s, _, _, cx| s.unhide_host(&show, cx))),
+                    ));
+                }
+                el.child(w::section(&t, "Removed from the list", hidden))
+            })
     }
 
     fn vault_page(&self, cx: &mut Context<Self>) -> gpui::Div {

@@ -395,9 +395,27 @@ impl Shell {
             self.ssh_hosts
                 .iter()
                 .filter(|h| !self.connections.iter().any(|c| c.name == h.alias))
+                .filter(|h| !self.settings.hidden_hosts.contains(&h.alias))
                 .cloned(),
         );
         self.hosts = hosts;
+    }
+
+    /// Removes a `~/.ssh/config` host from tern's list (the file is never written), with Undo.
+    pub(crate) fn hide_host(&mut self, alias: String, cx: &mut Context<Self>) {
+        self.update_settings(|s| s.hidden_hosts.push(alias.clone()), cx);
+        self.refresh_hosts();
+        self.toast(
+            Toast::new(ToastKind::Default, format!("Removed {alias} from the list"))
+                .action("Undo", move |s, _, cx| s.unhide_host(&alias, cx)),
+            cx,
+        );
+    }
+
+    pub(crate) fn unhide_host(&mut self, alias: &str, cx: &mut Context<Self>) {
+        self.update_settings(|s| s.hidden_hosts.retain(|h| h != alias), cx);
+        self.refresh_hosts();
+        cx.notify();
     }
 
     /// Focus back to the active terminal, or the window when there is none.
