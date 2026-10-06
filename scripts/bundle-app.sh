@@ -74,7 +74,7 @@ fi
 if [ -n "${TERN_SIGN_ID:-}" ] && [ -n "${TERN_NOTARY_PROFILE:-}" ]; then
   zip=$(mktemp -d)/tern-notarize.zip
   ditto -c -k --keepParent "$app" "$zip"
-  xcrun notarytool submit "$zip" --keychain-profile "$TERN_NOTARY_PROFILE" --wait
+  scripts/notarize.sh "$zip"
   xcrun stapler staple "$app"
   echo "notarised and stapled"
 else

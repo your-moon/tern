@@ -17,3 +17,15 @@ Releases are cut from `main` by pushing a `vX.Y.Z` tag. The [release workflow](.
 7. The workflow runs the gates again and publishes a GitHub release whose notes are that version's changelog section.
 
 The signed macOS app bundle is attached by the workflow once the app crate exists (#10); until then releases carry notes only.
+
+## The macOS download (dmg and zip)
+
+`scripts/release.sh` builds `target/release/bundle/tern-X.Y.Z-macos-arm64.dmg` (drag tern to Applications) and the `.zip` the Homebrew cask uses, and prints the `gh release create` command without running it. For a build that opens without a Gatekeeper warning, run it on the Mac that holds the Developer ID certificate:
+
+```sh
+xcrun notarytool store-credentials tern-notary   # once: Apple ID, team ID, app-specific password
+TERN_SIGN_ID="Developer ID Application: Enkhjil Erdenebat (X6M62VN277)" \
+TERN_NOTARY_PROFILE=tern-notary scripts/release.sh
+```
+
+It signs and notarises the app, staples it, builds the dmg from the stapled app, signs, notarises and staples the dmg, then checks both with `spctl`. Without `TERN_NOTARY_PROFILE` it still signs and skips notarisation, saying so.
