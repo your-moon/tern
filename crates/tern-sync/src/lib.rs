@@ -9,6 +9,7 @@
 
 mod github;
 mod gitrepo;
+mod merge;
 
 use std::collections::BTreeMap;
 
@@ -16,6 +17,7 @@ use sha2::{Digest, Sha256};
 
 pub use github::{Gist, GithubError, RemoteBundle, TokenSource, forget_token, save_token, token};
 pub use gitrepo::{GitRepo, create_github_repo};
+pub use merge::{ABSENT, HostsMerge, ItemPlan, decide_item, item_hashes, merge_hosts};
 
 /// The files that travel, by name, as raw bytes.
 pub type Files = BTreeMap<String, Vec<u8>>;
