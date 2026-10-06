@@ -9,7 +9,16 @@ use super::Session;
 
 /// Something the shell should tell the person about, without the session knowing how.
 pub enum SessionNote {
-    ForwardFailed { forward: String, error: String },
+    ForwardFailed {
+        forward: String,
+        error: String,
+    },
+    /// The remote is asking for a password and one could be filled: show the shortcut.
+    PasswordPrompt,
+    /// A line for a toast.
+    Message(String),
+    /// A line for a toast that is an error.
+    Problem(String),
 }
 
 impl EventEmitter<SessionNote> for Session {}

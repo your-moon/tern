@@ -35,10 +35,11 @@ pub enum ShortcutId {
     FontBigger,
     FontSmaller,
     FontReset,
+    FillPassword,
 }
 
 impl ShortcutId {
-    pub const ALL: [ShortcutId; 19] = [
+    pub const ALL: [ShortcutId; 20] = [
         ShortcutId::HostPicker,
         ShortcutId::SearchHosts,
         ShortcutId::Snippets,
@@ -58,6 +59,7 @@ impl ShortcutId {
         ShortcutId::FontBigger,
         ShortcutId::FontSmaller,
         ShortcutId::FontReset,
+        ShortcutId::FillPassword,
     ];
 
     pub fn label(self) -> &'static str {
@@ -81,6 +83,7 @@ impl ShortcutId {
             ShortcutId::FontBigger => "Bigger text",
             ShortcutId::FontSmaller => "Smaller text",
             ShortcutId::FontReset => "Default text size",
+            ShortcutId::FillPassword => "Fill password",
         }
     }
 
@@ -105,6 +108,7 @@ impl ShortcutId {
             ShortcutId::FontBigger => "cmd-=",
             ShortcutId::FontSmaller => "cmd--",
             ShortcutId::FontReset => "cmd-0",
+            ShortcutId::FillPassword => "cmd-\\",
         }
     }
 
@@ -135,6 +139,7 @@ impl ShortcutId {
             ShortcutId::FontBigger => Box::new(IncreaseFontSize),
             ShortcutId::FontSmaller => Box::new(DecreaseFontSize),
             ShortcutId::FontReset => Box::new(ResetFontSize),
+            ShortcutId::FillPassword => Box::new(crate::shell::FillPassword),
         }
     }
 }

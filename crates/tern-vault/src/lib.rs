@@ -12,6 +12,7 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
 pub mod keys;
+pub mod pin;
 
 pub use age::secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};

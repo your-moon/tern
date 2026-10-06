@@ -6,6 +6,9 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 
 ### Added
 
+- `tern`: vault PIN (Settings → Vault → Unlock with a PIN). A 4 to 8 digit PIN seals the vault passphrase (age scrypt) in the login Keychain item `tern vault pin`; every unlock prompt asks "Vault PIN" first, with Enter or "Use passphrase instead" for the passphrase. 5 wrong PINs in a row (counted in `vault-pin.json`, not synced) delete the item; changing the vault passphrase removes it.
+- `tern`: "Fill password" (⌘\\ by default). Types the saved password plus Enter into the focused pane, only when the cursor line ends in a password prompt (`[sudo] password for me:`, `Password:`, a key passphrase), and only on the key press; a hint toast names the shortcut when such a prompt appears. The password comes from the connection's `sudoPasswordCommand`, else its `passwordCommand`, else the vault entry for the host; commands need the same one-time approval as the password command.
+
 - `tern-ssh`: SSH sessions over russh with ssh-agent, key-file (with passphrase), password and keyboard-interactive login; `~/.ssh/config` hosts and `ProxyCommand`; `known_hosts` checking where a changed key refuses the connection and an unknown key asks first.
 - `tern-ssh`: bounded output path. Output is coalesced into 64 KiB chunks over an 8-deep queue, and the session stops reading the socket when the UI falls behind; a 16.9 MB burst peaks at 6 MB RSS. Input reports `Busy` instead of queueing without limit.
 - `tern-term`: a GPUI terminal view fed by any byte stream, with xterm-256color and truecolor, text attributes, wide characters, box drawing painted as paths, mouse reporting, selection and bracketed paste.

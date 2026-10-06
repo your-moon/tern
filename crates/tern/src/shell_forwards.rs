@@ -2,6 +2,7 @@
 //! "Port forwards…" on a tab: the forwards running on that session, each with Stop, and a line
 //! to add another (`-L 8080:db:5432`, `-R …`, `-D 1080`) while connected.
 
+use gpui::actions;
 use gpui::{
     AnyElement, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement,
     KeyDownEvent, ParentElement, Pixels, Point, SharedString, StatefulInteractiveElement, Styled,
@@ -9,11 +10,15 @@ use gpui::{
 };
 use tern_ssh::Forward;
 
-use super::Shell;
 use super::broadcast_ui::TabId;
+use super::{Shell, ToastKind};
 use crate::forward_spec;
+use crate::keymap::{self, Keymap, ShortcutId};
 use crate::session::Status;
+use crate::session::{Session, SessionNote};
 use crate::text_input::{InputColors, TextInput};
+
+actions!(tern, [FillPassword]);
 
 /// The popovers and side panels a tab can have open.
 #[derive(Default)]
@@ -80,20 +85,6 @@ impl Shell {
             error: None,
         });
         cx.notify();
-    }
-
-    /// What a session reports on its own: today only a forward that could not start.
-    pub(super) fn on_session_note(
-        &mut self,
-        note: &crate::session::SessionNote,
-        cx: &mut Context<Self>,
-    ) {
-        let crate::session::SessionNote::ForwardFailed { forward, error } = note;
-        self.notify_toast(
-            super::ToastKind::Critical,
-            format!("Port forward {forward} failed: {error}"),
-            cx,
-        );
     }
 
     pub(super) fn close_forwards_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -281,5 +272,55 @@ impl Shell {
             .priority(2)
             .into_any_element(),
         )
+    }
+}
+
+// "Fill password": the shortcut and the toasts sessions raise about it; what it does is in
+// `session_fill.rs`.
+
+impl Shell {
+    /// ⌘\ (by default): fill the password into the focused pane, if it is at a prompt.
+    pub(super) fn fill_password(&mut self, cx: &mut Context<Self>) {
+        // A form or the Settings page has the keyboard; the pane behind it is not the target.
+        if self.settings_page.is_some() || self.form.is_some() {
+            return;
+        }
+        let Some(tab) = self.tabs.get(self.active) else {
+            return;
+        };
+        let session = tab.session().clone();
+        session.update(cx, |s, cx| s.fill_password(cx));
+    }
+
+    /// What a session reports on its own: a forward that could not start, a password prompt
+    /// worth a hint, or a line about a fill.
+    pub(super) fn on_session_note(
+        &mut self,
+        session: &Entity<Session>,
+        note: &SessionNote,
+        cx: &mut Context<Self>,
+    ) {
+        match note {
+            SessionNote::ForwardFailed { forward, error } => self.notify_toast(
+                ToastKind::Critical,
+                format!("Port forward {forward} failed: {error}"),
+                cx,
+            ),
+            SessionNote::PasswordPrompt => {
+                let in_front = self.settings_page.is_none()
+                    && self
+                        .tabs
+                        .get(self.active)
+                        .is_some_and(|t| t.session() == session);
+                let combo = cx.global::<Keymap>().combo(ShortcutId::FillPassword);
+                // Unbound, there is no shortcut to name.
+                if in_front && !combo.is_empty() {
+                    let text = format!("{} fills the password", keymap::badge(combo));
+                    self.notify_toast(ToastKind::Default, text, cx);
+                }
+            }
+            SessionNote::Message(text) => self.notify_toast(ToastKind::Default, text.clone(), cx),
+            SessionNote::Problem(text) => self.notify_toast(ToastKind::Critical, text.clone(), cx),
+        }
     }
 }

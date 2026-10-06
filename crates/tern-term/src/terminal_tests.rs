@@ -163,3 +163,19 @@ fn scrollback_resizes_at_runtime_without_losing_what_fits() {
     }
     assert_eq!(t.history_size(), 38);
 }
+
+#[test]
+fn the_cursor_line_is_what_precedes_the_cursor_on_its_row() {
+    let mut t = term(40, 5);
+    t.process(b"old output\r\n[sudo] password for test: ");
+    assert_eq!(
+        t.cursor_line_text().as_deref(),
+        Some("[sudo] password for test:")
+    );
+    // Text after the cursor is not part of the line being typed.
+    t.process(b"\r\x1b[2Cab\x1b[2D");
+    assert_eq!(t.cursor_line_text().as_deref(), Some("[s"));
+    // A hidden cursor means no line to speak of.
+    t.process(b"\x1b[?25l");
+    assert_eq!(t.cursor_line_text(), None);
+}

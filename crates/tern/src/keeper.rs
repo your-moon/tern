@@ -9,6 +9,8 @@ use gpui::{App, AppContext, Global, Task};
 use tern_ssh::{ExposeSecret, Prompt, SecretString};
 use tern_vault::{Key, Vault, VaultError};
 
+use crate::vault_pin;
+
 pub struct Keeper {
     path: Option<PathBuf>,
     open: Option<Vault>,
@@ -18,6 +20,8 @@ pub struct Keeper {
     keychain_current: bool,
     /// Numbers each write in the order it was asked for.
     ticket: u64,
+    /// A PIN is set: the Keychain holds the passphrase sealed to it (see `vault_pin`).
+    pin: bool,
 }
 
 impl Global for Keeper {}
@@ -45,6 +49,7 @@ impl Keeper {
             keychain,
             keychain_current: false,
             ticket: 0,
+            pin: crate::keychain::load_pin_blob().is_some(),
         });
     }
 
@@ -155,9 +160,84 @@ impl Keeper {
         Ok(())
     }
 
-    /// The vault was re-sealed under a new passphrase: the Keychain item, if any, is stale.
+    /// The vault was re-sealed under a new passphrase: the Keychain item, if any, is stale,
+    /// and so is the PIN's sealed copy, which is deleted: the PIN must be set again.
     pub fn passphrase_changed(cx: &mut App) {
-        cx.global_mut::<Self>().keychain_current = false;
+        let k = cx.global_mut::<Self>();
+        k.keychain_current = false;
+        if k.pin {
+            k.pin = false;
+            if let Some(dir) = crate::settings::dir()
+                && let Err(e) = vault_pin::clear(&dir, &vault_pin::KeychainStore)
+            {
+                tracing::warn!(error = %e, "vault_pin_clear_failed");
+            }
+        }
+    }
+
+    /// Unlocking asks for the PIN first: one is set and there is a vault to open.
+    pub fn pin_set(cx: &App) -> bool {
+        cx.global::<Self>().pin && Self::exists(cx)
+    }
+
+    /// Seals the open vault's passphrase to `pin` off the UI thread. Call
+    /// [`Keeper::pin_stored`] when the task succeeds.
+    ///
+    /// # Errors
+    /// A message for the person when the vault is locked or the PIN is not 4 to 8 digits.
+    pub fn set_pin(pin: String, cx: &mut App) -> Result<Task<Result<(), String>>, String> {
+        if let Some(problem) = tern_vault::pin::problem(&pin) {
+            return Err(problem.into());
+        }
+        let Some(vault) = cx.global::<Self>().open.as_ref() else {
+            return Err("Unlock the vault first: its passphrase is what the PIN seals.".into());
+        };
+        let passphrase = vault.passphrase().clone();
+        let dir = crate::settings::dir().ok_or("There is no settings folder.")?;
+        Ok(cx.background_spawn(async move {
+            vault_pin::set(&dir, &passphrase, &pin, &vault_pin::KeychainStore)
+        }))
+    }
+
+    /// The sealed passphrase is in the Keychain.
+    pub fn pin_stored(cx: &mut App) {
+        cx.global_mut::<Self>().pin = true;
+    }
+
+    /// Turns the PIN off and deletes its Keychain item.
+    ///
+    /// # Errors
+    /// A message when the Keychain refuses.
+    pub fn clear_pin(cx: &mut App) -> Result<(), String> {
+        let dir = crate::settings::dir().ok_or("There is no settings folder.")?;
+        vault_pin::clear(&dir, &vault_pin::KeychainStore)?;
+        cx.global_mut::<Self>().pin = false;
+        Ok(())
+    }
+
+    /// Tries `pin` off the UI thread. Hand the result to [`Keeper::pin_done`].
+    pub fn pin_unlock(pin: String, cx: &mut App) -> Task<vault_pin::Outcome> {
+        let (path, dir) = (cx.global::<Self>().path.clone(), crate::settings::dir());
+        cx.background_spawn(async move {
+            let (Some(path), Some(dir)) = (path, dir) else {
+                return vault_pin::Outcome::Gone;
+            };
+            vault_pin::unlock(&dir, &path, &pin, &vault_pin::KeychainStore)
+        })
+    }
+
+    /// Takes a PIN outcome in: an opened vault is kept, and a PIN that is gone or wiped is
+    /// forgotten. Returns what to tell the person, `None` when the vault opened.
+    pub fn pin_done(outcome: vault_pin::Outcome, cx: &mut App) -> Option<String> {
+        let message = vault_pin::message(&outcome);
+        match outcome {
+            vault_pin::Outcome::Opened(vault) => Self::put(vault, cx),
+            vault_pin::Outcome::Wiped | vault_pin::Outcome::Gone => {
+                cx.global_mut::<Self>().pin = false;
+            }
+            vault_pin::Outcome::Wrong { .. } | vault_pin::Outcome::Failed(_) => {}
+        }
+        message
     }
 
     /// Writes a copy of the open vault off the UI thread. Writes land in the order asked.

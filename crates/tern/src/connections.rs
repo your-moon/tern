@@ -39,6 +39,11 @@ pub struct Connection {
     /// arrived through sync waits for approval first (see `password_command`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub password_command: Option<String>,
+    /// A shell command whose stdout is the password for `sudo` (and other prompts after
+    /// login), filled on the "Fill password" shortcut. Falls back to `password_command`, then
+    /// to the vault entry for this host. Approved like `password_command`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sudo_password_command: Option<String>,
     /// Hosts to hop through, comma separated, each a saved connection's name or
     /// `[user@]host[:port]`, in connection order. Empty connects directly.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -119,6 +124,7 @@ impl Connection {
             proxy_command: entry.proxy_command.clone(),
             vault_key: None,
             password_command: None,
+            sudo_password_command: None,
             proxy_jump: entry
                 .proxy_jump
                 .iter()
@@ -271,6 +277,7 @@ pub struct Draft {
     pub tags: String,
     pub vault_key: String,
     pub password_command: String,
+    pub sudo_password_command: String,
     pub proxy_jump: String,
     pub forward_agent: bool,
     /// Seconds, as typed; empty means the default.
@@ -330,6 +337,9 @@ pub fn validate(draft: &Draft, others: &[&str], all: &[Connection]) -> Result<Co
     let password_command = Some(draft.password_command.trim())
         .filter(|c| !c.is_empty())
         .map(str::to_owned);
+    let sudo_password_command = Some(draft.sudo_password_command.trim())
+        .filter(|c| !c.is_empty())
+        .map(str::to_owned);
     let proxy_jump = split_list(&draft.proxy_jump).collect::<Vec<_>>();
     for t in &proxy_jump {
         hop(t, all)?;
@@ -363,6 +373,7 @@ pub fn validate(draft: &Draft, others: &[&str], all: &[Connection]) -> Result<Co
         proxy_command: None,
         vault_key,
         password_command,
+        sudo_password_command,
         proxy_jump: proxy_jump.join(", "),
         forward_agent: draft.forward_agent,
         agent_socket: None,
@@ -445,6 +456,33 @@ mod tests {
         assert_eq!(load(dir.path()).unwrap(), vec![c]);
         d.password_command = "   ".into();
         assert_eq!(validate(&d, &[], &[]).unwrap().password_command, None);
+    }
+
+    #[test]
+    fn a_sudo_password_command_is_optional_trimmed_and_named_in_camel_case() {
+        let dir = tempfile::tempdir().unwrap();
+        let old = r#"{"version":1,"connections":[{"name":"web","host":"h","port":22,"user":"u","passwordCommand":"p"}]}"#;
+        std::fs::write(dir.path().join(FILE_NAME), old).unwrap();
+        let loaded = load(dir.path()).unwrap();
+        assert_eq!(loaded[0].sudo_password_command, None);
+        save(dir.path(), &loaded).unwrap();
+        let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
+        assert!(!text.contains("sudoPasswordCommand"), "{text}");
+
+        let mut d = draft("web", "h", "", "u");
+        d.sudo_password_command = "  gopass show -o sudo/web ".into();
+        let c = validate(&d, &[], &[]).unwrap();
+        assert_eq!(
+            c.sudo_password_command.as_deref(),
+            Some("gopass show -o sudo/web")
+        );
+        save(dir.path(), std::slice::from_ref(&c)).unwrap();
+        let text = std::fs::read_to_string(dir.path().join(FILE_NAME)).unwrap();
+        assert!(
+            text.contains(r#""sudoPasswordCommand": "gopass show -o sudo/web""#),
+            "{text}"
+        );
+        assert_eq!(load(dir.path()).unwrap(), vec![c]);
     }
 
     #[test]

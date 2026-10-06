@@ -7,6 +7,10 @@
 //! With `--sftp DIR` it also serves the `sftp` subsystem over DIR (`/` is DIR, the login
 //! directory is DIR/home), the same file service tern-ssh's tests use.
 //!
+//! With `--sudo` the shell prints `[sudo] password for test: ` after login, reads one line
+//! without echo and checks it against the login password (`sudo: ok` or `Sorry, try again.`),
+//! for checking tern's "Fill password" shortcut.
+//!
 //! With `--otp 123456` it behaves like a 2FA server: the password is only the first step
 //! (partial success), then a keyboard-interactive "Verification code:" prompt with echo off
 //! must be answered with the code.
@@ -31,6 +35,10 @@ struct PasswordServer {
     password_ok: bool,
     /// Served as `/` for the sftp subsystem, when asked for.
     sftp_root: Option<PathBuf>,
+    /// Print a sudo prompt after login and check the reply (`--sudo`).
+    sudo: bool,
+    /// What has been typed at the sudo prompt so far.
+    typed: Vec<u8>,
     /// Session channels not yet claimed by a subsystem.
     sessions: HashMap<ChannelId, Channel<Msg>>,
 }
@@ -138,6 +146,36 @@ impl server::Handler for PasswordServer {
     async fn shell_request(&mut self, ch: ChannelId, s: &mut Session) -> Result<(), Self::Error> {
         s.channel_success(ch)?;
         s.data(ch, &b"password_server: logged in\r\n"[..])?;
+        if self.sudo {
+            s.data(ch, &b"[sudo] password for test: "[..])?;
+        }
+        Ok(())
+    }
+
+    async fn data(
+        &mut self,
+        ch: ChannelId,
+        data: &[u8],
+        s: &mut Session,
+    ) -> Result<(), Self::Error> {
+        if !self.sudo {
+            return Ok(());
+        }
+        for &b in data {
+            if b != b'\r' && b != b'\n' {
+                self.typed.push(b);
+                continue;
+            }
+            let ok = self.typed == self.password.as_bytes();
+            eprintln!("sudo reply accepted={ok} length={}", self.typed.len());
+            self.typed.clear();
+            let reply: &[u8] = if ok {
+                b"\r\nsudo: ok\r\n"
+            } else {
+                b"\r\nSorry, try again.\r\n[sudo] password for test: "
+            };
+            s.data(ch, reply)?;
+        }
         Ok(())
     }
 }
@@ -150,6 +188,11 @@ async fn main() {
         args.drain(i..=i + 1);
         Arc::new(code)
     });
+    let sudo = args
+        .iter()
+        .position(|a| a == "--sudo")
+        .map(|i| args.remove(i))
+        .is_some();
     let sftp_root = args.iter().position(|a| a == "--sftp").map(|i| {
         let dir = PathBuf::from(args.get(i + 1).cloned().expect("--sftp needs a directory"));
         args.drain(i..=i + 1);
@@ -181,6 +224,8 @@ async fn main() {
             otp: otp.clone(),
             password_ok: false,
             sftp_root: sftp_root.clone(),
+            sudo,
+            typed: Vec::new(),
             sessions: HashMap::new(),
         };
         let config = config.clone();

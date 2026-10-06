@@ -14,6 +14,7 @@ use tern_vault::{ExposeSecret, Key, Vault, VaultError};
 use super::{Shell, Toast, ToastKind};
 use crate::keeper::{self, Keeper};
 use crate::text_input::{InputColors, TextInput};
+use crate::vault_pin;
 
 /// How often the idle lock looks at the clock.
 const IDLE_CHECK: Duration = Duration::from_secs(10);
@@ -25,6 +26,12 @@ pub(super) struct VaultUi {
     pub(super) current: Entity<TextInput>,
     pub(super) new: Entity<TextInput>,
     pub(super) confirm: Entity<TextInput>,
+    /// The vault PIN, entered to unlock, and entered twice to set one.
+    pub(super) pin: Entity<TextInput>,
+    pub(super) pin_new: Entity<TextInput>,
+    pub(super) pin_repeat: Entity<TextInput>,
+    /// "Use passphrase instead": the unlock row asks for the passphrase although a PIN is set.
+    pub(super) use_passphrase: bool,
     pub(super) key_name: Entity<TextInput>,
     pub(super) key_path: Entity<TextInput>,
     pub(super) busy: bool,
@@ -107,6 +114,10 @@ impl Shell {
             current: input("Current passphrase", true),
             new: input("New passphrase", true),
             confirm: input("Repeat new passphrase", true),
+            pin: input("Vault PIN", true),
+            pin_new: input("New PIN, 4 to 8 digits", true),
+            pin_repeat: input("Repeat PIN", true),
+            use_passphrase: false,
             key_name: input("Key name, e.g. laptop", false),
             key_path: input("~/.ssh/id_ed25519", false),
             busy: false,
@@ -119,6 +130,9 @@ impl Shell {
             &ui.current,
             &ui.new,
             &ui.confirm,
+            &ui.pin,
+            &ui.pin_new,
+            &ui.pin_repeat,
             &ui.key_name,
             &ui.key_path,
         ]
@@ -153,6 +167,9 @@ impl Shell {
         if ui.busy {
             return;
         }
+        if Keeper::pin_set(cx) && !ui.use_passphrase {
+            return self.unlock_with_pin(cx);
+        }
         let typed = ui.unlock.read(cx).text().to_owned();
         if typed.is_empty() {
             return self.vault_message(false, "Enter the vault passphrase.", cx);
@@ -184,6 +201,55 @@ impl Shell {
             });
         })
         .detach();
+    }
+
+    /// Settings' Unlock row while a PIN is set: the PIN first, off the UI thread.
+    fn unlock_with_pin(&mut self, cx: &mut Context<Self>) {
+        let Some(ui) = self.vault_ui.as_mut() else {
+            return;
+        };
+        let pin = ui.pin.read(cx).text().to_owned();
+        if pin.is_empty() {
+            return self.vault_message(false, "Enter the vault PIN.", cx);
+        }
+        ui.busy = true;
+        ui.message = None;
+        let work = Keeper::pin_unlock(pin, cx);
+        cx.spawn(async move |this, cx| {
+            let outcome = work.await;
+            let _ = this.update(cx, |s, cx| {
+                let off = !matches!(
+                    outcome,
+                    vault_pin::Outcome::Opened(_) | vault_pin::Outcome::Wrong { .. }
+                );
+                let message = Keeper::pin_done(outcome, cx);
+                if let Some(ui) = s.vault_ui.as_mut() {
+                    ui.busy = false;
+                    // A PIN that is off leaves only the passphrase to ask for.
+                    ui.use_passphrase |= off;
+                }
+                match message {
+                    None => {
+                        if let Some(ui) = &s.vault_ui {
+                            let input = ui.pin.clone();
+                            s.clear_inputs(&[&input], cx);
+                        }
+                        s.notify_toast(ToastKind::Positive, "Vault unlocked", cx);
+                    }
+                    Some(text) => s.vault_message(false, text, cx),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub(super) fn toggle_use_passphrase(&mut self, cx: &mut Context<Self>) {
+        if let Some(ui) = self.vault_ui.as_mut() {
+            ui.use_passphrase = !ui.use_passphrase;
+            ui.message = None;
+        }
+        cx.notify();
     }
 
     pub(super) fn create_vault(&mut self, cx: &mut Context<Self>) {
@@ -229,6 +295,60 @@ impl Shell {
             });
         })
         .detach();
+    }
+
+    /// Settings -> Vault -> "Unlock with a PIN": set it (the vault must be open: its passphrase
+    /// is what gets sealed).
+    pub(super) fn set_vault_pin(&mut self, cx: &mut Context<Self>) {
+        let Some(ui) = self.vault_ui.as_mut() else {
+            return;
+        };
+        if ui.busy {
+            return;
+        }
+        let pin = ui.pin_new.read(cx).text().to_owned();
+        let again = ui.pin_repeat.read(cx).text().to_owned();
+        if pin != again {
+            return self.vault_message(false, "The PIN and its repeat differ.", cx);
+        }
+        let task = match Keeper::set_pin(pin, cx) {
+            Ok(task) => task,
+            Err(e) => return self.vault_message(false, e, cx),
+        };
+        if let Some(ui) = self.vault_ui.as_mut() {
+            ui.busy = true;
+            ui.message = None;
+        }
+        cx.spawn(async move |this, cx| {
+            let result = task.await;
+            let _ = this.update(cx, |s, cx| {
+                if let Some(ui) = s.vault_ui.as_mut() {
+                    ui.busy = false;
+                }
+                match result {
+                    Ok(()) => {
+                        Keeper::pin_stored(cx);
+                        if let Some(ui) = s.vault_ui.as_mut() {
+                            ui.use_passphrase = false;
+                            let (a, b) = (ui.pin_new.clone(), ui.pin_repeat.clone());
+                            s.clear_inputs(&[&a, &b], cx);
+                        }
+                        s.notify_toast(ToastKind::Positive, "Vault PIN set", cx);
+                    }
+                    Err(e) => s.vault_message(false, e, cx),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub(super) fn clear_vault_pin(&mut self, cx: &mut Context<Self>) {
+        match Keeper::clear_pin(cx) {
+            Ok(()) => self.notify_toast(ToastKind::Default, "Vault PIN removed", cx),
+            Err(e) => self.notify_toast(ToastKind::Critical, e, cx),
+        }
+        cx.notify();
     }
 
     pub(super) fn lock_vault(&mut self, cx: &mut Context<Self>) {
@@ -449,6 +569,11 @@ impl Shell {
                 .iter()
                 .find(|c| c.name == alias)
                 .and_then(|c| c.password_command.clone()),
+            sudo_command: self
+                .connections
+                .iter()
+                .find(|c| c.name == alias)
+                .and_then(|c| c.sudo_password_command.clone()),
         }
     }
 
@@ -483,13 +608,19 @@ impl Shell {
                 }
                 match result {
                     Ok(vault) => {
+                        let had_pin = Keeper::pin_set(cx);
                         Keeper::passphrase_changed(cx);
                         Keeper::put(vault, cx);
                         if let Some(ui) = &s.vault_ui {
                             let all = [ui.current.clone(), ui.new.clone(), ui.confirm.clone()];
                             s.clear_inputs(&[&all[0], &all[1], &all[2]], cx);
                         }
-                        s.notify_toast(ToastKind::Positive, "Vault passphrase changed", cx);
+                        let text = if had_pin {
+                            "Vault passphrase changed. The PIN was removed: set it again"
+                        } else {
+                            "Vault passphrase changed"
+                        };
+                        s.notify_toast(ToastKind::Positive, text, cx);
                     }
                     Err(VaultError::WrongPassphrase) => {
                         s.vault_message(false, "The current passphrase is wrong.", cx)

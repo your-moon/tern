@@ -38,6 +38,7 @@ pub(super) struct ConnectionForm {
     proxy_command: Option<String>,
     vault_key: Entity<TextInput>,
     password_command: Entity<TextInput>,
+    sudo_password_command: Entity<TextInput>,
     agent_socket: Option<String>,
     /// One input per port forward, as `-L`/`-R`/`-D` text; blank rows are ignored on save.
     forwards: Vec<Entity<TextInput>>,
@@ -71,6 +72,7 @@ impl ConnectionForm {
             &self.keep_alive,
             &self.vault_key,
             &self.password_command,
+            &self.sudo_password_command,
             &self.password,
             &self.vault_pass,
             &self.vault_repeat,
@@ -149,6 +151,11 @@ impl Shell {
                 "Prints the password, e.g. gopass show -o …",
                 false,
                 d.password_command.unwrap_or_default(),
+            ),
+            sudo_password_command: field(
+                "e.g. gopass show -o …",
+                false,
+                d.sudo_password_command.unwrap_or_default(),
             ),
             agent_socket: d.agent_socket,
             forwards: d
@@ -319,7 +326,12 @@ impl Shell {
             &form.keep_alive,
         ];
         fields.extend(&form.forwards);
-        fields.extend([&form.vault_key, &form.password_command, &form.password]);
+        fields.extend([
+            &form.vault_key,
+            &form.password_command,
+            &form.sudo_password_command,
+            &form.password,
+        ]);
         if step != VaultStep::None {
             fields.push(&form.vault_pass);
         }
@@ -376,6 +388,7 @@ impl Shell {
             tags: read(&form.tags, cx),
             vault_key: read(&form.vault_key, cx),
             password_command: read(&form.password_command, cx),
+            sudo_password_command: read(&form.sudo_password_command, cx),
             proxy_jump: read(&form.proxy_jump, cx),
             forward_agent: form.forward_agent,
             keep_alive: read(&form.keep_alive, cx),
@@ -644,6 +657,7 @@ impl Shell {
             .child(self.forward_rows(form, cx))
             .child(row("Vault key", &form.vault_key, t))
             .child(row("Password command", &form.password_command, t))
+            .child(row("Sudo password command", &form.sudo_password_command, t))
             .child(row("Password", &form.password, t));
         match step {
             VaultStep::None => {}

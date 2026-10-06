@@ -45,6 +45,8 @@ struct Link {
     vault_keys: Vec<String>,
     /// Prints the login password; see `password_command`.
     password_command: Option<String>,
+    /// Prints the password for `sudo` and other prompts after login (`session_fill`).
+    sudo_command: Option<String>,
 }
 
 impl Status {
@@ -79,6 +81,13 @@ pub struct Session {
     command_tried: bool,
     /// Secrets the user was already asked for on this connection.
     asked: Vec<tern_vault::Key>,
+    /// How many times the remote has written: a password fill checked the screen at one
+    /// count and types only if it is still the same (see `session_fill`).
+    output_seq: u64,
+    /// A fill command is running.
+    filling: bool,
+    /// The fill hint was shown for the prompt on screen.
+    fill_hinted: bool,
     /// When the remote last wrote, and whether that ended a line: the save offer waits for a
     /// quiet moment so it is not interleaved with the login banner.
     last_output: std::time::Instant,
@@ -135,6 +144,7 @@ impl Session {
                 handle: None,
                 vault_keys: auth.vault_keys,
                 password_command: auth.password_command,
+                sudo_command: auth.sudo_command,
             };
             // A locked vault is unlocked before dialling, so its keys can be offered.
             let unlock_first = !idle && Self::keys_need_unlock(&link, cx);
@@ -158,6 +168,9 @@ impl Session {
                 tried: Vec::new(),
                 command_tried: false,
                 asked: Vec::new(),
+                output_seq: 0,
+                filling: false,
+                fill_hinted: false,
                 last_output: std::time::Instant::now(),
                 ends_line: true,
                 view,
@@ -346,8 +359,10 @@ impl Session {
             SessionEvent::Data(bytes) => {
                 self.last_output = std::time::Instant::now();
                 self.ends_line = bytes.last().is_some_and(|b| *b == b'\n');
+                self.output_seq += 1;
                 self.record(&bytes);
                 self.show(&bytes, cx);
+                self.offer_fill_hint(cx);
             }
             SessionEvent::Prompt(prompt) => self.on_prompt(prompt, cx),
             SessionEvent::Connected => {
@@ -558,6 +573,8 @@ impl Session {
 
 #[path = "session_command.rs"]
 mod command;
+#[path = "session_fill.rs"]
+mod fill;
 #[path = "session_vault.rs"]
 mod vault;
 

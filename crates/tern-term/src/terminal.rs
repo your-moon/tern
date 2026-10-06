@@ -671,6 +671,24 @@ impl Terminal {
         })
     }
 
+    /// The text on the cursor's row up to (not including) the cursor, trailing blanks
+    /// trimmed: what the remote has written at the line being typed, so a prompt can be
+    /// recognised before anything is sent. `None` when the cursor is hidden or scrolled out.
+    pub fn cursor_line_text(&self) -> Option<String> {
+        let cursor = self.cursor()?;
+        let mut text: String = self
+            .line(cursor.row)
+            .iter()
+            .take(cursor.col)
+            .filter(|c| !c.wide_spacer)
+            .map(|c| c.ch)
+            .collect();
+        while text.ends_with(' ') {
+            text.pop();
+        }
+        Some(text)
+    }
+
     /// A viewport row as trimmed text (wide-char spacers skipped).
     pub fn row_text(&self, viewport_row: usize) -> String {
         let mut text: String = self

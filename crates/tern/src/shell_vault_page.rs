@@ -49,16 +49,39 @@ impl Shell {
         let mut status_card =
             w::card(&t).child(w::row(&t, true, status, Some(detail.into()), lock));
         if entries.is_none() && exists {
+            let pin = Keeper::pin_set(cx);
+            let by_pin = pin && !ui.use_passphrase;
+            let switch = pin.then(|| {
+                w::button(
+                    &t,
+                    "vault-unlock-switch",
+                    if by_pin {
+                        "Use passphrase instead"
+                    } else {
+                        "Use PIN instead"
+                    },
+                )
+                .on_click(cx.listener(|s, _, _, cx| s.toggle_use_passphrase(cx)))
+            });
             status_card = status_card.child(w::row(
                 &t,
                 false,
                 "Unlock",
-                Some("Enter the vault passphrase".into()),
+                Some(if by_pin {
+                    "Enter the vault PIN".into()
+                } else {
+                    "Enter the vault passphrase".into()
+                }),
                 div()
                     .flex()
                     .items_center()
                     .gap(px(6.))
-                    .child(field(&ui.unlock, &t))
+                    .child(if by_pin {
+                        field(&ui.pin, &t)
+                    } else {
+                        field(&ui.unlock, &t)
+                    })
+                    .children(switch)
                     .child(
                         w::button(
                             &t,
@@ -293,7 +316,7 @@ impl Shell {
         };
         let (minus, value, plus) = w::stepper(&t, "vault-lock-after", label);
         let keychain = self.settings.vault_keychain;
-        w::card(&t)
+        let card = w::card(&t)
             .child(w::row(
                 &t,
                 true,
@@ -326,6 +349,57 @@ impl Shell {
                     .cursor_pointer()
                     .on_click(cx.listener(|s, _, _, cx| s.toggle_keychain(cx)))
                     .child(w::toggle(&t, keychain, "vault-keychain")),
+            ));
+        // A PIN seals the vault's passphrase, so there is nothing to set until a vault exists.
+        card.when(Keeper::exists(cx), |c| c.child(self.pin_row(cx)))
+    }
+
+    /// "Unlock with a PIN": set it (twice, masked) or turn it off.
+    fn pin_row(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+        let t = self.theme;
+        let Some(ui) = &self.vault_ui else {
+            return div();
+        };
+        if Keeper::pin_set(cx) {
+            return div().child(w::row(
+                &t,
+                false,
+                "Unlock with a PIN",
+                Some(
+                    "On. Opens the vault after an idle lock; 5 wrong PINs turn it off. Changing the passphrase removes it."
+                        .into(),
+                ),
+                w::button(&t, "vault-pin-off", "Turn off")
+                    .on_click(cx.listener(|s, _, _, cx| s.clear_vault_pin(cx))),
+            ));
+        }
+        // Two rows, as the passphrase card does: two fields and a button in one row do not
+        // fit the page at the narrowest window width.
+        div()
+            .child(w::row(
+                &t,
+                false,
+                "Unlock with a PIN",
+                Some(
+                    "4 to 8 digits, kept in the Keychain on this Mac. The vault must be unlocked to set it."
+                        .into(),
+                ),
+                field(&ui.pin_new, &t),
+            ))
+            .child(w::row(
+                &t,
+                false,
+                "Repeat PIN",
+                None,
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .child(field(&ui.pin_repeat, &t))
+                    .child(
+                        w::button(&t, "vault-pin-set", if ui.busy { "Working…" } else { "Set PIN" })
+                            .on_click(cx.listener(|s, _, _, cx| s.set_vault_pin(cx))),
+                    ),
             ))
     }
 }

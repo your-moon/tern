@@ -1,5 +1,6 @@
-//! The vault side of logging in: answer prompts from the vault, unlock it when it is locked,
-//! and offer to save what the user typed once the login worked.
+//! The vault side of logging in: answer prompts from the vault, unlock it when it is locked
+//! (with the PIN first, when one is set), and offer to save what the user typed once the login
+//! worked.
 
 use std::time::{Duration, Instant};
 
@@ -10,24 +11,45 @@ use tern_vault::{Key, Vault, VaultError};
 use super::Session;
 use crate::keeper::{self, Keeper};
 use crate::login::Login;
+use crate::vault_pin::{self, Outcome};
 
 const QUIET: Duration = Duration::from_millis(500);
 const QUIET_MAX: Duration = Duration::from_secs(3);
 
+/// What waits for the vault to open. Several can be pending at once only in the sense that
+/// each field is a different reason; the vault opening is what they all need.
+#[derive(Default)]
+pub(super) struct After {
+    /// The server's question, answered from the vault once it is open.
+    pub(super) prompt: Option<Prompt>,
+    /// A secret to save once it is open.
+    pub(super) entry: Option<(Key, SecretString)>,
+    /// A password fill, as the screen was when it was asked for (see `session_fill`).
+    pub(super) fill: Option<u64>,
+}
+
 /// A question tern is asking for itself, and what to do with the answer.
 pub(super) enum Flow {
-    /// "Vault passphrase (Enter to skip)": then answer `prompt` from the vault or ask it.
-    UnlockForPrompt(Prompt),
-    /// "Vault passphrase (Enter to skip)", asked before dialling because the connection names
-    /// a vault key; skipping dials anyway and falls back to the usual prompts.
-    UnlockForKeys,
+    /// "Vault PIN (Enter to use the passphrase)", asked first when a PIN is set.
+    Pin(After),
+    /// "Vault passphrase (Enter to skip)". With nothing in [`After`] it was asked before
+    /// dialling because the connection names a vault key; skipping dials anyway and falls
+    /// back to the usual prompts.
+    Unlock(After),
     /// "This connection runs `…` to get its password. Run it? (yes/no)".
     ApproveCommand(Prompt),
+    /// The same for a password fill; the number is the screen it was asked on.
+    ApproveFill(String, u64),
     /// "Save … in tern's vault? (yes/no)".
     OfferSave(Key, SecretString),
-    UnlockToSave(Key, SecretString),
     NewPassphrase(Key, SecretString),
     RepeatPassphrase(Key, SecretString, SecretString),
+}
+
+/// How the person is opening the vault.
+enum Opener {
+    Passphrase(SecretString),
+    Pin(String),
 }
 
 impl Session {
@@ -56,26 +78,54 @@ impl Session {
                 return;
             }
             if Keeper::locked(cx) {
-                return self.ask_local(
-                    "Vault passphrase (Enter to skip): ",
-                    false,
-                    Flow::UnlockForPrompt(prompt),
-                    cx,
-                );
+                let after = After {
+                    prompt: Some(prompt),
+                    ..After::default()
+                };
+                return self.ask_unlock(after, cx);
             }
         }
         self.ask_user(prompt, cx);
     }
 
-    /// Asks for the vault passphrase before the connection dials (see [`Flow::UnlockForKeys`]).
+    /// Asks for the vault passphrase before the connection dials (see [`Flow::Unlock`]).
     pub(super) fn ask_vault_before_dialling(&mut self, cx: &mut Context<Self>) {
         self.connect_after_unlock = true;
-        self.ask_local(
-            "Vault passphrase (Enter to skip): ",
-            false,
-            Flow::UnlockForKeys,
-            cx,
-        );
+        self.ask_unlock(After::default(), cx);
+    }
+
+    /// Asks to open the vault: the PIN when one is set, else the passphrase.
+    pub(super) fn ask_unlock(&mut self, after: After, cx: &mut Context<Self>) {
+        if Keeper::pin_set(cx) {
+            let text = format!("{}Vault PIN (Enter to use the passphrase): ", lead(&after));
+            self.ask_local(&text, false, Flow::Pin(after), cx);
+        } else {
+            self.ask_passphrase(after, cx);
+        }
+    }
+
+    fn ask_passphrase(&mut self, after: After, cx: &mut Context<Self>) {
+        let ask = if after.entry.is_some() {
+            "Vault passphrase: "
+        } else {
+            "Vault passphrase (Enter to skip): "
+        };
+        let text = format!("{}{ask}", lead(&after));
+        self.ask_local(&text, false, Flow::Unlock(after), cx);
+    }
+
+    /// The vault was not opened and the person gave up: back to what each reason falls to.
+    fn skipped(&mut self, after: After, cx: &mut Context<Self>) {
+        if let Some(prompt) = after.prompt {
+            self.ask_user(prompt, cx);
+        } else if after.entry.is_some() {
+            self.note("Not saved.", cx);
+        } else if after.fill.is_some() {
+            self.note("Not filled.", cx);
+        } else {
+            self.connect_after_unlock = false;
+            self.dial(cx);
+        }
     }
 
     /// The server's question, asked in the terminal; a typed password is remembered so it can
@@ -147,19 +197,19 @@ impl Session {
         };
         let typed = answer.filter(|a| !a.expose_secret().is_empty());
         match flow {
-            Flow::UnlockForKeys => match typed {
-                Some(passphrase) => self.unlock(passphrase, None, None, cx),
-                None => {
-                    self.connect_after_unlock = false;
-                    self.dial(cx);
-                }
+            Flow::Pin(after) => match typed {
+                Some(pin) => self.unlock(Opener::Pin(pin.expose_secret().to_owned()), after, cx),
+                None => self.ask_passphrase(after, cx),
             },
-            Flow::UnlockForPrompt(prompt) => match typed {
-                Some(passphrase) => self.unlock(passphrase, Some(prompt), None, cx),
-                None => self.ask_user(prompt, cx),
+            Flow::Unlock(after) => match typed {
+                Some(passphrase) => self.unlock(Opener::Passphrase(passphrase), after, cx),
+                None => self.skipped(after, cx),
             },
             Flow::ApproveCommand(prompt) => {
                 self.command_approved(prompt, keeper::is_yes(typed.as_ref()), cx)
+            }
+            Flow::ApproveFill(command, seq) => {
+                self.fill_approved(command, seq, keeper::is_yes(typed.as_ref()), cx)
             }
             Flow::OfferSave(key, secret) => {
                 if !keeper::is_yes(typed.as_ref()) {
@@ -173,21 +223,16 @@ impl Session {
                         cx,
                     );
                 } else if Keeper::locked(cx) {
-                    self.ask_local(
-                        "Vault passphrase: ",
-                        false,
-                        Flow::UnlockToSave(key, secret),
-                        cx,
-                    );
+                    let after = After {
+                        entry: Some((key, secret)),
+                        ..After::default()
+                    };
+                    self.ask_unlock(after, cx);
                 } else if let Some(mut vault) = Keeper::take(cx) {
                     vault.set(key, secret);
                     self.save(vault, cx);
                 }
             }
-            Flow::UnlockToSave(key, secret) => match typed {
-                Some(passphrase) => self.unlock(passphrase, None, Some((key, secret)), cx),
-                None => self.note("Not saved.", cx),
-            },
             Flow::NewPassphrase(key, secret) => match typed {
                 Some(first) => self.ask_local(
                     "Repeat vault passphrase: ",
@@ -209,49 +254,84 @@ impl Session {
         }
     }
 
-    /// Unlocks off the UI thread, then either answers `prompt` or saves `entry`.
-    fn unlock(
-        &mut self,
-        passphrase: SecretString,
-        prompt: Option<Prompt>,
-        entry: Option<(Key, SecretString)>,
-        cx: &mut Context<Self>,
-    ) {
+    /// Opens the vault off the UI thread, then does what was waiting for it.
+    fn unlock(&mut self, opener: Opener, after: After, cx: &mut Context<Self>) {
         let Some(path) = Keeper::path(cx) else {
             return;
         };
         self.note("Unlocking the vault…", cx);
-        let work = cx.background_spawn(async move { Vault::unlock(&path, passphrase) });
+        let work = match opener {
+            Opener::Passphrase(passphrase) => cx.background_spawn(async move {
+                match Vault::unlock(&path, passphrase) {
+                    Ok(vault) => Outcome::Opened(vault),
+                    Err(VaultError::WrongPassphrase) => {
+                        Outcome::Failed("Wrong vault passphrase.".into())
+                    }
+                    Err(e) => Outcome::Failed(format!("Vault unavailable: {e}")),
+                }
+            }),
+            Opener::Pin(pin) => Keeper::pin_unlock(pin, cx),
+        };
         cx.spawn(async move |this, cx| {
-            let result = work.await;
-            let _ = this.update(cx, |s, cx| {
-                let unlocked = result.is_ok();
-                match result {
-                    Ok(mut vault) => match entry {
-                        Some((key, secret)) => {
-                            vault.set(key, secret);
-                            s.save(vault, cx);
-                        }
-                        None => Keeper::put(vault, cx),
-                    },
-                    Err(VaultError::WrongPassphrase) => s.note("Wrong vault passphrase.", cx),
-                    Err(e) => s.note(&format!("Vault unavailable: {e}"), cx),
-                }
-                // The connection was waiting for the vault: dial now, with the keys if the
-                // vault opened and without them if it did not.
-                if std::mem::take(&mut s.connect_after_unlock) {
-                    s.dial(cx);
-                }
-                // A failed unlock goes straight to the server's question rather than asking
-                // for the vault passphrase again.
-                match prompt {
-                    Some(prompt) if unlocked => s.on_prompt(prompt, cx),
-                    Some(prompt) => s.ask_user(prompt, cx),
-                    None => {}
-                }
-            });
+            let outcome = work.await;
+            let _ = this.update(cx, |s, cx| s.unlocked(outcome, after, cx));
         })
         .detach();
+    }
+
+    /// The vault opened, or it did not and the person is asked again.
+    fn unlocked(&mut self, outcome: Outcome, after: After, cx: &mut Context<Self>) {
+        let vault = match outcome {
+            Outcome::Opened(vault) => Some(vault),
+            Outcome::Wrong { .. } => {
+                // A wrong PIN is asked again, with the tries left said first.
+                if let Some(text) = vault_pin::message(&outcome) {
+                    self.note(&text, cx);
+                }
+                return self.ask_unlock(after, cx);
+            }
+            Outcome::Wiped | Outcome::Gone => {
+                // The PIN is off now: say so, and ask for the passphrase.
+                if let Some(text) = Keeper::pin_done(outcome, cx) {
+                    self.note(&text, cx);
+                }
+                return self.ask_passphrase(after, cx);
+            }
+            Outcome::Failed(text) => {
+                self.note(&text, cx);
+                None
+            }
+        };
+        let After {
+            prompt,
+            entry,
+            fill,
+        } = after;
+        let unlocked = vault.is_some();
+        if let Some(mut vault) = vault {
+            match entry {
+                Some((key, secret)) => {
+                    vault.set(key, secret);
+                    self.save(vault, cx);
+                }
+                None => Keeper::put(vault, cx),
+            }
+        }
+        // The connection was waiting for the vault: dial now, with the keys if the vault
+        // opened and without them if it did not.
+        if std::mem::take(&mut self.connect_after_unlock) {
+            self.dial(cx);
+        }
+        // A failed unlock goes straight to the server's question rather than asking for the
+        // vault passphrase again.
+        match prompt {
+            Some(prompt) if unlocked => self.on_prompt(prompt, cx),
+            Some(prompt) => self.ask_user(prompt, cx),
+            None => {}
+        }
+        if let (Some(seq), true) = (fill, unlocked) {
+            self.fill_now(seq, cx);
+        }
     }
 
     /// Encrypts and writes off the UI thread; the vault returns to the keeper afterwards.
@@ -279,7 +359,12 @@ impl Session {
         .detach();
     }
 
-    fn note(&self, text: &str, cx: &mut Context<Self>) {
+    pub(super) fn note(&self, text: &str, cx: &mut Context<Self>) {
         self.show(format!("\x1b[2m{text}\x1b[0m\r\n").as_bytes(), cx);
     }
+}
+
+/// A fill asks in the middle of the remote's own prompt line: start on a fresh line.
+fn lead(after: &After) -> &'static str {
+    if after.fill.is_some() { "\r\n" } else { "" }
 }

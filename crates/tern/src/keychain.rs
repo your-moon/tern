@@ -48,3 +48,41 @@ pub fn delete() -> Result<(), String> {
         Err(e) => Err(format!("Keychain: {e}")),
     }
 }
+
+// ---- the vault PIN ------------------------------------------------------------------------
+
+/// The vault passphrase sealed to the PIN (see `vault_pin`), in its own item: service
+/// `tern vault pin` (`tern vault pin (debug)` in debug builds). The PIN opens nothing without
+/// this item, and the item is useless without the PIN.
+pub fn pin_service() -> &'static str {
+    if cfg!(debug_assertions) {
+        "tern vault pin (debug)"
+    } else {
+        "tern vault pin"
+    }
+}
+
+pub fn store_pin_blob(blob: &[u8]) -> Result<(), String> {
+    set_generic_password(pin_service(), ACCOUNT, blob).map_err(|e| format!("Keychain: {e}"))
+}
+
+pub fn load_pin_blob() -> Option<Vec<u8>> {
+    match get_generic_password(pin_service(), ACCOUNT) {
+        Ok(bytes) => Some(bytes),
+        Err(e) => {
+            if e.code() != NOT_FOUND {
+                tracing::warn!(status = e.code(), "vault_pin_keychain_read_failed");
+            }
+            None
+        }
+    }
+}
+
+/// Removes the PIN item; one that is already gone counts as removed.
+pub fn delete_pin_blob() -> Result<(), String> {
+    match delete_generic_password(pin_service(), ACCOUNT) {
+        Ok(()) => Ok(()),
+        Err(e) if e.code() == NOT_FOUND => Ok(()),
+        Err(e) => Err(format!("Keychain: {e}")),
+    }
+}

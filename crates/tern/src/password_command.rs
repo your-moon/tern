@@ -27,6 +27,8 @@ pub struct Auth {
     /// so the spec never holds key material between connections.
     pub vault_keys: Vec<String>,
     pub password_command: Option<String>,
+    /// The "Sudo password command"; see `session_fill`.
+    pub sudo_command: Option<String>,
 }
 
 /// What to do about the command when a password prompt arrives.
@@ -233,7 +235,16 @@ impl Approved {
 
 /// A command saved from this Mac's form counts as seen, so it is approved with the save.
 pub fn approve_saved(connection: &crate::connections::Connection) {
-    if let (Some(command), Some(dir)) = (&connection.password_command, crate::settings::dir()) {
+    let Some(dir) = crate::settings::dir() else {
+        return;
+    };
+    for command in [
+        &connection.password_command,
+        &connection.sudo_password_command,
+    ]
+    .into_iter()
+    .flatten()
+    {
         let _ = Approved::approve(&dir, command);
     }
 }

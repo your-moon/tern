@@ -120,7 +120,9 @@ impl Shell {
             });
         let notes = cx.subscribe(
             &session,
-            |shell, _, note: &crate::session::SessionNote, cx| shell.on_session_note(note, cx),
+            |shell, session, note: &crate::session::SessionNote, cx| {
+                shell.on_session_note(&session, note, cx)
+            },
         );
         self.next_pane += 1;
         Pane {

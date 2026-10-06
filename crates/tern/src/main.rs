@@ -37,6 +37,7 @@ mod theme;
 mod theme_tint;
 mod themes;
 mod titlebar;
+mod vault_pin;
 mod wallpaper;
 mod wallpaper_colors;
 mod wallpaper_fx;

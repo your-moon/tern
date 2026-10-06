@@ -45,6 +45,7 @@ mod broadcast_ui;
 mod forwards_ui;
 #[path = "shell_sftp.rs"]
 mod sftp_ui;
+pub(crate) use forwards_ui::FillPassword;
 pub(crate) use sftp_ui::ToggleSftp;
 #[path = "shell_look.rs"]
 mod look;
@@ -674,6 +675,7 @@ impl Render for Shell {
             .on_action(cx.listener(|s, _: &ToggleSnippets, w, cx| s.toggle_snippet_picker(w, cx)))
             .on_action(cx.listener(|s, _: &ToggleSidebar, _, cx| s.toggle_sidebar(cx)))
             .on_action(cx.listener(|s, _: &ToggleSftp, w, cx| s.toggle_sftp(w, cx)))
+            .on_action(cx.listener(|s, _: &FillPassword, _, cx| s.fill_password(cx)))
             .on_action(cx.listener(|s, _: &NewConnection, w, cx| s.open_form(None, None, w, cx)))
             .on_action(cx.listener(|s, _: &OpenSettings, w, cx| s.toggle_settings(w, cx)))
             // Capture phase: the terminal handles Escape itself, and ending a broadcast must
