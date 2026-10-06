@@ -43,9 +43,13 @@ impl Shell {
                 "Created the first time you save a password, or here".into(),
             ),
         };
-        let lock = w::button(&t, "vault-lock", "Lock now")
-            .when(entries.is_none(), |el| el.opacity(0.4))
-            .on_click(cx.listener(|s, _, _, cx| s.lock_vault(cx)));
+        // Only an open vault can be locked; a dimmed button that does nothing is noise.
+        let lock = div().when(entries.is_some(), |el| {
+            el.child(
+                w::button(&t, "vault-lock", "Lock now")
+                    .on_click(cx.listener(|s, _, _, cx| s.lock_vault(cx))),
+            )
+        });
         let mut status_card =
             w::card(&t).child(w::row(&t, true, status, Some(detail.into()), lock));
         if entries.is_none() && exists {
@@ -98,9 +102,13 @@ impl Shell {
                 false,
                 "Create the vault",
                 Some("Choose a passphrase. It cannot be recovered if you forget it.".into()),
+                // Stacked: side by side, two fields and a button squeezed the title to one
+                // letter per line at the 900 px minimum window.
                 div()
+                    .flex_none()
                     .flex()
-                    .items_center()
+                    .flex_col()
+                    .items_end()
                     .gap(px(6.))
                     .child(field(&ui.new, &t))
                     .child(field(&ui.confirm, &t))
