@@ -86,6 +86,13 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 | F7 | 153 MB start-up memory peak | Unexplained (docs/perf.md) |
 | ✓ F8 | macOS Reduce motion | Follows the system setting via objc2-app-kit (safe), re-read on activation |
 
+## 6b. Standard (1×) displays
+
+| # | Gap | Impact |
+| --- | --- | --- |
+| ✓ D1 | Soft text and icons on 1080p monitors | Whole-pixel sizes, 1 px icon strokes, opaque fill and stronger muted text at 1× (Settings → Appearance → Sharper text) |
+| D2 | Waiting-for-input state | A session at a password prompt shows the connecting dot |
+
 ## 7. Shipping
 
 | # | Gap | Impact |
