@@ -95,6 +95,8 @@ pub struct Session {
     backoff: Backoff,
     /// A countdown to the next automatic dial; dropping it cancels the dial.
     retry: Option<Retry>,
+    /// Forwards running on the current connection.
+    forward_handles: Vec<tern_ssh::ForwardHandle>,
     _session_events: Task<()>,
     _terminal_events: Subscription,
 }
@@ -163,6 +165,7 @@ impl Session {
                 ever_connected: false,
                 backoff: Backoff::default(),
                 retry: None,
+                forward_handles: Vec::new(),
                 _session_events: task,
                 _terminal_events: subscription,
             };
@@ -338,6 +341,7 @@ impl Session {
                 self.ended_at = None;
                 self.ever_connected = true;
                 self.backoff.reset();
+                self.start_spec_forwards(cx);
                 self.offer_save(cx);
                 cx.notify();
             }
@@ -347,6 +351,7 @@ impl Session {
                 reason,
             } => {
                 self.status = Status::Closed;
+                self.forget_forwards();
                 self.ended_at = Some(std::time::Instant::now());
                 self.login = None;
                 self.flow = None;
@@ -537,6 +542,10 @@ impl Session {
 
 #[path = "session_vault.rs"]
 mod vault;
+
+#[path = "session_forwards.rs"]
+mod forwards;
+pub use forwards::SessionNote;
 
 /// A closed tab reconnects on Enter only, so a stray keystroke into a dead tab does not dial
 /// the server again. Enter arrives as CR from both the main and the keypad key.

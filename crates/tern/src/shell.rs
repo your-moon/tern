@@ -41,6 +41,8 @@ actions!(
 
 #[path = "shell_broadcast.rs"]
 mod broadcast_ui;
+#[path = "shell_forwards.rs"]
+mod forwards_ui;
 #[path = "shell_look.rs"]
 mod look;
 #[path = "shell_menu.rs"]
@@ -150,6 +152,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 next_pane: 0,
                 broadcast: None,
                 broadcast_picker: None,
+                forwards_panel: None,
                 active: 0,
                 error: None,
                 picker: None,
@@ -240,6 +243,7 @@ pub struct Shell {
     next_pane: PaneId,
     broadcast: Option<broadcast_ui::Broadcast>,
     broadcast_picker: Option<broadcast_ui::BroadcastPicker>,
+    forwards_panel: Option<forwards_ui::ForwardsPanel>,
     active: usize,
     error: Option<String>,
     picker: Option<Picker>,
@@ -285,6 +289,7 @@ struct Pane {
     session: Entity<Session>,
     _repaint: Subscription,
     _bell: Subscription,
+    _notes: Subscription,
 }
 
 struct Tab {
@@ -765,6 +770,7 @@ impl Render for Shell {
             .when_some(theme_picker, |el, p| el.child(p))
             .when_some(context_menu, |el, m| el.child(m))
             .when_some(self.render_broadcast_picker(cx), |el, p| el.child(p))
+            .when_some(self.render_forwards_panel(cx), |el, p| el.child(p))
             .when_some(toast, |el, t| el.child(t))
             .when_some(self.picker.as_ref(), |el, p| {
                 el.child(picker::render(

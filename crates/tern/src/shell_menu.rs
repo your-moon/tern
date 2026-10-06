@@ -150,6 +150,9 @@ impl Shell {
                 s.start_logging(ix, cx)
             }));
         }
+        items.push(action(icons::GLOBE, "Port forwards…", move |s, w, cx| {
+            s.open_forwards_panel(ix, position, w, cx)
+        }));
         let theme_alias = alias.clone();
         items.push(action(icons::PALETTE, "Theme…", move |s, w, cx| {
             s.open_theme_picker(ThemeTarget::Host(theme_alias.clone()), w, cx)

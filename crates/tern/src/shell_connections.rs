@@ -19,6 +19,8 @@ use crate::sidebar;
 use crate::text_input::{InputColors, TextInput};
 use crate::theme::Theme;
 
+const FORWARD_HINT: &str = "-L 8080:db:5432   (-R and -D too)";
+
 pub(super) struct ConnectionForm {
     /// Index into the shell's connections when editing; `None` for a new one.
     editing: Option<usize>,
@@ -36,7 +38,8 @@ pub(super) struct ConnectionForm {
     proxy_command: Option<String>,
     vault_key: Entity<TextInput>,
     agent_socket: Option<String>,
-    forwards: Vec<String>,
+    /// One input per port forward, as `-L`/`-R`/`-D` text; blank rows are ignored on save.
+    forwards: Vec<Entity<TextInput>>,
     password: Entity<TextInput>,
     vault_pass: Entity<TextInput>,
     vault_repeat: Entity<TextInput>,
@@ -55,7 +58,7 @@ enum VaultStep {
 
 impl ConnectionForm {
     fn fields(&self) -> Vec<&Entity<TextInput>> {
-        vec![
+        let mut all = vec![
             &self.name,
             &self.host,
             &self.port,
@@ -69,7 +72,9 @@ impl ConnectionForm {
             &self.password,
             &self.vault_pass,
             &self.vault_repeat,
-        ]
+        ];
+        all.extend(&self.forwards);
+        all
     }
 }
 
@@ -139,7 +144,11 @@ impl Shell {
                 d.vault_key.unwrap_or_default(),
             ),
             agent_socket: d.agent_socket,
-            forwards: d.forwards,
+            forwards: d
+                .forwards
+                .iter()
+                .map(|f| field(FORWARD_HINT, false, f.clone()))
+                .collect(),
             password: field(password_hint, true, String::new()),
             vault_pass: field("Vault passphrase", true, String::new()),
             vault_repeat: field("Repeat vault passphrase", true, String::new()),
@@ -161,6 +170,104 @@ impl Shell {
         self.picker = None;
         window.focus(&first, cx);
         cx.notify();
+    }
+
+    /// A blank port-forward row, focused.
+    fn add_forward_row(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let t = self.theme;
+        let colors = InputColors {
+            text: t.text,
+            placeholder: t.faint,
+            cursor: t.accent,
+            selection: t.accent.opacity(0.35),
+        };
+        let input = cx.new(|cx| TextInput::new(FORWARD_HINT.to_owned(), false, colors, cx));
+        window.focus(&input.focus_handle(cx), cx);
+        if let Some(form) = self.form.as_mut() {
+            form._repaint
+                .push(cx.observe(&input, |_, _, cx| cx.notify()));
+            form.forwards.push(input);
+        }
+        cx.notify();
+    }
+
+    fn remove_forward_row(&mut self, ix: usize, cx: &mut Context<Self>) {
+        if let Some(form) = self.form.as_mut()
+            && ix < form.forwards.len()
+        {
+            form.forwards.remove(ix);
+        }
+        cx.notify();
+    }
+
+    /// The "Port forwards" list: one row per spec with a remove button, and an add button.
+    fn forward_rows(&self, form: &ConnectionForm, cx: &mut Context<Self>) -> impl IntoElement {
+        let t = &self.theme;
+        let mut list = div().flex().flex_col().gap(px(6.)).child(
+            div()
+                .flex()
+                .items_center()
+                .justify_between()
+                .child(div().text_xs().text_color(t.muted).child("Port forwards"))
+                .child(
+                    div()
+                        .id("form-add-forward")
+                        .px(px(8.))
+                        .py(px(2.))
+                        .rounded(px(6.))
+                        .text_xs()
+                        .text_color(t.accent)
+                        .cursor_pointer()
+                        .hover(|s| s.bg(t.row_hover))
+                        .on_click(
+                            cx.listener(|shell, _, window, cx| shell.add_forward_row(window, cx)),
+                        )
+                        .child("+ Add"),
+                ),
+        );
+        for (ix, input) in form.forwards.iter().enumerate() {
+            list =
+                list.child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .h(px(30.))
+                                .px(px(10.))
+                                .flex()
+                                .items_center()
+                                .rounded(px(8.))
+                                .border_1()
+                                .border_color(t.border)
+                                .bg(t.row_hover)
+                                .overflow_hidden()
+                                .text_sm()
+                                .child(input.clone()),
+                        )
+                        .child(
+                            div()
+                                .id(("form-remove-forward", ix))
+                                .flex_none()
+                                .size(px(24.))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(px(6.))
+                                .text_color(t.muted)
+                                .cursor_pointer()
+                                .hover(|s| s.bg(t.row_hover))
+                                .on_click(cx.listener(move |shell, _, _, cx| {
+                                    shell.remove_forward_row(ix, cx)
+                                }))
+                                .child("×"),
+                        ),
+                );
+        }
+        list
     }
 
     pub(crate) fn connection(&self, ix: usize) -> Option<Connection> {
@@ -203,9 +310,9 @@ impl Shell {
             &form.tags,
             &form.proxy_jump,
             &form.keep_alive,
-            &form.vault_key,
-            &form.password,
         ];
+        fields.extend(&form.forwards);
+        fields.extend([&form.vault_key, &form.password]);
         if step != VaultStep::None {
             fields.push(&form.vault_pass);
         }
@@ -264,7 +371,7 @@ impl Shell {
             proxy_jump: read(&form.proxy_jump, cx),
             forward_agent: form.forward_agent,
             keep_alive: read(&form.keep_alive, cx),
-            forwards: form.forwards.clone(),
+            forwards: form.forwards.iter().map(|f| read(f, cx)).collect(),
         };
         let editing = form.editing;
         let others: Vec<&str> = self
@@ -545,6 +652,7 @@ impl Shell {
                             .child(toggle(t, form.forward_agent, "form-forward-agent")),
                     ),
             )
+            .child(self.forward_rows(form, cx))
             .child(row("Vault key", &form.vault_key, t))
             .child(row("Password", &form.password, t));
         match step {

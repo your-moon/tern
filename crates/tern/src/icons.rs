@@ -56,6 +56,7 @@ icon_assets!(
     (CHEVRON_LEFT, "alt-arrow-left"),
     (MORE, "more-horizontal"),
     (SEARCH, "magnifer"),
+    (GLOBE, "global"),
 );
 
 pub fn icon(path: &'static str) -> Svg {

@@ -67,6 +67,32 @@ impl server::Handler for PasswordServer {
         Ok(if ok { Auth::Accept } else { Auth::reject() })
     }
 
+    /// Carries `-L` / `-D` connections: dials the destination from here and bridges it, so a
+    /// forward can be checked end to end against 127.0.0.1.
+    async fn channel_open_direct_tcpip(
+        &mut self,
+        channel: Channel<Msg>,
+        host: &str,
+        port: u32,
+        _: &str,
+        _: u32,
+        reply: server::ChannelOpenHandle,
+        _: &mut Session,
+    ) -> Result<(), Self::Error> {
+        let dest = (host.to_owned(), port as u16);
+        match tokio::net::TcpStream::connect(dest).await {
+            Ok(mut tcp) => {
+                reply.accept().await;
+                tokio::spawn(async move {
+                    let mut stream = channel.into_stream();
+                    let _ = tokio::io::copy_bidirectional(&mut stream, &mut tcp).await;
+                });
+            }
+            Err(e) => eprintln!("direct-tcpip {host}:{port} failed: {e}"),
+        }
+        Ok(())
+    }
+
     async fn channel_open_session(
         &mut self,
         _: Channel<Msg>,

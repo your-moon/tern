@@ -118,12 +118,17 @@ impl Shell {
                 last = status;
                 cx.notify();
             });
+        let notes = cx.subscribe(
+            &session,
+            |shell, _, note: &crate::session::SessionNote, cx| shell.on_session_note(note, cx),
+        );
         self.next_pane += 1;
         Pane {
             id: self.next_pane,
             session,
             _repaint: repaint,
             _bell: bell,
+            _notes: notes,
         }
     }
 
