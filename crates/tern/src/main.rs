@@ -37,6 +37,7 @@ mod theme;
 mod theme_tint;
 mod themes;
 mod titlebar;
+mod vault_cli;
 mod vault_pin;
 mod wallpaper;
 mod wallpaper_colors;
@@ -55,14 +56,16 @@ enum Cli {
     Open(Option<String>),
     Print(String),
     Refuse(String),
+    VaultInit,
 }
 
 fn parse_cli(arg: Option<String>) -> Cli {
-    let usage = "usage: tern [alias | user@host[:port]]";
+    let usage = "usage: tern [alias | user@host[:port]]\n       tern vault init   (passphrase, then PIN, on standard input)";
     match arg.as_deref() {
         None => Cli::Open(None),
         Some("-V" | "--version") => Cli::Print(format!("tern {}", env!("CARGO_PKG_VERSION"))),
         Some("-h" | "--help") => Cli::Print(usage.to_owned()),
+        Some("vault") if std::env::args().nth(2).as_deref() == Some("init") => Cli::VaultInit,
         Some(flag) if flag.starts_with('-') => {
             Cli::Refuse(format!("unknown option {flag}\n{usage}"))
         }
@@ -82,6 +85,16 @@ fn main() {
             eprintln!("{text}");
             std::process::exit(2);
         }
+        Cli::VaultInit => match vault_cli::init(std::io::stdin().lock()) {
+            Ok(text) => {
+                println!("{text}");
+                return;
+            }
+            Err(text) => {
+                eprintln!("{text}");
+                std::process::exit(1);
+            }
+        },
     };
     let _log_guard = init_logging();
     log_panics();
