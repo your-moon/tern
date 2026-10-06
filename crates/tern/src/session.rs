@@ -270,6 +270,14 @@ impl Session {
         self.log.take().map(|log| log.path().to_owned())
     }
 
+    /// What opens another session just like this one: the same server, or a new local shell.
+    pub fn launch_again(&self) -> Launch {
+        match &self.link {
+            Link::Ssh { spec, .. } => Launch::Ssh(spec.clone()),
+            Link::Local(_) => Launch::Local,
+        }
+    }
+
     pub fn is_local(&self) -> bool {
         matches!(self.link, Link::Local(_))
     }

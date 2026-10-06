@@ -34,8 +34,10 @@ impl Shell {
         self.update_settings(change, cx);
         let options = self.terminal_options();
         for tab in &self.tabs {
-            let view = tab.session.read(cx).view.clone();
-            view.update(cx, |v, cx| v.set_options(options.clone(), cx));
+            for pane in &tab.panes {
+                let view = pane.session.read(cx).view.clone();
+                view.update(cx, |v, cx| v.set_options(options.clone(), cx));
+            }
         }
     }
 

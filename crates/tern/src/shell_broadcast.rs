@@ -4,22 +4,26 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    AnyElement, Context, EntityId, InteractiveElement, IntoElement, ParentElement, Pixels, Point,
+    AnyElement, Context, InteractiveElement, IntoElement, ParentElement, Pixels, Point,
     SharedString, StatefulInteractiveElement, Styled, anchored, deferred, div, px,
 };
 
 use super::Shell;
 use crate::session::Status;
 
-/// Who is typing and who receives it, by session id.
+/// A tab's identity for as long as it is open; unlike its slot it survives reordering, and
+/// unlike its session it survives a change of the focused pane.
+pub(super) type TabId = u64;
+
+/// Who is typing and who receives it, by tab.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Broadcast {
-    pub source: EntityId,
-    pub targets: Vec<EntityId>,
+    pub source: TabId,
+    pub targets: Vec<TabId>,
 }
 
 impl Broadcast {
-    pub fn new(source: EntityId) -> Self {
+    pub fn new(source: TabId) -> Self {
         Self {
             source,
             targets: Vec::new(),
@@ -28,7 +32,7 @@ impl Broadcast {
 
     /// Adds the session, or removes it when it is already a target. The source is never its
     /// own target: it would receive every keystroke twice.
-    pub fn toggle(&mut self, id: EntityId) {
+    pub fn toggle(&mut self, id: TabId) {
         if id == self.source {
             return;
         }
@@ -41,13 +45,13 @@ impl Broadcast {
     }
 
     /// Takes part: types here, or receives.
-    pub fn involves(&self, id: EntityId) -> bool {
+    pub fn involves(&self, id: TabId) -> bool {
         self.source == id || self.targets.contains(&id)
     }
 
     /// Drops targets that are no longer open. False once the source is gone, or nothing is
     /// left to receive: the broadcast has ended.
-    pub fn retain_open(&mut self, open: &[EntityId]) -> bool {
+    pub fn retain_open(&mut self, open: &[TabId]) -> bool {
         self.targets.retain(|t| open.contains(t));
         open.contains(&self.source) && !self.targets.is_empty()
     }
@@ -55,12 +59,12 @@ impl Broadcast {
 
 /// The popover that picks the receivers, and where it sits.
 pub(super) struct BroadcastPicker {
-    pub source: EntityId,
+    pub source: TabId,
     pub position: Point<Pixels>,
 }
 
 impl Shell {
-    pub(crate) fn is_broadcasting(&self, id: EntityId) -> bool {
+    pub(crate) fn is_broadcasting(&self, id: TabId) -> bool {
         self.broadcast
             .as_ref()
             .is_some_and(|b| !b.targets.is_empty() && b.involves(id))
@@ -74,7 +78,7 @@ impl Shell {
         position: Point<Pixels>,
         cx: &mut Context<Self>,
     ) {
-        let Some(source) = self.tabs.get(ix).map(|t| t.session.entity_id()) else {
+        let Some(source) = self.tabs.get(ix).map(|t| t.id) else {
             return;
         };
         if self.broadcast.as_ref().is_none_or(|b| b.source != source) {
@@ -86,7 +90,7 @@ impl Shell {
     }
 
     pub(crate) fn toggle_broadcast_target(&mut self, ix: usize, cx: &mut Context<Self>) {
-        let Some(id) = self.tabs.get(ix).map(|t| t.session.entity_id()) else {
+        let Some(id) = self.tabs.get(ix).map(|t| t.id) else {
             return;
         };
         if let Some(broadcast) = self.broadcast.as_mut() {
@@ -103,7 +107,7 @@ impl Shell {
 
     /// After tabs closed: forget the ones that are gone.
     pub(crate) fn sync_broadcast(&mut self, cx: &mut Context<Self>) {
-        let open: Vec<EntityId> = self.tabs.iter().map(|t| t.session.entity_id()).collect();
+        let open: Vec<TabId> = self.tabs.iter().map(|t| t.id).collect();
         let picking = self.broadcast_picker.is_some();
         if let Some(broadcast) = self.broadcast.as_mut() {
             // While the list is open an empty selection is still a broadcast in the making.
@@ -118,19 +122,19 @@ impl Shell {
     }
 
     /// Points the source at its receivers, and every other session at none.
-    fn apply_broadcast(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn apply_broadcast(&mut self, cx: &mut Context<Self>) {
         for tab in &self.tabs {
-            let id = tab.session.entity_id();
+            let id = tab.id;
             let mirrors = match &self.broadcast {
                 Some(b) if b.source == id => self
                     .tabs
                     .iter()
-                    .filter(|t| b.targets.contains(&t.session.entity_id()))
-                    .map(|t| t.session.downgrade())
+                    .filter(|t| b.targets.contains(&t.id))
+                    .map(|t| t.session().downgrade())
                     .collect(),
                 _ => Vec::new(),
             };
-            tab.session.update(cx, |s, _| s.set_mirrors(mirrors));
+            tab.session().update(cx, |s, _| s.set_mirrors(mirrors));
         }
         cx.notify();
     }
@@ -161,7 +165,7 @@ impl Shell {
         let source_label = self
             .tabs
             .iter()
-            .find(|tab| tab.session.entity_id() == picker.source)
+            .find(|tab| tab.id == picker.source)
             .map(|tab| tab.title.clone().unwrap_or_else(|| tab.alias.clone()))
             .unwrap_or_default();
         let mut card = div()
@@ -194,12 +198,12 @@ impl Shell {
             );
         let mut any = false;
         for (ix, tab) in self.tabs.iter().enumerate() {
-            let id = tab.session.entity_id();
+            let id = tab.id;
             if id == picker.source {
                 continue;
             }
             any = true;
-            let live = tab.session.read(cx).status == Status::Connected;
+            let live = tab.session().read(cx).status == Status::Connected;
             let on = self
                 .broadcast
                 .as_ref()
@@ -295,12 +299,10 @@ impl Shell {
 
 #[cfg(test)]
 mod tests {
-    use gpui::EntityId;
+    use super::{Broadcast, TabId};
 
-    use super::Broadcast;
-
-    fn id(n: u64) -> EntityId {
-        EntityId::from(n)
+    fn id(n: u64) -> TabId {
+        n
     }
 
     #[test]

@@ -16,6 +16,7 @@ use crate::pane::{self, DragGhost, SidebarResize, WidthTween};
 use crate::picker::{self, Picker, ToggleHostPicker};
 use crate::session::{Launch, Session, Status};
 use crate::settings::{self, SIDEBAR_DEFAULT, Settings};
+use crate::split::{self, PaneId};
 use crate::tabs::{self, ActivateTab, CloseTab, NextTab, PrevTab, TabInfo};
 use crate::theme::{PANEL_RADIUS, SPACE_SM, Theme, UI_FONT};
 use crate::{sidebar, titlebar};
@@ -29,6 +30,12 @@ actions!(
         ResetFontSize,
         NewConnection,
         NewLocalTerminal,
+        SplitRight,
+        SplitDown,
+        FocusPaneLeft,
+        FocusPaneRight,
+        FocusPaneUp,
+        FocusPaneDown,
         OpenSettings
     ]
 );
@@ -37,6 +44,8 @@ actions!(
 mod broadcast_ui;
 #[path = "shell_menu.rs"]
 mod menu;
+#[path = "shell_panes.rs"]
+mod panes_ui;
 #[path = "shell_settings.rs"]
 mod settings_ui;
 #[path = "shell_sync.rs"]
@@ -128,6 +137,8 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 tabs: Vec::new(),
                 renaming: None,
                 restoring: false,
+                next_tab: 0,
+                next_pane: 0,
                 broadcast: None,
                 broadcast_picker: None,
                 active: 0,
@@ -189,6 +200,8 @@ pub struct Shell {
     /// True while the last run's tabs are being reopened, so half a list is never saved.
     restoring: bool,
     /// Input typed in one tab also going to others, and the list that picks them.
+    next_tab: broadcast_ui::TabId,
+    next_pane: PaneId,
     broadcast: Option<broadcast_ui::Broadcast>,
     broadcast_picker: Option<broadcast_ui::BroadcastPicker>,
     active: usize,
@@ -227,16 +240,37 @@ fn with_dev_known_hosts(spec: ConnectSpec) -> ConnectSpec {
     }
 }
 
+/// One terminal in a tab: a connection or a local shell.
+struct Pane {
+    id: PaneId,
+    session: Entity<Session>,
+    _repaint: Subscription,
+    _bell: Subscription,
+}
+
 struct Tab {
+    id: broadcast_ui::TabId,
     alias: String,
     /// A shell on this machine rather than a connection.
     local: bool,
     /// The user's name for the tab. It belongs to the tab, not the session, so a reconnect
     /// keeps it.
     title: Option<String>,
-    session: Entity<Session>,
-    _repaint: Subscription,
-    _bell: Subscription,
+    /// How the panes are laid out, and which one has the keyboard.
+    tree: split::Node,
+    focused: PaneId,
+    panes: Vec<Pane>,
+}
+
+impl Tab {
+    /// The focused pane's session: what the strip shows and what typing reaches.
+    fn session(&self) -> &Entity<Session> {
+        match self.panes.iter().find(|p| p.id == self.focused) {
+            Some(pane) => &pane.session,
+            // `focused` always names a pane; the first is the fallback if that ever breaks.
+            None => &self.panes[0].session,
+        }
+    }
 }
 
 impl Shell {
@@ -247,9 +281,9 @@ impl Shell {
         if let Some(ix) = self
             .tabs
             .iter()
-            .position(|tab| tab.alias == host.alias && !tab.session.read(cx).is_local())
+            .position(|tab| tab.alias == host.alias && !tab.session().read(cx).is_local())
         {
-            let session = self.tabs[ix].session.clone();
+            let session = self.tabs[ix].session().clone();
             session.update(cx, |s, cx| {
                 if s.status.is_dormant() {
                     s.reconnect(cx);
@@ -283,18 +317,41 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // Debug builds: keep scripted logins out of the real ~/.ssh/known_hosts.
+        let local = matches!(launch, Launch::Local);
+        let pane = self.make_pane(launch, &alias, window, cx);
+        self.next_tab += 1;
+        self.tabs.push(Tab {
+            id: self.next_tab,
+            alias,
+            local,
+            title: None,
+            tree: split::Node::Leaf(pane.id),
+            focused: pane.id,
+            panes: vec![pane],
+        });
+        self.error = None;
+        self.activate_tab(self.tabs.len() - 1, window, cx);
+    }
+
+    /// A session with the settings applied, and an eye on it for the day it drops.
+    fn make_pane(
+        &mut self,
+        launch: Launch,
+        alias: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Pane {
+        // Debug builds: keep scripted logins out of the real known_hosts file.
         #[cfg(debug_assertions)]
         let launch = match launch {
             Launch::Ssh(spec) => Launch::Ssh(with_dev_known_hosts(spec)),
             Launch::SshIdle(spec) => Launch::SshIdle(with_dev_known_hosts(spec)),
             local => local,
         };
-        let local = matches!(launch, Launch::Local);
-        let theme = self.terminal_theme(&alias);
+        let theme = self.terminal_theme(alias);
         let session = Session::open(
             launch,
-            alias.clone(),
+            alias.to_owned(),
             self.settings.log_sessions,
             theme,
             window,
@@ -315,7 +372,10 @@ impl Shell {
             cx.observe(&session, move |shell, session, cx| {
                 let status = session.read(cx).status.clone();
                 if status == Status::Closed && last != Status::Closed {
-                    let ix = shell.tabs.iter().position(|t| t.session == session);
+                    let ix = shell
+                        .tabs
+                        .iter()
+                        .position(|t| t.panes.iter().any(|p| p.session == session));
                     if let Some(ix) =
                         ix.filter(|ix| *ix != shell.active || shell.settings_page.is_some())
                     {
@@ -335,16 +395,13 @@ impl Shell {
                 last = status;
                 cx.notify();
             });
-        self.tabs.push(Tab {
-            alias,
-            local,
-            title: None,
+        self.next_pane += 1;
+        Pane {
+            id: self.next_pane,
             session,
             _repaint: repaint,
             _bell: bell,
-        });
-        self.error = None;
-        self.activate_tab(self.tabs.len() - 1, window, cx);
+        }
     }
 
     pub fn activate_tab(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
@@ -354,8 +411,9 @@ impl Shell {
         self.active = ix;
         self.persist_tabs();
         self.tab_scroll.scroll_to_item(ix);
-        let focus = tab.session.read(cx).view.focus_handle(cx);
+        let focus = tab.session().read(cx).view.focus_handle(cx);
         window.focus(&focus, cx);
+        self.apply_broadcast(cx);
         cx.notify();
     }
 
@@ -498,9 +556,11 @@ impl Shell {
     /// remote side is told the new grid size.
     fn restyle_tabs(&self, cx: &mut Context<Self>) {
         for tab in &self.tabs {
-            let theme = self.terminal_theme(&tab.alias);
-            let view = tab.session.read(cx).view.clone();
-            view.update(cx, |v, cx| v.set_theme(theme, cx));
+            for pane in &tab.panes {
+                let theme = self.terminal_theme(&tab.alias);
+                let view = pane.session.read(cx).view.clone();
+                view.update(cx, |v, cx| v.set_theme(theme, cx));
+            }
         }
     }
 
@@ -533,7 +593,7 @@ impl Shell {
     /// Focus back to the active terminal, or the window when there is none.
     fn restore_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let focus = match self.tabs.get(self.active) {
-            Some(tab) => tab.session.read(cx).view.focus_handle(cx),
+            Some(tab) => tab.session().read(cx).view.focus_handle(cx),
             None => self.focus.clone(),
         };
         window.focus(&focus, cx);
@@ -543,8 +603,10 @@ impl Shell {
     fn apply_option_as_meta(&self, cx: &mut Context<Self>) {
         let on = self.settings.option_as_meta;
         for tab in &self.tabs {
-            let view = tab.session.read(cx).view.clone();
-            view.update(cx, |v, _| v.set_option_as_meta(on));
+            for pane in &tab.panes {
+                let view = pane.session.read(cx).view.clone();
+                view.update(cx, |v, _| v.set_option_as_meta(on));
+            }
         }
     }
 
@@ -576,10 +638,10 @@ impl Shell {
             .map(|(ix, tab)| TabInfo {
                 alias: tab.alias.clone(),
                 title: tab.title.clone(),
-                local: tab.session.read(cx).is_local(),
-                logging: tab.session.read(cx).is_logging(),
-                broadcast: self.is_broadcasting(tab.session.entity_id()),
-                status: tab.session.read(cx).status.clone(),
+                local: tab.session().read(cx).is_local(),
+                logging: tab.session().read(cx).is_logging(),
+                broadcast: self.is_broadcasting(tab.id),
+                status: tab.session().read(cx).status.clone(),
                 rename: self
                     .renaming
                     .as_ref()
@@ -591,7 +653,7 @@ impl Shell {
 
     fn panel_content(&self, cx: &mut Context<Self>) -> AnyElement {
         if let Some(tab) = self.tabs.get(self.active) {
-            return tab.session.read(cx).view.clone().into_any_element();
+            return self.render_panes(tab, cx);
         }
         let t = self.theme;
         let keymap = cx.global::<crate::keymap::Keymap>();
@@ -745,7 +807,25 @@ impl Render for Shell {
             .children(layers)
             .font_family(UI_FONT)
             .text_color(t.text)
-            .on_action(cx.listener(|s, _: &CloseTab, w, cx| s.close_tab_at(s.active, w, cx)))
+            .on_action(cx.listener(|s, _: &CloseTab, w, cx| s.close_pane_or_tab(w, cx)))
+            .on_action(
+                cx.listener(|s, _: &SplitRight, w, cx| s.split_pane(split::Axis::Row, w, cx)),
+            )
+            .on_action(
+                cx.listener(|s, _: &SplitDown, w, cx| s.split_pane(split::Axis::Column, w, cx)),
+            )
+            .on_action(cx.listener(|s, _: &FocusPaneLeft, w, cx| {
+                s.move_pane_focus(split::Direction::Left, w, cx)
+            }))
+            .on_action(cx.listener(|s, _: &FocusPaneRight, w, cx| {
+                s.move_pane_focus(split::Direction::Right, w, cx)
+            }))
+            .on_action(cx.listener(|s, _: &FocusPaneUp, w, cx| {
+                s.move_pane_focus(split::Direction::Up, w, cx)
+            }))
+            .on_action(cx.listener(|s, _: &FocusPaneDown, w, cx| {
+                s.move_pane_focus(split::Direction::Down, w, cx)
+            }))
             .on_action(cx.listener(|s, _: &NextTab, w, cx| {
                 s.activate_tab(tabs::step(s.active, s.tabs.len(), 1), w, cx)
             }))

@@ -127,7 +127,7 @@ impl Shell {
         let Some(tab) = self.tabs.get(self.active) else {
             return;
         };
-        let sent = tab.session.read(cx).insert_text(&snippet.command);
+        let sent = tab.session().read(cx).insert_text(&snippet.command);
         if !sent {
             self.notify_toast(
                 ToastKind::Critical,

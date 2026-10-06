@@ -21,6 +21,12 @@ pub enum ShortcutId {
     Snippets,
     NewConnection,
     NewLocalTerminal,
+    SplitRight,
+    SplitDown,
+    PaneLeft,
+    PaneRight,
+    PaneUp,
+    PaneDown,
     Settings,
     ToggleSidebar,
     CloseTab,
@@ -32,12 +38,18 @@ pub enum ShortcutId {
 }
 
 impl ShortcutId {
-    pub const ALL: [ShortcutId; 13] = [
+    pub const ALL: [ShortcutId; 19] = [
         ShortcutId::HostPicker,
         ShortcutId::SearchHosts,
         ShortcutId::Snippets,
         ShortcutId::NewConnection,
         ShortcutId::NewLocalTerminal,
+        ShortcutId::SplitRight,
+        ShortcutId::SplitDown,
+        ShortcutId::PaneLeft,
+        ShortcutId::PaneRight,
+        ShortcutId::PaneUp,
+        ShortcutId::PaneDown,
         ShortcutId::Settings,
         ShortcutId::ToggleSidebar,
         ShortcutId::CloseTab,
@@ -55,6 +67,12 @@ impl ShortcutId {
             ShortcutId::Snippets => "Snippets",
             ShortcutId::NewConnection => "New connection",
             ShortcutId::NewLocalTerminal => "New local terminal",
+            ShortcutId::SplitRight => "Split right",
+            ShortcutId::SplitDown => "Split down",
+            ShortcutId::PaneLeft => "Focus pane left",
+            ShortcutId::PaneRight => "Focus pane right",
+            ShortcutId::PaneUp => "Focus pane up",
+            ShortcutId::PaneDown => "Focus pane down",
             ShortcutId::Settings => "Open settings",
             ShortcutId::ToggleSidebar => "Toggle sidebar",
             ShortcutId::CloseTab => "Close tab",
@@ -73,6 +91,12 @@ impl ShortcutId {
             ShortcutId::Snippets => "cmd-shift-s",
             ShortcutId::NewConnection => "cmd-n",
             ShortcutId::NewLocalTerminal => "cmd-t",
+            ShortcutId::SplitRight => "cmd-d",
+            ShortcutId::SplitDown => "cmd-shift-d",
+            ShortcutId::PaneLeft => "alt-cmd-left",
+            ShortcutId::PaneRight => "alt-cmd-right",
+            ShortcutId::PaneUp => "alt-cmd-up",
+            ShortcutId::PaneDown => "alt-cmd-down",
             ShortcutId::Settings => "cmd-,",
             ShortcutId::ToggleSidebar => "cmd-b",
             ShortcutId::CloseTab => "cmd-w",
@@ -86,8 +110,9 @@ impl ShortcutId {
 
     fn action(self) -> Box<dyn Action> {
         use crate::shell::{
-            DecreaseFontSize, IncreaseFontSize, NewConnection, NewLocalTerminal, OpenSettings,
-            ResetFontSize, ToggleSidebar,
+            DecreaseFontSize, FocusPaneDown, FocusPaneLeft, FocusPaneRight, FocusPaneUp,
+            IncreaseFontSize, NewConnection, NewLocalTerminal, OpenSettings, ResetFontSize,
+            SplitDown, SplitRight, ToggleSidebar,
         };
         use crate::tabs::{CloseTab, NextTab, PrevTab};
         match self {
@@ -96,6 +121,12 @@ impl ShortcutId {
             ShortcutId::Snippets => Box::new(crate::shell::ToggleSnippets),
             ShortcutId::NewConnection => Box::new(NewConnection),
             ShortcutId::NewLocalTerminal => Box::new(NewLocalTerminal),
+            ShortcutId::SplitRight => Box::new(SplitRight),
+            ShortcutId::SplitDown => Box::new(SplitDown),
+            ShortcutId::PaneLeft => Box::new(FocusPaneLeft),
+            ShortcutId::PaneRight => Box::new(FocusPaneRight),
+            ShortcutId::PaneUp => Box::new(FocusPaneUp),
+            ShortcutId::PaneDown => Box::new(FocusPaneDown),
             ShortcutId::Settings => Box::new(OpenSettings),
             ShortcutId::ToggleSidebar => Box::new(ToggleSidebar),
             ShortcutId::CloseTab => Box::new(CloseTab),
