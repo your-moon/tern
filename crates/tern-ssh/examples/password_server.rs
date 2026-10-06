@@ -122,11 +122,9 @@ async fn main() {
     let port: u16 = args.next().map_or(2299, |p| p.parse().expect("port"));
     let password = Arc::new(args.next().unwrap_or_else(|| "hunter2".into()));
     let config = Arc::new(server::Config {
-        methods: if otp.is_some() {
-            MethodSet::from(&[MethodKind::Password, MethodKind::KeyboardInteractive][..])
-        } else {
-            MethodSet::from(&[MethodKind::Password][..])
-        },
+        // Only the password is offered at first; the code is offered after it, as sshd's
+        // `AuthenticationMethods password,keyboard-interactive` does.
+        methods: MethodSet::from(&[MethodKind::Password][..]),
         auth_rejection_time: Duration::ZERO,
         auth_rejection_time_initial: Some(Duration::ZERO),
         // A fixed key, so a restarted server is the same host to known_hosts (reconnect checks).

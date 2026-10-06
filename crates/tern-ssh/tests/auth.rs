@@ -17,6 +17,9 @@ use tern_ssh::{ChallengePrompt, ConnectSpec, Prompt, SecretString, SessionEvent,
 enum Want {
     Password(&'static str),
     Code(&'static str),
+    /// Two steps like `AuthenticationMethods password,keyboard-interactive`: only the password
+    /// is offered at first; once it is right, the code is.
+    PasswordThenCode(&'static str, &'static str),
     Key(PublicKey),
 }
 
@@ -30,6 +33,10 @@ impl server::Handler for TestServer {
     async fn auth_password(&mut self, _: &str, password: &str) -> Result<Auth, Self::Error> {
         Ok(match self.0 {
             Want::Password(p) if p == password => Auth::Accept,
+            Want::PasswordThenCode(p, _) if p == password => Auth::Reject {
+                proceed_with_methods: Some(MethodSet::from(&[MethodKind::KeyboardInteractive][..])),
+                partial_success: true,
+            },
             _ => Auth::Reject {
                 proceed_with_methods: Some(MethodSet::from(&[MethodKind::Password][..])),
                 partial_success: false,
@@ -50,7 +57,7 @@ impl server::Handler for TestServer {
         _: &str,
         response: Option<Response<'a>>,
     ) -> Result<Auth, Self::Error> {
-        let Want::Code(code) = self.0 else {
+        let (Want::Code(code) | Want::PasswordThenCode(_, code)) = self.0 else {
             return Ok(Auth::reject());
         };
         Ok(match response {
@@ -228,6 +235,50 @@ async fn keyboard_interactive_shows_the_servers_prompt() {
         echo: false,
     };
     assert_eq!(asked, [Ask::HostKey, Ask::Challenge(vec![code])]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_password_then_a_code_asks_for_the_code_after_the_password() {
+    let port = serve(
+        Want::PasswordThenCode("hunter2", "123456"),
+        MethodKind::Password,
+    )
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let (asked, error) = login(port, unused_key(&dir), &[Some("hunter2"), Some("123456")]).await;
+    assert_eq!(error, None);
+    let code = ChallengePrompt {
+        text: "Verification code: ".into(),
+        echo: false,
+    };
+    assert_eq!(
+        asked,
+        [Ask::HostKey, Ask::Password, Ask::Challenge(vec![code])]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_wrong_code_is_asked_for_again_not_the_password() {
+    let port = serve(
+        Want::PasswordThenCode("hunter2", "123456"),
+        MethodKind::Password,
+    )
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    // Password, wrong code, then the code again (never the password, which already passed).
+    let answers = [Some("hunter2"), Some("000000"), None];
+    let (asked, error) = login(port, unused_key(&dir), &answers).await;
+    assert!(error.unwrap().contains("cancelled"));
+    let kinds: Vec<&str> = asked
+        .iter()
+        .map(|a| match a {
+            Ask::HostKey => "host",
+            Ask::Password => "password",
+            Ask::Passphrase => "passphrase",
+            Ask::Challenge(_) => "code",
+        })
+        .collect();
+    assert_eq!(kinds, ["host", "password", "code", "code"]);
 }
 
 #[tokio::test(flavor = "multi_thread")]

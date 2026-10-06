@@ -26,6 +26,8 @@ pub(crate) struct Authenticator<'a> {
     pub events: &'a async_channel::Sender<SessionEvent>,
     memory_keys: Vec<MemoryKey>,
     remaining: MethodSet,
+    /// The last failure said one step of a multi-step login passed (`partial_success`).
+    progressed: bool,
 }
 
 impl<'a> Authenticator<'a> {
@@ -44,6 +46,7 @@ impl<'a> Authenticator<'a> {
             events,
             memory_keys: Vec::new(),
             remaining: MethodSet::client_supported(),
+            progressed: false,
         }
     }
 
@@ -62,9 +65,11 @@ impl<'a> Authenticator<'a> {
         match r {
             AuthResult::Success => true,
             AuthResult::Failure {
-                remaining_methods, ..
+                remaining_methods,
+                partial_success,
             } => {
                 self.remaining = remaining_methods;
+                self.progressed = partial_success;
                 false
             }
         }
@@ -267,7 +272,14 @@ impl<'a> Authenticator<'a> {
                     tracing::info!(host = %self.host, auth_method = "password", "ssh_authenticated");
                     return Ok(true);
                 }
-                tries += 1;
+                if self.progressed {
+                    // The password was right and the server wants another step (a code, as
+                    // `AuthenticationMethods password,keyboard-interactive` does): that is not a
+                    // wrong try, and the next step is the one it now offers.
+                    kbd = self.allows(MethodKind::KeyboardInteractive);
+                } else {
+                    tries += 1;
+                }
             } else {
                 break;
             }
@@ -285,9 +297,11 @@ impl<'a> Authenticator<'a> {
             match resp {
                 KeyboardInteractiveAuthResponse::Success => return Ok(Kbd::Success),
                 KeyboardInteractiveAuthResponse::Failure {
-                    remaining_methods, ..
+                    remaining_methods,
+                    partial_success,
                 } => {
                     self.remaining = remaining_methods;
+                    self.progressed = partial_success;
                     return Ok(Kbd::Rejected { prompted });
                 }
                 KeyboardInteractiveAuthResponse::InfoRequest {
