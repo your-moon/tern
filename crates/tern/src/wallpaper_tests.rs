@@ -118,7 +118,15 @@ fn prepare_renders_once_then_reuses_the_cached_image() {
         .unwrap();
     let second = prepare(&src, Effect::Scanlines, false, &dir).unwrap();
     assert_eq!(second.image, first.image);
-    assert!(second.sample.rgba.as_chunks::<4>().0.iter().all(|p| p[0] == 255));
+    assert!(
+        second
+            .sample
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|p| p[0] == 255)
+    );
     assert_ne!(second.sample.rgba, first.sample.rgba);
 }
 

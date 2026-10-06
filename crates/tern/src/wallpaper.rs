@@ -1,4 +1,3 @@
-#![allow(dead_code)] // wired into the window in the next commit
 //! The wallpaper store and pipeline: a picked file is copied into `<config>/wallpapers/`, the
 //! last few picks are remembered, and an image with its effect applied is rendered once (off
 //! the UI thread) and cached as a PNG that the window then draws.

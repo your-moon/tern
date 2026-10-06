@@ -1,8 +1,6 @@
 // Adapted from zeron crates/ui/src/settings/wallpaper_colors.rs (extract) (MIT).
 //! The wallpaper's dominant colour, and an accent derived from it that stays readable.
 
-#![allow(dead_code)] // used from the wallpaper pipeline in the next commit
-
 use crate::wallpaper_fx::contrast_ratio;
 
 /// Contrast an accent keeps against the surface it sits on (WCAG non-text minimum).

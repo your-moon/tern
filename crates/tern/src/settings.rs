@@ -39,6 +39,12 @@ pub struct Settings {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wallpaper: Option<String>,
     pub wallpaper_opacity: f32,
+    /// Artwork treatment applied to the wallpaper once and cached.
+    pub wallpaper_effect: crate::wallpaper_fx::Effect,
+    /// Recent wallpapers (copies in tern's folder), newest first.
+    pub wallpaper_history: Vec<String>,
+    /// Tint the accent with the wallpaper's dominant colour.
+    pub wallpaper_theme_colors: bool,
     /// A git remote to sync through (any host git can reach); `None` uses a GitHub gist.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sync_remote: Option<String>,
@@ -87,6 +93,9 @@ impl Default for Settings {
             host_themes: BTreeMap::new(),
             wallpaper: None,
             wallpaper_opacity: WALLPAPER_OPACITY_DEFAULT,
+            wallpaper_effect: crate::wallpaper_fx::Effect::None,
+            wallpaper_history: Vec::new(),
+            wallpaper_theme_colors: false,
             sync_remote: None,
             cursor_style: CursorStyle::Block,
             cursor_blink: false,
@@ -138,6 +147,8 @@ impl Settings {
         self.terminal_font_size =
             clamp_or(self.terminal_font_size, FONT_MIN, FONT_MAX, FONT_DEFAULT);
         self.scrollback_lines = self.scrollback_lines.clamp(SCROLLBACK_MIN, SCROLLBACK_MAX);
+        self.wallpaper_history
+            .truncate(crate::wallpaper::HISTORY_LIMIT);
         self.wallpaper_opacity = clamp_or(
             self.wallpaper_opacity,
             WALLPAPER_OPACITY_MIN,
@@ -237,6 +248,17 @@ mod tests {
     }
 
     #[test]
+    fn wallpaper_history_is_capped_when_loaded() {
+        let many = Settings {
+            wallpaper_history: (0..20).map(|i| format!("/w/{i}.png")).collect(),
+            ..Settings::default()
+        };
+        let kept = many.clamped().wallpaper_history;
+        assert_eq!(kept.len(), crate::wallpaper::HISTORY_LIMIT);
+        assert_eq!(kept[0], "/w/0.png");
+    }
+
+    #[test]
     fn wallpaper_opacity_is_clamped() {
         let low = Settings {
             wallpaper_opacity: 0.0,
@@ -263,6 +285,9 @@ mod tests {
             host_themes: BTreeMap::from([("grape".into(), "Nord".into())]),
             wallpaper: Some("/tmp/w.png".into()),
             wallpaper_opacity: 0.5,
+            wallpaper_effect: crate::wallpaper_fx::Effect::Halftone,
+            wallpaper_history: vec!["/tmp/w.png".into(), "/tmp/v.png".into()],
+            wallpaper_theme_colors: true,
             sync_remote: Some("git@github.com:me/tern-sync.git".into()),
             cursor_style: CursorStyle::Bar,
             cursor_blink: true,

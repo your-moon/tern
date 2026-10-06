@@ -474,6 +474,7 @@ impl Shell {
         };
         self.settings = crate::settings::Settings::load(&dir);
         crate::motion::apply(self.settings.reduce_motion, cx);
+        self.refresh_accent(cx);
         cx.set_global(crate::keymap::Keymap::load(&dir));
         crate::keymap::apply(cx);
         match crate::connections::load(&dir) {

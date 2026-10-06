@@ -1,5 +1,4 @@
 // Adapted from zeron crates/mobile/src/wallpaper.rs (artwork effects, contrast guard) (MIT).
-#![allow(dead_code)] // used from the wallpaper pipeline in the next commit
 //! Wallpaper artwork effects and the contrast guard that caps its opacity.
 //!
 //! Pixels are straight RGBA8, row-major. An effect runs once per (image, effect, appearance)
