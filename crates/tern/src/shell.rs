@@ -11,6 +11,7 @@ use gpui::{
 };
 use tern_ssh::{ConnectSpec, HostEntry};
 
+use crate::connections::{self, Connection};
 use crate::pane::{self, DragGhost, SidebarResize, WidthTween};
 use crate::picker::{self, Picker, ToggleHostPicker};
 use crate::session::{Session, Status};
@@ -25,9 +26,13 @@ actions!(
         ToggleSidebar,
         IncreaseFontSize,
         DecreaseFontSize,
-        ResetFontSize
+        ResetFontSize,
+        NewConnection
     ]
 );
+
+#[path = "shell_connections.rs"]
+mod connections_ui;
 
 pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
     let bounds = Bounds::centered(None, size(px(1320.), px(880.)), cx);
@@ -44,20 +49,35 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
         app_id: Some("tern".into()),
         ..Default::default()
     };
+    let (connections, store_error) = match settings::dir().map(|d| connections::load(&d)) {
+        Some(Ok(list)) => (list, None),
+        Some(Err(e)) => {
+            tracing::warn!(error = %e, "hosts_json_unreadable");
+            (Vec::new(), Some(e.to_string()))
+        }
+        None => (Vec::new(), None),
+    };
     let window = cx.open_window(options, |_, cx| {
-        cx.new(|cx| Shell {
+        let mut shell = Shell {
             focus: cx.focus_handle(),
             settings: settings::dir()
                 .map(|d| Settings::load(&d))
                 .unwrap_or_default(),
             theme: Theme::zeron_dark(),
-            hosts: tern_ssh::load_ssh_config_hosts(),
+            hosts: Vec::new(),
+            ssh_hosts: tern_ssh::load_ssh_config_hosts(),
+            connections,
+            store_error,
+            form: None,
+            confirm_delete: None,
             tabs: Vec::new(),
             active: 0,
             error: None,
             picker: None,
             sidebar_tween: None,
-        })
+        };
+        shell.refresh_hosts();
+        cx.new(|_| shell)
     })?;
     window.update(cx, |shell, _, cx| {
         cx.set_reduce_motion(shell.settings.reduce_motion)
@@ -72,7 +92,15 @@ pub struct Shell {
     focus: FocusHandle,
     settings: Settings,
     theme: Theme,
+    /// What the sidebar and picker list: tern's connections, then `~/.ssh/config` hosts that
+    /// no connection replaces.
     hosts: Vec<HostEntry>,
+    ssh_hosts: Vec<HostEntry>,
+    connections: Vec<Connection>,
+    /// Set when `hosts.json` exists but cannot be read; saving is refused so it is not lost.
+    store_error: Option<String>,
+    form: Option<connections_ui::ConnectionForm>,
+    confirm_delete: Option<usize>,
     tabs: Vec<Tab>,
     active: usize,
     error: Option<String>,
@@ -183,15 +211,9 @@ impl Shell {
 
     /// Closing hands focus back to the active terminal, so typing resumes where it was.
     pub fn close_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.picker.take().is_none() {
-            return;
+        if self.picker.take().is_some() {
+            self.restore_focus(window, cx);
         }
-        let focus = match self.tabs.get(self.active) {
-            Some(tab) => tab.session.read(cx).view.focus_handle(cx),
-            None => self.focus.clone(),
-        };
-        window.focus(&focus, cx);
-        cx.notify();
     }
 
     /// Applies a settings change and writes it out; a failed write is logged, not fatal.
@@ -284,6 +306,27 @@ impl Shell {
         }
     }
 
+    fn refresh_hosts(&mut self) {
+        let mut hosts: Vec<HostEntry> = self.connections.iter().map(Connection::entry).collect();
+        hosts.extend(
+            self.ssh_hosts
+                .iter()
+                .filter(|h| !self.connections.iter().any(|c| c.name == h.alias))
+                .cloned(),
+        );
+        self.hosts = hosts;
+    }
+
+    /// Focus back to the active terminal, or the window when there is none.
+    fn restore_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let focus = match self.tabs.get(self.active) {
+            Some(tab) => tab.session.read(cx).view.focus_handle(cx),
+            None => self.focus.clone(),
+        };
+        window.focus(&focus, cx);
+        cx.notify();
+    }
+
     pub fn hosts(&self) -> &[HostEntry] {
         &self.hosts
     }
@@ -343,12 +386,17 @@ impl Render for Shell {
         let strip = tabs::strip(&infos, self.active, &t, cx);
         let sidebar = sidebar::render(
             &self.hosts,
+            sidebar::Editable {
+                count: self.connections.len(),
+                confirm_delete: self.confirm_delete,
+            },
             &infos,
             active_alias.as_deref(),
             self.settings.sidebar_width,
             &t,
             cx,
         );
+        let form = self.render_form(window, cx);
         let sidebar_now = self.sidebar_now();
         if self.sidebar_tween.is_some() {
             if sidebar_now == self.sidebar_target() {
@@ -377,6 +425,7 @@ impl Render for Shell {
             .on_action(cx.listener(|s, a: &ActivateTab, w, cx| s.activate_tab(a.0, w, cx)))
             .on_action(cx.listener(|s, _: &ToggleHostPicker, w, cx| s.toggle_picker(w, cx)))
             .on_action(cx.listener(|s, _: &ToggleSidebar, _, cx| s.toggle_sidebar(cx)))
+            .on_action(cx.listener(|s, _: &NewConnection, w, cx| s.open_form(None, None, w, cx)))
             .on_action(cx.listener(|s, _: &IncreaseFontSize, _, cx| {
                 s.change_font(|st| st.step_font(1.0), cx)
             }))
@@ -424,6 +473,7 @@ impl Render for Shell {
                     )
                     .children(handle),
             )
+            .when_some(form, |el, form| el.child(form))
             .when_some(self.picker.as_ref(), |el, p| {
                 el.child(picker::render(
                     p,

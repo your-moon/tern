@@ -6991,12 +6991,15 @@ dependencies = [
  "nucleo-matcher",
  "serde",
  "serde_json",
+ "tempfile",
  "tern-ssh",
  "tern-term",
  "tern-vault",
+ "thiserror 2.0.21",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "unicode-segmentation",
 ]
 
 [[package]]

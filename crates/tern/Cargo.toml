@@ -12,6 +12,8 @@ gpui = { package = "gpui-pre", version = "=0.3.8" }
 nucleo-matcher = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+thiserror = "2"
+unicode-segmentation = "1"
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.8", features = ["font-kit", "runtime_shaders"] }
 tern-ssh.workspace = true
 tern-term.workspace = true
@@ -19,6 +21,9 @@ tern-vault.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "env-filter"] }
+
+[dev-dependencies]
+tempfile = "3"
 
 [lints]
 workspace = true

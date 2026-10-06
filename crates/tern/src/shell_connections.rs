@@ -1,0 +1,541 @@
+// Adapted from zeron crates/ui/src/shell/command_palette.rs (palette card and overlay) (MIT).
+//! Adding, editing and removing connections: the form, its vault step, and the list changes.
+
+use gpui::prelude::FluentBuilder;
+use gpui::{
+    AnyElement, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, KeyDownEvent, ParentElement, SharedString, StatefulInteractiveElement, Styled,
+    Subscription, Window, anchored, deferred, div, hsla, point, px,
+};
+use tern_ssh::SecretString;
+use tern_vault::{Key, Vault, VaultError};
+
+use super::Shell;
+use crate::connections::{self, Connection, Draft};
+use crate::keeper::Keeper;
+use crate::text_input::{InputColors, TextInput};
+use crate::theme::Theme;
+
+pub(super) struct ConnectionForm {
+    /// Index into the shell's connections when editing; `None` for a new one.
+    editing: Option<usize>,
+    name: Entity<TextInput>,
+    host: Entity<TextInput>,
+    port: Entity<TextInput>,
+    user: Entity<TextInput>,
+    key: Entity<TextInput>,
+    password: Entity<TextInput>,
+    vault_pass: Entity<TextInput>,
+    vault_repeat: Entity<TextInput>,
+    error: Option<String>,
+    busy: bool,
+    _repaint: Vec<Subscription>,
+}
+
+/// What the vault needs before a typed password can be stored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VaultStep {
+    None,
+    Unlock,
+    Create,
+}
+
+impl ConnectionForm {
+    fn fields(&self) -> Vec<&Entity<TextInput>> {
+        vec![
+            &self.name,
+            &self.host,
+            &self.port,
+            &self.user,
+            &self.key,
+            &self.password,
+            &self.vault_pass,
+            &self.vault_repeat,
+        ]
+    }
+}
+
+fn read(input: &Entity<TextInput>, cx: &gpui::App) -> String {
+    input.read(cx).text().to_owned()
+}
+
+impl Shell {
+    /// Opens the form: empty for a new connection, filled for an edit or a duplicate.
+    pub(crate) fn open_form(
+        &mut self,
+        editing: Option<usize>,
+        draft: Option<Connection>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let t = self.theme;
+        let colors = InputColors {
+            text: t.text,
+            placeholder: t.faint,
+            cursor: t.accent,
+            selection: t.accent.opacity(0.35),
+        };
+        let mut field = |placeholder: &str, masked: bool, value: String| {
+            cx.new(|cx| {
+                let mut input = TextInput::new(placeholder.to_owned(), masked, colors, cx);
+                if !value.is_empty() {
+                    input.set_text(value, cx);
+                }
+                input
+            })
+        };
+        let d = draft.unwrap_or(Connection {
+            name: String::new(),
+            host: String::new(),
+            port: 22,
+            user: std::env::var("USER").unwrap_or_default(),
+            identity_file: None,
+        });
+        let password_hint = if editing.is_some() {
+            "Unchanged"
+        } else {
+            "Optional, saved to the vault"
+        };
+        let form = ConnectionForm {
+            editing,
+            name: field("production-web", false, d.name),
+            host: field("10.0.0.5 or example.com", false, d.host),
+            port: field("22", false, d.port.to_string()),
+            user: field("deploy", false, d.user),
+            key: field(
+                "~/.ssh/id_ed25519 (optional)",
+                false,
+                d.identity_file.unwrap_or_default(),
+            ),
+            password: field(password_hint, true, String::new()),
+            vault_pass: field("Vault passphrase", true, String::new()),
+            vault_repeat: field("Repeat vault passphrase", true, String::new()),
+            error: None,
+            busy: false,
+            _repaint: Vec::new(),
+        };
+        // Typing changes which vault fields show, so the shell re-renders on every edit.
+        let repaint = form
+            .fields()
+            .into_iter()
+            .map(|f| cx.observe(f, |_, _, cx| cx.notify()))
+            .collect();
+        let first = form.name.focus_handle(cx);
+        self.form = Some(ConnectionForm {
+            _repaint: repaint,
+            ..form
+        });
+        self.picker = None;
+        window.focus(&first, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn connection(&self, ix: usize) -> Option<Connection> {
+        self.connections.get(ix).cloned()
+    }
+
+    pub(super) fn close_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.form.take().is_some() {
+            self.restore_focus(window, cx);
+        }
+    }
+
+    fn vault_step(&self, cx: &gpui::App) -> VaultStep {
+        let Some(form) = &self.form else {
+            return VaultStep::None;
+        };
+        if read(&form.password, cx).is_empty() {
+            VaultStep::None
+        } else if Keeper::locked(cx) {
+            VaultStep::Unlock
+        } else if Keeper::exists(cx) {
+            VaultStep::None
+        } else {
+            VaultStep::Create
+        }
+    }
+
+    fn visible_fields(&self, cx: &gpui::App) -> Vec<FocusHandle> {
+        let Some(form) = &self.form else {
+            return Vec::new();
+        };
+        let step = self.vault_step(cx);
+        let mut fields = vec![
+            &form.name,
+            &form.host,
+            &form.port,
+            &form.user,
+            &form.key,
+            &form.password,
+        ];
+        if step != VaultStep::None {
+            fields.push(&form.vault_pass);
+        }
+        if step == VaultStep::Create {
+            fields.push(&form.vault_repeat);
+        }
+        fields.into_iter().map(|f| f.focus_handle(cx)).collect()
+    }
+
+    fn on_form_key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        match event.keystroke.key.as_str() {
+            "escape" => self.close_form(window, cx),
+            "enter" => self.submit_form(window, cx),
+            "tab" => {
+                let fields = self.visible_fields(cx);
+                let at = fields
+                    .iter()
+                    .position(|f| f.is_focused(window))
+                    .unwrap_or(0);
+                let delta = if event.keystroke.modifiers.shift {
+                    -1
+                } else {
+                    1
+                };
+                let next = crate::tabs::step(at, fields.len(), delta);
+                if let Some(f) = fields.get(next) {
+                    window.focus(f, cx);
+                }
+            }
+            _ => return,
+        }
+        cx.stop_propagation();
+    }
+
+    fn submit_form(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let step = self.vault_step(cx);
+        let Some(form) = self.form.as_mut() else {
+            return;
+        };
+        if form.busy {
+            return;
+        }
+        if let Some(e) = &self.store_error {
+            form.error = Some(e.clone());
+            return cx.notify();
+        }
+        let draft = Draft {
+            name: read(&form.name, cx),
+            host: read(&form.host, cx),
+            port: read(&form.port, cx),
+            user: read(&form.user, cx),
+            identity_file: read(&form.key, cx),
+        };
+        let editing = form.editing;
+        let others: Vec<&str> = self
+            .connections
+            .iter()
+            .enumerate()
+            .filter(|(ix, _)| Some(*ix) != editing)
+            .map(|(_, c)| c.name.as_str())
+            .collect();
+        let connection = match connections::validate(&draft, &others) {
+            Ok(c) => c,
+            Err(e) => {
+                form.error = Some(e);
+                return cx.notify();
+            }
+        };
+        let password = read(&form.password, cx);
+        let vault_pass = read(&form.vault_pass, cx);
+        if step != VaultStep::None && vault_pass.is_empty() {
+            form.error = Some("Enter the vault passphrase to save the password.".into());
+            return cx.notify();
+        }
+        if step == VaultStep::Create && vault_pass != read(&form.vault_repeat, cx) {
+            form.error = Some("The vault passphrases differ.".into());
+            return cx.notify();
+        }
+        let key = Key::Password {
+            user: connection.user.clone(),
+            host: connection.host.clone(),
+            port: connection.port,
+        };
+        if let Err(e) = self.store_connection(editing, connection) {
+            if let Some(form) = self.form.as_mut() {
+                form.error = Some(e);
+            }
+            return cx.notify();
+        }
+        if password.is_empty() {
+            return self.close_form(window, cx);
+        }
+        if let Some(form) = self.form.as_mut() {
+            form.busy = true;
+            // The connection itself is saved; from here on the form stays open only for the
+            // vault, and can be re-submitted after a wrong passphrase.
+            form.editing = self
+                .connections
+                .iter()
+                .position(|c| c.name == read(&form.name, cx).trim());
+        }
+        cx.notify();
+        self.save_password(
+            key,
+            SecretString::from(password),
+            SecretString::from(vault_pass),
+            cx,
+        );
+    }
+
+    /// Adds or replaces a connection and writes `hosts.json`.
+    fn store_connection(
+        &mut self,
+        editing: Option<usize>,
+        connection: Connection,
+    ) -> Result<(), String> {
+        let mut next = self.connections.clone();
+        match editing.and_then(|ix| next.get_mut(ix)) {
+            Some(slot) => *slot = connection,
+            None => next.push(connection),
+        }
+        if let Some(dir) = crate::settings::dir() {
+            connections::save(&dir, &next).map_err(|e| e.to_string())?;
+        }
+        self.connections = next;
+        self.refresh_hosts();
+        Ok(())
+    }
+
+    /// Unlocks or creates the vault as needed, stores the password and saves, all off the UI
+    /// thread (scrypt takes about a second).
+    fn save_password(
+        &mut self,
+        key: Key,
+        password: SecretString,
+        vault_pass: SecretString,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(path) = Keeper::path(cx) else {
+            return;
+        };
+        let open = Keeper::take(cx);
+        let exists = path.exists();
+        let work = cx.background_spawn(async move {
+            let mut vault = match open {
+                Some(v) => v,
+                None if exists => match Vault::unlock(&path, vault_pass) {
+                    Ok(v) => v,
+                    Err(e) => return (None, Err(e)),
+                },
+                None => Vault::new(vault_pass),
+            };
+            vault.set(key, password);
+            let saved = vault.save(&path);
+            (Some(vault), saved)
+        });
+        cx.spawn(async move |this, cx| {
+            let (vault, result) = work.await;
+            let _ = this.update_in(cx, |shell, window, cx| {
+                if let Some(v) = vault {
+                    Keeper::put(v, cx);
+                }
+                match result {
+                    Ok(()) => shell.close_form(window, cx),
+                    Err(e) => {
+                        if let Some(form) = shell.form.as_mut() {
+                            form.busy = false;
+                            form.error = Some(match e {
+                                VaultError::WrongPassphrase => {
+                                    "Wrong vault passphrase. The connection is saved; the \
+                                     password is not."
+                                        .into()
+                                }
+                                other => format!("Vault: {other}"),
+                            });
+                        }
+                        cx.notify();
+                    }
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// First click asks, second click removes. Saved passwords stay in the vault.
+    pub(crate) fn delete_connection(&mut self, ix: usize, cx: &mut Context<Self>) {
+        if self.confirm_delete != Some(ix) {
+            self.confirm_delete = Some(ix);
+            return cx.notify();
+        }
+        self.confirm_delete = None;
+        let mut next = self.connections.clone();
+        if ix < next.len() {
+            next.remove(ix);
+        }
+        let saved = match crate::settings::dir() {
+            Some(dir) => connections::save(&dir, &next).map_err(|e| e.to_string()),
+            None => Ok(()),
+        };
+        match saved {
+            Ok(()) => {
+                self.connections = next;
+                self.refresh_hosts();
+            }
+            Err(e) => self.error = Some(e),
+        }
+        cx.notify();
+    }
+
+    pub(super) fn render_form(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let form = self.form.as_ref()?;
+        let t = &self.theme;
+        let step = self.vault_step(cx);
+        let viewport = window.viewport_size();
+        let title = if form.editing.is_some() {
+            "Edit connection"
+        } else {
+            "New connection"
+        };
+        let mut body = div()
+            .flex()
+            .flex_col()
+            .gap(px(10.))
+            .px(px(16.))
+            .py(px(12.))
+            .child(row("Name", &form.name, t))
+            .child(
+                div()
+                    .flex()
+                    .gap(px(10.))
+                    .child(div().flex_1().child(row("Host", &form.host, t)))
+                    .child(div().w(px(96.)).child(row("Port", &form.port, t))),
+            )
+            .child(row("User", &form.user, t))
+            .child(row("Key file", &form.key, t))
+            .child(row("Password", &form.password, t));
+        match step {
+            VaultStep::None => {}
+            VaultStep::Unlock => body = body.child(row("Vault passphrase", &form.vault_pass, t)),
+            VaultStep::Create => {
+                body = body
+                    .child(note(
+                        "No vault yet: this creates one, locked with this passphrase.",
+                        t,
+                    ))
+                    .child(row("New vault passphrase", &form.vault_pass, t))
+                    .child(row("Repeat passphrase", &form.vault_repeat, t));
+            }
+        }
+        if let Some(e) = &form.error {
+            body = body.child(
+                div()
+                    .text_xs()
+                    .text_color(t.danger)
+                    .child(SharedString::from(e.clone())),
+            );
+        }
+        let busy = form.busy;
+        let card =
+            div()
+                .id("connection-form")
+                .w(px(460.0_f32.min(f32::from(viewport.width) - 32.0)))
+                .flex()
+                .flex_col()
+                .rounded(px(16.))
+                .border_1()
+                .border_color(t.border)
+                .bg(t.popup)
+                .text_color(t.text)
+                .on_key_down(cx.listener(Self::on_form_key))
+                .child(
+                    div()
+                        .px(px(16.))
+                        .py(px(12.))
+                        .border_b_1()
+                        .border_color(t.hairline)
+                        .text_size(px(14.))
+                        .child(title),
+                )
+                .child(body)
+                .child(
+                    div()
+                        .px(px(16.))
+                        .py(px(10.))
+                        .border_t_1()
+                        .border_color(t.hairline)
+                        .flex()
+                        .justify_end()
+                        .gap(px(8.))
+                        .child(button("form-cancel", "Cancel", false, t).on_click(
+                            cx.listener(|shell, _, window, cx| shell.close_form(window, cx)),
+                        ))
+                        .child(
+                            button("form-save", if busy { "Saving…" } else { "Save" }, true, t)
+                                .on_click(cx.listener(|shell, _, window, cx| {
+                                    shell.submit_form(window, cx)
+                                })),
+                        ),
+                );
+        Some(
+            deferred(
+                anchored().position(point(px(0.), px(0.))).child(
+                    div()
+                        .occlude()
+                        .w(viewport.width)
+                        .h(viewport.height)
+                        .bg(hsla(0., 0., 0., 0.35))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(card),
+                ),
+            )
+            .priority(2)
+            .into_any_element(),
+        )
+    }
+}
+
+fn row(label: &'static str, input: &Entity<TextInput>, t: &Theme) -> impl IntoElement + use<> {
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(4.))
+        .child(div().text_xs().text_color(t.muted).child(label))
+        .child(
+            div()
+                .h(px(30.))
+                .px(px(10.))
+                .flex()
+                .items_center()
+                .rounded(px(8.))
+                .border_1()
+                .border_color(t.border)
+                .bg(t.row_hover)
+                .text_sm()
+                .child(input.clone()),
+        )
+}
+
+fn note(text: &'static str, t: &Theme) -> impl IntoElement + use<> {
+    div().text_xs().text_color(t.muted).child(text)
+}
+
+fn button(
+    id: &'static str,
+    label: &'static str,
+    primary: bool,
+    t: &Theme,
+) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .h(px(28.))
+        .px(px(12.))
+        .flex()
+        .items_center()
+        .rounded(px(8.))
+        .text_sm()
+        .cursor_pointer()
+        .when(primary, |el| el.bg(t.accent).text_color(gpui::white()))
+        .when(!primary, |el| {
+            el.bg(t.row_hover)
+                .text_color(t.text)
+                .hover(|s| s.bg(t.row_active))
+        })
+        .child(label)
+}

@@ -1,0 +1,266 @@
+//! Connections made in tern, kept in `hosts.json` next to the settings. tern never writes
+//! `~/.ssh/config`: it is often generated (assh, Nix, chezmoi) and an edit there would be lost.
+//! A connection with the same name as a `~/.ssh/config` host takes its place in the list.
+
+use std::io;
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+use tern_ssh::HostEntry;
+
+const FILE_NAME: &str = "hosts.json";
+const VERSION: u32 = 1;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Connection {
+    pub name: String,
+    pub host: String,
+    pub port: u16,
+    pub user: String,
+    /// A private key path; `None` tries ssh-agent and the default keys, as `ssh` does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_file: Option<String>,
+}
+
+impl Connection {
+    /// The connection as a host entry, so it connects and lists like a `~/.ssh/config` host.
+    pub fn entry(&self) -> HostEntry {
+        HostEntry {
+            alias: self.name.clone(),
+            host_name: self.host.clone(),
+            port: self.port,
+            user: Some(self.user.clone()),
+            identity_files: self.identity_file.iter().map(|p| expand_home(p)).collect(),
+            proxy_command: None,
+        }
+    }
+
+    /// A draft copied from a `~/.ssh/config` host, for "Duplicate to edit".
+    pub fn from_entry(entry: &HostEntry) -> Self {
+        Self {
+            name: entry.alias.clone(),
+            host: entry.host_name.clone(),
+            port: entry.port,
+            user: entry.user.clone().unwrap_or_default(),
+            identity_file: entry
+                .identity_files
+                .first()
+                .map(|p| p.display().to_string()),
+        }
+    }
+}
+
+fn expand_home(path: &str) -> PathBuf {
+    match (path.strip_prefix("~/"), std::env::home_dir()) {
+        (Some(rest), Some(home)) => home.join(rest),
+        _ => PathBuf::from(path),
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct File {
+    version: u32,
+    connections: Vec<Connection>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum StoreError {
+    #[error("hosts.json could not be read ({0}); fix or move it, tern will not overwrite it")]
+    Unreadable(String),
+    #[error("{0}")]
+    Io(#[from] io::Error),
+}
+
+/// Reads `hosts.json`. A missing file is an empty list; a file that does not parse is an
+/// error, so the caller can refuse to save over it rather than lose the user's connections.
+///
+/// # Errors
+/// [`StoreError::Unreadable`] when the file exists but is not valid; [`StoreError::Io`] when it
+/// cannot be read.
+pub fn load(dir: &Path) -> Result<Vec<Connection>, StoreError> {
+    let text = match std::fs::read_to_string(dir.join(FILE_NAME)) {
+        Ok(text) => text,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(e.into()),
+    };
+    let file: File =
+        serde_json::from_str(&text).map_err(|e| StoreError::Unreadable(e.to_string()))?;
+    if file.version != VERSION {
+        return Err(StoreError::Unreadable(format!("version {}", file.version)));
+    }
+    Ok(file.connections)
+}
+
+/// Writes `hosts.json` through a temp file and rename.
+///
+/// # Errors
+/// [`StoreError::Io`] when the directory or file cannot be written.
+pub fn save(dir: &Path, connections: &[Connection]) -> Result<(), StoreError> {
+    std::fs::create_dir_all(dir)?;
+    let path = dir.join(FILE_NAME);
+    let tmp = path.with_extension("json.tmp");
+    let json = serde_json::to_string_pretty(&File {
+        version: VERSION,
+        connections: connections.to_vec(),
+    })
+    .map_err(io::Error::other)?;
+    std::fs::write(&tmp, json)?;
+    std::fs::rename(&tmp, &path)?;
+    Ok(())
+}
+
+/// The form's text, as typed.
+#[derive(Debug, Default, Clone)]
+pub struct Draft {
+    pub name: String,
+    pub host: String,
+    pub port: String,
+    pub user: String,
+    pub identity_file: String,
+}
+
+/// Checks a draft. `others` are the names of the other tern connections (not the one being
+/// edited); reusing a `~/.ssh/config` alias is allowed and replaces that host.
+///
+/// # Errors
+/// A message for the first field that is wrong, worded for the form.
+pub fn validate(draft: &Draft, others: &[&str]) -> Result<Connection, String> {
+    let name = draft.name.trim();
+    let host = draft.host.trim();
+    let user = draft.user.trim();
+    if name.is_empty() {
+        return Err("Name is required.".into());
+    }
+    if others.contains(&name) {
+        return Err(format!("A connection named \"{name}\" already exists."));
+    }
+    if host.is_empty() {
+        return Err("Host is required.".into());
+    }
+    if host.contains(char::is_whitespace) {
+        return Err("Host cannot contain spaces.".into());
+    }
+    let port = match draft.port.trim() {
+        "" => 22,
+        p => match p.parse::<u16>() {
+            Ok(n) if n > 0 => n,
+            _ => return Err("Port must be a number from 1 to 65535.".into()),
+        },
+    };
+    if user.is_empty() {
+        return Err("User is required.".into());
+    }
+    let identity_file = Some(draft.identity_file.trim())
+        .filter(|p| !p.is_empty())
+        .map(str::to_owned);
+    Ok(Connection {
+        name: name.to_owned(),
+        host: host.to_owned(),
+        port,
+        user: user.to_owned(),
+        identity_file,
+    })
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    fn draft(name: &str, host: &str, port: &str, user: &str) -> Draft {
+        Draft {
+            name: name.into(),
+            host: host.into(),
+            port: port.into(),
+            user: user.into(),
+            identity_file: String::new(),
+        }
+    }
+
+    #[test]
+    fn a_complete_draft_becomes_a_connection_with_port_22_by_default() {
+        let c = validate(&draft(" web ", "10.0.0.5", "", "deploy"), &[]).unwrap();
+        assert_eq!(c.name, "web");
+        assert_eq!(c.port, 22);
+        assert_eq!(c.identity_file, None);
+    }
+
+    #[test]
+    fn each_bad_field_is_named() {
+        assert!(
+            validate(&draft("", "h", "", "u"), &[])
+                .unwrap_err()
+                .contains("Name")
+        );
+        assert!(
+            validate(&draft("a", "", "", "u"), &[])
+                .unwrap_err()
+                .contains("Host")
+        );
+        assert!(
+            validate(&draft("a", "h h", "", "u"), &[])
+                .unwrap_err()
+                .contains("spaces")
+        );
+        assert!(
+            validate(&draft("a", "h", "0", "u"), &[])
+                .unwrap_err()
+                .contains("Port")
+        );
+        assert!(
+            validate(&draft("a", "h", "70000", "u"), &[])
+                .unwrap_err()
+                .contains("Port")
+        );
+        assert!(
+            validate(&draft("a", "h", "x", "u"), &[])
+                .unwrap_err()
+                .contains("Port")
+        );
+        assert!(
+            validate(&draft("a", "h", "", " "), &[])
+                .unwrap_err()
+                .contains("User")
+        );
+    }
+
+    #[test]
+    fn names_are_unique_among_tern_connections() {
+        let err = validate(&draft("web", "h", "", "u"), &["db", "web"]).unwrap_err();
+        assert!(err.contains("already exists"));
+        assert!(validate(&draft("web", "h", "", "u"), &["db"]).is_ok());
+    }
+
+    #[test]
+    fn missing_file_is_empty_and_save_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(load(dir.path()).unwrap().is_empty());
+        let list = vec![validate(&draft("web", "10.0.0.5", "2222", "deploy"), &[]).unwrap()];
+        save(dir.path(), &list).unwrap();
+        assert_eq!(load(dir.path()).unwrap(), list);
+    }
+
+    #[test]
+    fn a_broken_file_is_an_error_not_an_empty_list() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(FILE_NAME), "{ nope").unwrap();
+        assert!(matches!(load(dir.path()), Err(StoreError::Unreadable(_))));
+    }
+
+    #[test]
+    fn duplicating_an_ssh_config_host_keeps_its_fields() {
+        let entry = HostEntry {
+            alias: "grape".into(),
+            host_name: "203.0.113.40".into(),
+            port: 22,
+            user: Some("root".into()),
+            identity_files: vec![PathBuf::from("/k/id")],
+            proxy_command: None,
+        };
+        let c = Connection::from_entry(&entry);
+        assert_eq!((c.name.as_str(), c.user.as_str()), ("grape", "root"));
+        assert_eq!(c.identity_file.as_deref(), Some("/k/id"));
+        assert_eq!(c.entry().host_name, "203.0.113.40");
+    }
+}

@@ -26,6 +26,8 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 - `tern`: saved logins. After a password or key passphrase is typed and the login works, tern offers to keep it in the vault, creating one with a repeated passphrase if there is none. Later logins answer from the vault (unlocked once per run, Enter skips), try each saved secret once, and fall back to asking. Unlock and save run off the UI thread.
 - `tern-ssh`: `password_server` example, a 127.0.0.1-only server that accepts one password, for checking login flows.
 - Docs: README lists what the app does today and what is not done yet.
+- `tern`: add, edit and remove connections in the app (⌘N or + in the sidebar). They are kept in `hosts.json`, never in `~/.ssh/config`, and a password typed in the form goes to the vault (created on first use). `~/.ssh/config` hosts stay listed, read-only, with Duplicate to edit; a connection with the same name takes their place.
+- `tern`: text fields (adapted from gpui's input example) with a masked mode that never copies its secret.
 - `tern`: a macOS menu bar (Hide, Hide Others, Show All, Quit, Minimize, Zoom) with ⌘Q, ⌘H, ⌥⌘H and ⌘M.
 - `tern-term`: `local_demo <command>` for visual checks; scripted runs never take keyboard focus.
 - Project: craft gates (`clippy -D warnings`, file-size and attribution checks, `cargo deny`), CI, architecture diagram, UI spec and measured performance notes.

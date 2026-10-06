@@ -1,5 +1,6 @@
 //! tern: a fast, low-memory SSH terminal.
 
+mod connections;
 #[cfg(debug_assertions)]
 mod devkeys;
 mod fonts;
@@ -14,6 +15,7 @@ mod settings;
 mod shell;
 mod sidebar;
 mod tabs;
+mod text_input;
 mod theme;
 mod titlebar;
 
@@ -29,9 +31,11 @@ fn main() {
         menus::init(cx);
         keeper::Keeper::install(cx);
         cx.bind_keys(tabs::bindings());
+        cx.bind_keys(text_input::bindings());
         cx.bind_keys([
             gpui::KeyBinding::new("cmd-k", picker::ToggleHostPicker, None),
             gpui::KeyBinding::new("cmd-b", shell::ToggleSidebar, None),
+            gpui::KeyBinding::new("cmd-n", shell::NewConnection, None),
             gpui::KeyBinding::new("cmd-=", shell::IncreaseFontSize, None),
             gpui::KeyBinding::new("cmd-+", shell::IncreaseFontSize, None),
             gpui::KeyBinding::new("cmd--", shell::DecreaseFontSize, None),
