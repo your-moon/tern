@@ -46,6 +46,7 @@ pub(crate) async fn open(
             events: events.clone(),
             cause: Cause::default(),
             remote: RemoteTargets::default(),
+            agent_socket: None,
         };
         let cfg = client_config(spec, &hop.host, hop.port);
         let connecting = async {

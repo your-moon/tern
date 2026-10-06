@@ -13,6 +13,7 @@ use tokio::process::Child;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
+use crate::agent;
 use crate::authn::Authenticator;
 use crate::config;
 use crate::disconnect::{Cause, classify};
@@ -195,6 +196,7 @@ async fn run_inner(
     handshaken: &mut bool,
     forwards: &Arc<Registry>,
 ) -> Result<Outcome, Failure> {
+    let agent_socket = agent::socket_for(spec.forward_agent, spec.agent_socket.as_deref());
     let handler = Handler {
         host: spec.host.clone(),
         port: spec.port,
@@ -202,6 +204,7 @@ async fn run_inner(
         events: events.clone(),
         cause: cause.clone(),
         remote: forwards.remote_targets.clone(),
+        agent_socket: agent_socket.clone(),
     };
 
     let cfg = client_config(spec, &spec.host, spec.port);
@@ -257,6 +260,10 @@ async fn run_inner(
     *handshaken = true;
     let session = Arc::new(session);
     let mut channel = session.channel_open_session().await?;
+    if agent_socket.is_some() {
+        // No reply wanted: a refusal would arrive as a channel failure and read as a refused shell.
+        channel.agent_forward(false).await?;
+    }
     channel
         .request_pty(
             false,

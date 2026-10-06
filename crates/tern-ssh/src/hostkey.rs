@@ -6,6 +6,7 @@ use futures::channel::oneshot;
 use russh::client;
 use russh::keys::{Algorithm, HashAlg, PublicKey, PublicKeyOrCertificate, known_hosts};
 
+use crate::agent;
 use crate::disconnect::{Cause, Disconnect, classify};
 use crate::error::Failure;
 use crate::forward::{self, RemoteTargets};
@@ -66,6 +67,8 @@ pub(crate) struct Handler {
     pub cause: Cause,
     /// Where the server's forwarded-tcpip channels go.
     pub remote: RemoteTargets,
+    /// The local agent socket to wire server-opened agent channels to; `None` refuses them.
+    pub agent_socket: Option<PathBuf>,
 }
 
 impl client::Handler for Handler {
@@ -125,6 +128,23 @@ impl client::Handler for Handler {
                 Ok(true)
             }
         }
+    }
+
+    /// The server opening an agent channel: only honoured when forwarding was asked for.
+    async fn server_channel_open_agent_forward(
+        &mut self,
+        channel: russh::Channel<client::Msg>,
+        reply: client::ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        match self.agent_socket.clone() {
+            Some(socket) => {
+                reply.accept().await;
+                tokio::spawn(agent::bridge(channel, socket));
+            }
+            None => reply.reject(forward::NOT_FORWARDED).await,
+        }
+        Ok(())
     }
 
     /// A connection to a port the server is listening on for a `-R` forward.

@@ -25,9 +25,23 @@ pub enum Shell {
     Hangup,
 }
 
+/// When the server tries to open an `auth-agent@openssh.com` channel back to the client.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum AgentProbe {
+    Never,
+    /// Only after the client asked for agent forwarding.
+    WhenAsked,
+    /// Even if it did not: a hostile or buggy server.
+    Always,
+}
+
 #[derive(Clone)]
 struct TestServer {
     shell: Shell,
+    probe: AgentProbe,
+    agent_asked: bool,
+    /// What came back over the agent channel, or `refused`.
+    agent_log: Arc<Mutex<Vec<String>>>,
     /// Every direct-tcpip request this server accepted, as `host:port`.
     opened: Arc<Mutex<Vec<String>>>,
     /// The channel the shell runs on; other channels (tunnels) are not echoed.
@@ -51,6 +65,11 @@ impl server::Handler for TestServer {
         Ok(())
     }
 
+    async fn agent_request(&mut self, _: ChannelId, _: &mut Session) -> Result<bool, Self::Error> {
+        self.agent_asked = true;
+        Ok(true)
+    }
+
     async fn pty_request(
         &mut self,
         ch: ChannelId,
@@ -69,6 +88,28 @@ impl server::Handler for TestServer {
     async fn shell_request(&mut self, ch: ChannelId, s: &mut Session) -> Result<(), Self::Error> {
         s.channel_success(ch)?;
         self.shell_channel = Some(ch);
+        if self.probe == AgentProbe::Always
+            || (self.probe == AgentProbe::WhenAsked && self.agent_asked)
+        {
+            let (h, log) = (s.handle(), self.agent_log.clone());
+            tokio::spawn(async move {
+                let entry = match h.channel_open_agent().await {
+                    Ok(ch) => {
+                        let mut st = ch.into_stream();
+                        let _ = st.write_all(b"agent-ping").await;
+                        let mut buf = [0u8; 10];
+                        match tokio::time::timeout(Duration::from_secs(5), st.read_exact(&mut buf))
+                            .await
+                        {
+                            Ok(Ok(_)) => String::from_utf8_lossy(&buf).into_owned(),
+                            _ => "no answer".into(),
+                        }
+                    }
+                    Err(_) => "refused".into(),
+                };
+                log.lock().unwrap().push(entry);
+            });
+        }
         match self.shell {
             Shell::Exit(code) => {
                 s.data(ch, &b"hi\r\n"[..])?;
@@ -161,11 +202,17 @@ async fn pipe(mut tcp: TcpStream, channel: Channel<Msg>) {
 
 pub struct Server {
     pub port: u16,
+    /// How agent channels the server opened ended up: the bytes echoed back, or `refused`.
+    pub agent_log: Arc<Mutex<Vec<String>>>,
     /// Direct-tcpip targets this server was asked to open.
     pub opened: Arc<Mutex<Vec<String>>>,
 }
 
 pub async fn serve(shell: Shell) -> Server {
+    serve_with(shell, AgentProbe::Never).await
+}
+
+pub async fn serve_with(shell: Shell, probe: AgentProbe) -> Server {
     let config = Arc::new(server::Config {
         methods: MethodSet::from(&[MethodKind::None][..]),
         auth_rejection_time: Duration::ZERO,
@@ -177,12 +224,17 @@ pub async fn serve(shell: Shell) -> Server {
     let port = listener.local_addr().unwrap().port();
     let opened = Arc::new(Mutex::new(Vec::new()));
     let log = opened.clone();
+    let agent_log = Arc::new(Mutex::new(Vec::new()));
+    let agent = agent_log.clone();
     tokio::spawn(async move {
         while let Ok((stream, _)) = listener.accept().await {
             let handler = TestServer {
                 shell,
                 opened: log.clone(),
                 shell_channel: None,
+                probe,
+                agent_asked: false,
+                agent_log: agent.clone(),
             };
             let config = config.clone();
             tokio::spawn(async move {
@@ -192,7 +244,11 @@ pub async fn serve(shell: Shell) -> Server {
             });
         }
     });
-    Server { port, opened }
+    Server {
+        port,
+        agent_log,
+        opened,
+    }
 }
 
 /// A TCP listener that echoes every byte back; returns its port.

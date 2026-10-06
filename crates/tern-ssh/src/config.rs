@@ -25,6 +25,8 @@ pub(crate) struct Resolved {
     pub proxy_command: Option<String>,
     pub proxy_jump: Vec<JumpHop>,
     pub forwards: Vec<Forward>,
+    pub forward_agent: bool,
+    pub agent_socket: Option<PathBuf>,
     pub server_alive_interval: Option<Duration>,
     pub server_alive_count_max: Option<u32>,
 }
@@ -78,6 +80,8 @@ fn resolve_base(config: Option<&Loaded>, alias: &str) -> Resolved {
         proxy_command: None,
         proxy_jump: Vec::new(),
         forwards: Vec::new(),
+        forward_agent: false,
+        agent_socket: None,
         server_alive_interval: p.server_alive_interval,
         server_alive_count_max: p
             .unsupported_fields
@@ -110,6 +114,9 @@ pub(crate) fn resolve(config: Option<&Loaded>, alias: &str) -> Resolved {
                 .ok()
         })
         .collect();
+    if let Some(v) = sshconf::first(&d, "forwardagent") {
+        (r.forward_agent, r.agent_socket) = crate::agent::parse_forward_agent(v);
+    }
     let claimed = d
         .iter()
         .find(|x| matches!(x.keyword.as_str(), "proxyjump" | "proxycommand"));
@@ -186,6 +193,8 @@ pub(crate) fn hosts_from(config: &Loaded) -> Vec<HostEntry> {
                 proxy_command: r.proxy_command,
                 proxy_jump: r.proxy_jump,
                 forwards: r.forwards,
+                forward_agent: r.forward_agent,
+                agent_socket: r.agent_socket,
                 server_alive_interval: r.server_alive_interval,
                 server_alive_count_max: r.server_alive_count_max,
             });
@@ -279,6 +288,8 @@ pub(crate) fn parse_target(target: &str, config: Option<&Loaded>) -> Result<Conn
         proxy_command: r.proxy_command,
         proxy_jump: r.proxy_jump,
         forwards: r.forwards,
+        forward_agent: r.forward_agent,
+        agent_socket: r.agent_socket,
         known_hosts: None,
         memory_keys: Vec::new(),
         server_alive_interval: r
@@ -335,6 +346,8 @@ impl ConnectSpec {
             proxy_command: e.proxy_command.clone(),
             proxy_jump: e.proxy_jump.clone(),
             forwards: e.forwards.clone(),
+            forward_agent: e.forward_agent,
+            agent_socket: e.agent_socket.clone(),
             known_hosts: None,
             memory_keys: Vec::new(),
             server_alive_interval: e
@@ -518,6 +531,31 @@ mod tests {
         assert_eq!(
             ConnectSpec::from_host_entry(&entry).unwrap().forwards,
             entry.forwards
+        );
+    }
+
+    #[test]
+    fn forward_agent_in_config_reaches_the_spec_first_value_winning() {
+        let c = cfg("Host a\n  ForwardAgent yes\nHost b\n  ForwardAgent yes\n\
+                     Host c\n  ForwardAgent no\nHost *\n  ForwardAgent yes\n");
+        let a = parse_target("u@a", Some(&c)).unwrap();
+        assert_eq!((a.forward_agent, a.agent_socket), (true, None));
+        assert!(parse_target("u@b", Some(&c)).unwrap().forward_agent);
+        // `no` in the specific block beats `yes` in `Host *`.
+        assert!(!parse_target("u@c", Some(&c)).unwrap().forward_agent);
+        assert!(parse_target("u@d", Some(&c)).unwrap().forward_agent);
+        let entries = hosts_from(&c);
+        assert!(entries[0].forward_agent && !entries[2].forward_agent);
+        assert!(
+            ConnectSpec::from_host_entry(&entries[0])
+                .unwrap()
+                .forward_agent
+        );
+        // Unset means off.
+        assert!(
+            !parse_target("u@x", Some(&cfg("Host a\n  User q\n")))
+                .unwrap()
+                .forward_agent
         );
     }
 }

@@ -7,6 +7,7 @@
 //! A host with a `ProxyCommand` in `~/.ssh/config` is reached through that command, as
 //! OpenSSH does; it is resolved once, with the rest of the alias, into [`ConnectSpec`].
 
+mod agent;
 mod authn;
 mod config;
 mod disconnect;
@@ -62,6 +63,10 @@ pub struct HostEntry {
     /// `LocalForward`, `RemoteForward` and `DynamicForward` lines, in file order. Start each
     /// with [`SessionHandle::start_forward`] once the session is connected.
     pub forwards: Vec<Forward>,
+    /// `ForwardAgent` is on.
+    pub forward_agent: bool,
+    /// The agent socket `ForwardAgent` named; `None` means `$SSH_AUTH_SOCK`.
+    pub agent_socket: Option<PathBuf>,
     /// `ServerAliveInterval`; `None` when the host does not set it, `Some(ZERO)` when it
     /// turns keep-alives off.
     pub server_alive_interval: Option<Duration>,
@@ -83,6 +88,11 @@ pub struct ConnectSpec {
     pub proxy_jump: Vec<JumpHop>,
     /// Forwards the host's config asks for; the session does not start them by itself.
     pub forwards: Vec<Forward>,
+    /// Let the server use the local ssh-agent for the session (`ssh -A`). Off by default: a
+    /// server you forward to can ask your agent to sign while you are connected.
+    pub forward_agent: bool,
+    /// The agent socket to forward; `None` means `$SSH_AUTH_SOCK`.
+    pub agent_socket: Option<PathBuf>,
     /// known_hosts file to check and learn host keys in; `None` means `~/.ssh/known_hosts`.
     pub known_hosts: Option<PathBuf>,
     /// Private keys held in memory (tern's vault), offered after the agent and before the key
@@ -107,6 +117,8 @@ impl Default for ConnectSpec {
             proxy_command: None,
             proxy_jump: Vec::new(),
             forwards: Vec::new(),
+            forward_agent: false,
+            agent_socket: None,
             known_hosts: None,
             memory_keys: Vec::new(),
             server_alive_interval: DEFAULT_SERVER_ALIVE_INTERVAL,

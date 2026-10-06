@@ -122,7 +122,6 @@ fn include_paths(args: &str) -> Vec<PathBuf> {
 }
 
 /// First value of `keyword`.
-#[cfg(test)]
 pub(crate) fn first<'a>(d: &'a [Directive], keyword: &str) -> Option<&'a str> {
     d.iter()
         .find(|x| x.keyword == keyword)
