@@ -24,6 +24,7 @@ use tracing_subscriber::EnvFilter;
 
 fn main() {
     init_logging();
+    log_panics();
     let _app = tracing::info_span!("app", service = "tern", env = env()).entered();
     let target = std::env::args().nth(1);
     gpui_platform::application().run(move |cx: &mut App| {
@@ -70,6 +71,38 @@ fn main() {
         cx.activate(true);
         tracing::info!("app_started");
     });
+}
+
+/// A panic is also written to `~/Library/Logs/tern/panic.log` with a backtrace: launched from
+/// Finder or the Dock, tern has no terminal, and a Rust panic leaves no macOS crash report.
+fn log_panics() {
+    let Some(dir) = std::env::home_dir().map(|h| h.join("Library/Logs/tern")) else {
+        return;
+    };
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        let entry = format!(
+            "--- {} tern {} panicked: {info}\n{backtrace}\n",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+            env!("CARGO_PKG_VERSION"),
+        );
+        if std::fs::create_dir_all(&dir).is_ok() {
+            use std::io::Write as _;
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(dir.join("panic.log"))
+            {
+                let _ = f.write_all(entry.as_bytes());
+            }
+        }
+        tracing::error!(panic = %info, "panic");
+        previous(info);
+    }));
 }
 
 /// Structured JSON logs on stderr, filtered by `TERN_LOG` (default `info`).
