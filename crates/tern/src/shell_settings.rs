@@ -241,9 +241,6 @@ impl Shell {
             ))
     }
 
-            ))
-    }
-
     fn shortcuts_page(&self, cx: &mut Context<Self>) -> gpui::Div {
         let t = self.theme;
         let keymap = cx.global::<Keymap>().clone();
