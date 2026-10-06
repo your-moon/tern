@@ -20,7 +20,7 @@ type Run = Rc<dyn Fn(&mut Shell, &mut Window, &mut Context<Shell>)>;
 enum Item {
     Action {
         icon: &'static str,
-        label: &'static str,
+        label: SharedString,
         destructive: bool,
         run: Run,
     },
@@ -29,12 +29,12 @@ enum Item {
 
 fn action(
     icon: &'static str,
-    label: &'static str,
+    label: impl Into<SharedString>,
     run: impl Fn(&mut Shell, &mut Window, &mut Context<Shell>) + 'static,
 ) -> Item {
     Item::Action {
         icon,
-        label,
+        label: label.into(),
         destructive: false,
         run: Rc::new(run),
     }
@@ -42,12 +42,12 @@ fn action(
 
 fn destructive(
     icon: &'static str,
-    label: &'static str,
+    label: impl Into<SharedString>,
     run: impl Fn(&mut Shell, &mut Window, &mut Context<Shell>) + 'static,
 ) -> Item {
     Item::Action {
         icon,
-        label,
+        label: label.into(),
         destructive: true,
         run: Rc::new(run),
     }
@@ -227,7 +227,10 @@ impl Shell {
         let mut card = div()
             .id("context-menu")
             .occlude()
-            .w(px(216.))
+            .min_w(px(216.))
+            .max_w(px(360.))
+            .max_h(px(480.))
+            .overflow_y_scroll()
             .p(px(4.))
             .flex()
             .flex_col()
@@ -279,7 +282,7 @@ impl Shell {
                             } else {
                                 t.muted
                             }))
-                            .child(SharedString::from(*label)),
+                            .child(label.clone()),
                     )
                 }
             };
@@ -294,5 +297,78 @@ impl Shell {
             .priority(2)
             .into_any_element(),
         )
+    }
+
+    /// The terminal font menu: the monospace families installed on this Mac, by name.
+    pub(crate) fn open_font_menu(&mut self, position: Point<Pixels>, cx: &mut Context<Self>) {
+        let current = self.settings.terminal_font_family.clone();
+        let mut names = monospace_families(cx.text_system().all_font_names());
+        names.retain(|n| n != crate::theme::MONO_FONT);
+        names.insert(0, crate::theme::MONO_FONT.to_owned());
+        let items = names
+            .into_iter()
+            .map(|name| {
+                let chosen = current.as_deref().unwrap_or(crate::theme::MONO_FONT) == name;
+                let label = if chosen {
+                    format!("{name}  ✓")
+                } else {
+                    name.clone()
+                };
+                action(icons::TERMINAL, label, move |s, _, cx| {
+                    let family = (name != crate::theme::MONO_FONT).then(|| name.clone());
+                    s.set_terminal_font(family, cx);
+                })
+            })
+            .collect();
+        self.context_menu = Some(ContextMenu { position, items });
+        cx.notify();
+    }
+}
+
+/// Families a terminal can use: fixed-width by name (gpui exposes no monospace flag). Nerd Font
+/// "Propo" variants are proportional and left out; capped so the menu fits on screen.
+fn monospace_families(all: Vec<String>) -> Vec<String> {
+    const KNOWN: [&str; 6] = [
+        "Menlo",
+        "Monaco",
+        "Courier",
+        "Courier New",
+        "SF Mono",
+        "PT Mono",
+    ];
+    let mut names: Vec<String> = all
+        .into_iter()
+        .filter(|n| {
+            (n.contains("Mono") || n.contains("Code") || KNOWN.contains(&n.as_str()))
+                && !n.contains("Propo")
+                && !n.starts_with('.')
+        })
+        .collect();
+    names.sort();
+    names.dedup();
+    names.truncate(30);
+    names
+}
+
+#[cfg(test)]
+mod font_tests {
+    use super::monospace_families;
+
+    #[test]
+    fn keeps_fixed_width_families_and_drops_proportional_nerd_variants() {
+        let all = [
+            "JetBrainsMono Nerd Font Mono",
+            "JetBrainsMono Nerd Font Propo",
+            "Helvetica",
+            "Menlo",
+            "Fira Code",
+            ".SF NS Mono",
+        ]
+        .map(String::from)
+        .to_vec();
+        assert_eq!(
+            monospace_families(all),
+            ["Fira Code", "JetBrainsMono Nerd Font Mono", "Menlo"]
+        );
     }
 }

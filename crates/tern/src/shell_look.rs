@@ -49,8 +49,13 @@ impl Shell {
     }
 
     pub(super) fn terminal_theme(&self, alias: &str) -> tern_term::TerminalTheme {
-        self.theme
-            .terminal(self.settings.terminal_font_size, self.scheme_for(alias))
+        let mut theme = self
+            .theme
+            .terminal(self.settings.terminal_font_size, self.scheme_for(alias));
+        if let Some(family) = &self.settings.terminal_font_family {
+            theme.font_family = family.clone().into();
+        }
+        theme
     }
 
     /// Re-applies font and scheme to every open terminal; each re-measures its cells and the

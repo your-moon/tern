@@ -59,6 +59,9 @@ pub struct Settings {
     pub sidebar_width: f32,
     pub sidebar_collapsed: bool,
     pub terminal_font_size: f32,
+    /// Terminal font family; `None` is the bundled Geist Mono.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_font_family: Option<String>,
     /// Hold looping animations still. macOS's Reduce motion does the same on its own.
     pub reduce_motion: bool,
     /// Option sends Meta (ESC-prefixed keys) to the remote, as most terminals offer.
@@ -131,6 +134,7 @@ impl Default for Settings {
             sidebar_width: SIDEBAR_DEFAULT,
             sidebar_collapsed: false,
             terminal_font_size: FONT_DEFAULT,
+            terminal_font_family: None,
             reduce_motion: false,
             option_as_meta: true,
             reopen_tabs: true,
@@ -339,6 +343,7 @@ mod tests {
             sidebar_width: 312.0,
             sidebar_collapsed: true,
             terminal_font_size: 15.0,
+            terminal_font_family: Some("JetBrainsMono Nerd Font Mono".into()),
             reduce_motion: true,
             option_as_meta: false,
             reopen_tabs: false,

@@ -31,6 +31,11 @@ impl Shell {
         }
     }
 
+    pub(super) fn set_terminal_font(&mut self, family: Option<String>, cx: &mut Context<Self>) {
+        self.update_settings(|st| st.terminal_font_family = family, cx);
+        self.restyle_tabs(cx);
+    }
+
     fn change_terminal(&mut self, change: impl FnOnce(&mut Settings), cx: &mut Context<Self>) {
         self.update_settings(change, cx);
         let options = self.terminal_options();
@@ -131,8 +136,27 @@ impl Shell {
             }))
             .child(w::toggle(&t, s.log_sessions, "log-sessions"));
 
+        let family = s
+            .terminal_font_family
+            .clone()
+            .unwrap_or_else(|| crate::theme::MONO_FONT.to_owned());
+        let font =
+            w::button(&t, "terminal-font", family).on_click(cx.listener(
+                |shell, e: &gpui::ClickEvent, _, cx| shell.open_font_menu(e.position(), cx),
+            ));
         w::page_column()
             .child(w::page_header(&t, "Terminal"))
+            .child(w::section(
+                &t,
+                "Font",
+                w::card(&t).child(w::row(
+                    &t,
+                    true,
+                    "Font",
+                    Some("Monospace fonts on this Mac; a Nerd Font \"Mono\" keeps icons one cell wide".into()),
+                    font,
+                )),
+            ))
             .child(w::section(
                 &t,
                 "Logging",
