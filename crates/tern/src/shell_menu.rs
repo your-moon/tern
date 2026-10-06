@@ -126,6 +126,9 @@ impl Shell {
                 None => s.connect_target(&again, w, cx),
             },
         ));
+        items.push(action(icons::PEN, "Rename…", move |s, w, cx| {
+            s.start_rename(ix, w, cx)
+        }));
         let theme_alias = alias.clone();
         items.push(action(icons::PALETTE, "Theme…", move |s, w, cx| {
             s.open_theme_picker(ThemeTarget::Host(theme_alias.clone()), w, cx)

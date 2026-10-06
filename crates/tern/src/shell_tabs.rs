@@ -1,0 +1,108 @@
+//! Tab editing on the strip: renaming a title in place and dragging a tab to a new slot.
+
+use gpui::{AppContext, Context, Entity, KeyDownEvent, Window};
+
+use super::Shell;
+use crate::tabs;
+use crate::text_input::{InputColors, TextInput};
+
+/// A title being edited: which tab, and the field holding the text.
+pub(super) struct Rename {
+    pub ix: usize,
+    pub input: Entity<TextInput>,
+}
+
+impl Shell {
+    pub(crate) fn is_renaming(&self, ix: usize) -> bool {
+        self.renaming.as_ref().is_some_and(|r| r.ix == ix)
+    }
+
+    /// Swaps the tab's title for a field holding it, selected for typing over.
+    pub(crate) fn start_rename(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(tab) = self.tabs.get(ix) else {
+            return;
+        };
+        let current = tab.title.clone().unwrap_or_else(|| tab.alias.clone());
+        let t = self.theme;
+        let colors = InputColors {
+            text: t.text,
+            placeholder: t.faint,
+            cursor: t.accent,
+            selection: t.accent.opacity(0.35),
+        };
+        let input = cx.new(|cx| {
+            let mut input = TextInput::new(tab.alias.clone(), false, colors, cx);
+            input.set_text(current, cx);
+            input
+        });
+        window.focus(&gpui::Focusable::focus_handle(input.read(cx), cx), cx);
+        self.renaming = Some(Rename { ix, input });
+        cx.notify();
+    }
+
+    /// Saves the field. An empty title, or the alias itself, clears the custom title.
+    pub(crate) fn commit_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(rename) = self.renaming.take() else {
+            return;
+        };
+        let typed = rename.input.read(cx).text().trim().to_owned();
+        if let Some(tab) = self.tabs.get_mut(rename.ix) {
+            tab.title = custom_title(&typed, &tab.alias);
+        }
+        self.restore_focus(window, cx);
+    }
+
+    pub(crate) fn cancel_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.renaming.take().is_some() {
+            self.restore_focus(window, cx);
+        }
+    }
+
+    /// Enter saves and Escape drops the edit; true when the key was for the field.
+    pub(super) fn on_rename_key(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if self.renaming.is_none() {
+            return false;
+        }
+        match event.keystroke.key.as_str() {
+            "enter" => self.commit_rename(window, cx),
+            "escape" => self.cancel_rename(window, cx),
+            _ => return false,
+        }
+        true
+    }
+
+    /// A tab was dropped on slot `to`; the tab in front stays in front.
+    pub(crate) fn move_tab(
+        &mut self,
+        from: usize,
+        to: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.renaming = None;
+        let active = tabs::reorder(&mut self.tabs, self.active, from, to);
+        self.activate_tab(active, window, cx);
+    }
+}
+
+/// What a typed title means: nothing, or the alias it already shows, is no custom title.
+fn custom_title(typed: &str, alias: &str) -> Option<String> {
+    (!typed.is_empty() && typed != alias).then(|| typed.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::custom_title;
+
+    #[test]
+    fn empty_or_unchanged_titles_are_not_custom() {
+        assert_eq!(custom_title("", "prod"), None);
+        assert_eq!(custom_title("prod", "prod"), None);
+        assert_eq!(custom_title("prod db", "prod"), Some("prod db".into()));
+    }
+}

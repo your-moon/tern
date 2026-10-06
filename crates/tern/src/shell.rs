@@ -38,6 +38,8 @@ mod menu;
 mod settings_ui;
 #[path = "shell_sync.rs"]
 mod sync_ui;
+#[path = "shell_tabs.rs"]
+mod tabs_ui;
 #[path = "shell_toast.rs"]
 mod toast;
 
@@ -100,6 +102,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 form: None,
                 confirm_delete: None,
                 tabs: Vec::new(),
+                renaming: None,
                 active: 0,
                 error: None,
                 picker: None,
@@ -149,6 +152,8 @@ pub struct Shell {
     form: Option<connections_ui::ConnectionForm>,
     confirm_delete: Option<usize>,
     tabs: Vec<Tab>,
+    /// The tab whose title is being edited in the strip.
+    renaming: Option<tabs_ui::Rename>,
     active: usize,
     error: Option<String>,
     picker: Option<Picker>,
@@ -171,6 +176,9 @@ pub struct Shell {
 
 struct Tab {
     alias: String,
+    /// The user's name for the tab. It belongs to the tab, not the session, so a reconnect
+    /// keeps it.
+    title: Option<String>,
     session: Entity<Session>,
     _repaint: Subscription,
 }
@@ -252,6 +260,7 @@ impl Shell {
             });
         self.tabs.push(Tab {
             alias,
+            title: None,
             session,
             _repaint: repaint,
         });
@@ -275,6 +284,7 @@ impl Shell {
         if ix >= self.tabs.len() {
             return;
         }
+        self.renaming = None;
         self.tabs.remove(ix);
         if self.tabs.is_empty() {
             self.active = 0;
@@ -475,9 +485,16 @@ impl Shell {
     fn tab_infos(&self, cx: &App) -> Vec<TabInfo> {
         self.tabs
             .iter()
-            .map(|tab| TabInfo {
+            .enumerate()
+            .map(|(ix, tab)| TabInfo {
                 alias: tab.alias.clone(),
+                title: tab.title.clone(),
                 status: tab.session.read(cx).status.clone(),
+                rename: self
+                    .renaming
+                    .as_ref()
+                    .filter(|r| r.ix == ix)
+                    .map(|r| r.input.clone()),
             })
             .collect()
     }
@@ -638,6 +655,10 @@ impl Render for Shell {
             .on_action(cx.listener(|s, _: &NewConnection, w, cx| s.open_form(None, None, w, cx)))
             .on_action(cx.listener(|s, _: &OpenSettings, w, cx| s.toggle_settings(w, cx)))
             .on_key_down(cx.listener(|s, e: &gpui::KeyDownEvent, w, cx| {
+                if s.on_rename_key(e, w, cx) {
+                    cx.stop_propagation();
+                    return;
+                }
                 if e.keystroke.key == "escape" && s.context_menu.is_some() {
                     s.context_menu = None;
                     cx.notify();
