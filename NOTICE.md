@@ -12,6 +12,7 @@ tern is GPL-3.0-or-later. It copies and adapts code from the projects below; eac
 | chi11321/CrabPort | Apache-2.0 | SSH terminal backend shape (resize, auth flow) |
 | longbridge/gpui-component (stories/examples) | Apache-2.0 | tabs, sidebar, dialogs |
 | alacritty/alacritty (`alacritty_terminal` crate) | Apache-2.0 | VT emulation (dependency) |
+| Eugeny/russh-sftp | Apache-2.0 | SFTP client protocol (dependency), usage after its `sftp_client` example |
 | veeso/ssh2-config | MIT | `~/.ssh/config` parsing (dependency) |
 | mbadolato/iTerm2-Color-Schemes (Ghostty format) | MIT | terminal colour schemes, `crates/tern/assets/themes.txt` |
 | Solar Icons by 480 Design (via zeron) | CC BY 4.0 | UI icons, `crates/tern/assets/icons` |

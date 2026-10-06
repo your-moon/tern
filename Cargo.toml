@@ -22,6 +22,8 @@ ssh-key = { version = "=0.7.0-rc.11", default-features = false, features = ["ed2
 rand = { version = "0.10", features = ["thread_rng"] }
 security-framework = "3"
 
+russh-sftp = "3.0.1"
+
 # Craft gates. Every crate opts in with `[lints] workspace = true`.
 [workspace.lints.rust]
 unsafe_code = "forbid"

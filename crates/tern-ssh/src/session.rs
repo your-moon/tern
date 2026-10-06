@@ -22,7 +22,11 @@ use crate::forward::{self, Registry};
 use crate::hostkey::{Handler, known_algorithms};
 use crate::jump;
 use crate::outbox::Outbox;
-use crate::{ConnectSpec, Disconnect, Forward, ForwardError, ForwardInfo, SessionEvent, TermSize};
+use crate::sftp;
+use crate::{
+    ConnectSpec, Disconnect, Forward, ForwardError, ForwardInfo, SessionEvent, Sftp, SftpError,
+    TermSize,
+};
 
 pub(crate) const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long to wait for russh to say why a connection that went quiet has died.
@@ -42,6 +46,10 @@ pub(crate) enum Command {
     Forward {
         forward: Forward,
         reply: oneshot::Sender<Result<ForwardInfo, ForwardError>>,
+    },
+    /// Open the SFTP subsystem; the session answers on `reply`.
+    Sftp {
+        reply: oneshot::Sender<Result<Sftp, SftpError>>,
     },
     /// Tell the server to stop a remote forward.
     CancelRemote {
@@ -299,6 +307,12 @@ async fn run_inner(
                     let (session, forwards) = (session.clone(), forwards.clone());
                     tokio::spawn(async move {
                         let _ = reply.send(forward::start(&session, &forwards, forward).await);
+                    });
+                }
+                Some(Command::Sftp { reply }) => {
+                    let session = session.clone();
+                    tokio::spawn(async move {
+                        let _ = reply.send(sftp::open(&session).await);
                     });
                 }
                 Some(Command::CancelRemote { host, port }) => {

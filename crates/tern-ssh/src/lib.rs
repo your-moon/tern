@@ -17,6 +17,7 @@ mod hostkey;
 mod jump;
 mod outbox;
 mod session;
+mod sftp;
 mod socks;
 mod sshconf;
 
@@ -32,6 +33,7 @@ pub use error::{Error, ForwardError, InputError, Result};
 pub use forward::{Forward, ForwardHandle, ForwardInfo};
 pub use futures::channel::oneshot;
 pub use secrecy::{self, ExposeSecret, SecretString};
+pub use sftp::{Progress, Sftp, SftpEntry, SftpError};
 
 /// Keep-alive probe interval when the host sets no `ServerAliveInterval`.
 pub const DEFAULT_SERVER_ALIVE_INTERVAL: Duration = Duration::from_secs(30);
@@ -256,6 +258,21 @@ impl SessionHandle {
             registry: self.forwards.clone(),
             cmds: self.tx.clone(),
         })
+    }
+
+    /// Opens SFTP on this session, on a channel of its own beside the shell.
+    ///
+    /// # Errors
+    ///
+    /// [`SftpError::NotOffered`] when the server has no SFTP service, [`SftpError::Closed`] once
+    /// the session has ended.
+    pub async fn open_sftp(&self) -> std::result::Result<Sftp, SftpError> {
+        let (reply, answer) = oneshot::channel();
+        self.tx
+            .send(session::Command::Sftp { reply })
+            .await
+            .map_err(|_| SftpError::Closed)?;
+        answer.await.map_err(|_| SftpError::Closed)?
     }
 
     /// The forwards running on this session.

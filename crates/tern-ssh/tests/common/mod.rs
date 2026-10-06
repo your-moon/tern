@@ -1,8 +1,13 @@
-// Adapted from russh 0.64 examples/echoserver.rs and client_open_direct_tcpip.rs (Apache-2.0)
-// for the server handler shape and the direct-tcpip / tcpip-forward plumbing.
+// Adapted from russh 0.64 examples/echoserver.rs, client_open_direct_tcpip.rs and
+// sftp_server.rs (Apache-2.0) for the server handler shape and the direct-tcpip, tcpip-forward
+// and sftp-subsystem plumbing.
 //! An in-process SSH server (127.0.0.1 only) and a session driver shared by the integration tests.
 #![allow(dead_code, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+pub mod sftp;
+
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -35,7 +40,6 @@ pub enum AgentProbe {
     Always,
 }
 
-#[derive(Clone)]
 struct TestServer {
     shell: Shell,
     probe: AgentProbe,
@@ -46,6 +50,9 @@ struct TestServer {
     opened: Arc<Mutex<Vec<String>>>,
     /// The channel the shell runs on; other channels (tunnels) are not echoed.
     shell_channel: Option<ChannelId>,
+    /// Serve SFTP from this directory when asked for the subsystem.
+    sftp_root: Option<PathBuf>,
+    sessions: HashMap<ChannelId, Channel<Msg>>,
 }
 
 impl server::Handler for TestServer {
@@ -57,11 +64,31 @@ impl server::Handler for TestServer {
 
     async fn channel_open_session(
         &mut self,
-        _: Channel<Msg>,
+        channel: Channel<Msg>,
         reply: server::ChannelOpenHandle,
         _: &mut Session,
     ) -> Result<(), Self::Error> {
+        self.sessions.insert(channel.id(), channel);
         reply.accept().await;
+        Ok(())
+    }
+
+    async fn subsystem_request(
+        &mut self,
+        ch: ChannelId,
+        name: &str,
+        s: &mut Session,
+    ) -> Result<(), Self::Error> {
+        match (name, self.sftp_root.clone(), self.sessions.remove(&ch)) {
+            ("sftp", Some(root), Some(channel)) => {
+                s.channel_success(ch)?;
+                tokio::spawn(russh_sftp::server::run(
+                    channel.into_stream(),
+                    sftp::FsHandler::new(root),
+                ));
+            }
+            _ => s.channel_failure(ch)?,
+        }
         Ok(())
     }
 
@@ -213,6 +240,15 @@ pub async fn serve(shell: Shell) -> Server {
 }
 
 pub async fn serve_with(shell: Shell, probe: AgentProbe) -> Server {
+    serve_full(shell, probe, None).await
+}
+
+/// A server that also offers SFTP over `sftp_root`.
+pub async fn serve_sftp(sftp_root: PathBuf) -> Server {
+    serve_full(Shell::Echo, AgentProbe::Never, Some(sftp_root)).await
+}
+
+async fn serve_full(shell: Shell, probe: AgentProbe, sftp_root: Option<PathBuf>) -> Server {
     let config = Arc::new(server::Config {
         methods: MethodSet::from(&[MethodKind::None][..]),
         auth_rejection_time: Duration::ZERO,
@@ -232,6 +268,8 @@ pub async fn serve_with(shell: Shell, probe: AgentProbe) -> Server {
                 shell,
                 opened: log.clone(),
                 shell_channel: None,
+                sftp_root: sftp_root.clone(),
+                sessions: HashMap::new(),
                 probe,
                 agent_asked: false,
                 agent_log: agent.clone(),
