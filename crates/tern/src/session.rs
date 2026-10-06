@@ -139,10 +139,19 @@ impl Session {
                     (None, Some(code)) => format!("exit status {code}"),
                     (None, None) => "closed".into(),
                 };
+                let next = match reason.starts_with("host key changed") {
+                    // Reconnecting only fails again; say how to drop the old key, but leave that
+                    // step to the user, because a changed key is also what an attack looks like.
+                    true => format!(
+                        "If the server was reinstalled, remove its old key and reconnect:\r\n  {}",
+                        forget_key_command(&self.spec)
+                    ),
+                    false => "Press Enter to reconnect".into(),
+                };
                 self.show(
                     format!(
                         "\r\n\x1b[2m[connection closed: {reason}]\x1b[0m\r\n\
-                         \x1b[2mPress Enter to reconnect\x1b[0m\r\n"
+                         \x1b[2m{next}\x1b[0m\r\n"
                     )
                     .as_bytes(),
                     cx,
@@ -226,13 +235,45 @@ mod vault;
 
 /// A closed tab reconnects on Enter only, so a stray keystroke into a dead tab does not dial
 /// the server again. Enter arrives as CR from both the main and the keypad key.
+/// The `ssh-keygen -R` line that forgets this server's key, in OpenSSH's `[host]:port` form.
+fn forget_key_command(spec: &ConnectSpec) -> String {
+    let host = match spec.port {
+        22 => spec.host.clone(),
+        port => format!("'[{}]:{port}'", spec.host),
+    };
+    match &spec.known_hosts {
+        Some(path) => format!("ssh-keygen -R {host} -f '{}'", path.display()),
+        None => format!("ssh-keygen -R {host}"),
+    }
+}
+
 fn wants_reconnect(input: &[u8]) -> bool {
     input.contains(&b'\r')
 }
 
 #[cfg(test)]
 mod tests {
-    use super::wants_reconnect;
+    use super::{forget_key_command, wants_reconnect};
+    use tern_ssh::ConnectSpec;
+
+    #[test]
+    fn forget_key_command_uses_openssh_host_forms() {
+        let mut spec = ConnectSpec {
+            host: "10.0.0.5".into(),
+            port: 2222,
+            user: "deploy".into(),
+            identity_files: Vec::new(),
+            proxy_command: None,
+            known_hosts: None,
+        };
+        assert_eq!(forget_key_command(&spec), "ssh-keygen -R '[10.0.0.5]:2222'");
+        spec.port = 22;
+        spec.known_hosts = Some("/tmp/kh".into());
+        assert_eq!(
+            forget_key_command(&spec),
+            "ssh-keygen -R 10.0.0.5 -f '/tmp/kh'"
+        );
+    }
 
     #[test]
     fn only_enter_reconnects() {
