@@ -4,6 +4,12 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-06
+
+### Changed
+
+- New app icon: a flat white bird in flight on near-black, replacing the glossy dusk-sky tern.
+
 ## [0.1.0] - 2026-10-06
 
 The first release: a daily-driver SSH client for macOS.
@@ -83,5 +89,6 @@ The first release: a daily-driver SSH client for macOS.
 - Secrets are held as zeroizing `SecretString`s and never logged; session output is redacted from `Debug`.
 - RUSTSEC-2023-0071 in `rsa` (via russh) is accepted for now; see [SECURITY.md](SECURITY.md) and #16.
 
-[Unreleased]: https://github.com/your-moon/tern/compare/v0.1.0...main
+[Unreleased]: https://github.com/your-moon/tern/compare/v0.1.1...main
+[0.1.1]: https://github.com/your-moon/tern/releases/tag/v0.1.1
 [0.1.0]: https://github.com/your-moon/tern/releases/tag/v0.1.0
