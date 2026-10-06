@@ -179,6 +179,7 @@ pub(crate) fn parse_target(target: &str, config: Option<&SshConfig>) -> Result<C
         identity_files: r.identity_files,
         proxy_command: r.proxy_command,
         known_hosts: None,
+        memory_keys: Vec::new(),
     })
 }
 
@@ -226,6 +227,7 @@ impl ConnectSpec {
             identity_files: e.identity_files.clone(),
             proxy_command: e.proxy_command.clone(),
             known_hosts: None,
+            memory_keys: Vec::new(),
         })
     }
 

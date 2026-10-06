@@ -18,6 +18,9 @@ const QUIET_MAX: Duration = Duration::from_secs(3);
 pub(super) enum Flow {
     /// "Vault passphrase (Enter to skip)": then answer `prompt` from the vault or ask it.
     UnlockForPrompt(Prompt),
+    /// "Vault passphrase (Enter to skip)", asked before dialling because the connection names
+    /// a vault key; skipping dials anyway and falls back to the usual prompts.
+    UnlockForKeys,
     /// "Save … in tern's vault? (yes/no)".
     OfferSave(Key, SecretString),
     UnlockToSave(Key, SecretString),
@@ -56,6 +59,17 @@ impl Session {
             }
         }
         self.ask_user(prompt, cx);
+    }
+
+    /// Asks for the vault passphrase before the connection dials (see [`Flow::UnlockForKeys`]).
+    pub(super) fn ask_vault_before_dialling(&mut self, cx: &mut Context<Self>) {
+        self.connect_after_unlock = true;
+        self.ask_local(
+            "Vault passphrase (Enter to skip): ",
+            false,
+            Flow::UnlockForKeys,
+            cx,
+        );
     }
 
     /// The server's question, asked in the terminal; a typed password is remembered so it can
@@ -127,6 +141,13 @@ impl Session {
         };
         let typed = answer.filter(|a| !a.expose_secret().is_empty());
         match flow {
+            Flow::UnlockForKeys => match typed {
+                Some(passphrase) => self.unlock(passphrase, None, None, cx),
+                None => {
+                    self.connect_after_unlock = false;
+                    self.dial(cx);
+                }
+            },
             Flow::UnlockForPrompt(prompt) => match typed {
                 Some(passphrase) => self.unlock(passphrase, Some(prompt), None, cx),
                 None => self.ask_user(prompt, cx),
@@ -206,6 +227,11 @@ impl Session {
                     },
                     Err(VaultError::WrongPassphrase) => s.note("Wrong vault passphrase.", cx),
                     Err(e) => s.note(&format!("Vault unavailable: {e}"), cx),
+                }
+                // The connection was waiting for the vault: dial now, with the keys if the
+                // vault opened and without them if it did not.
+                if std::mem::take(&mut s.connect_after_unlock) {
+                    s.dial(cx);
                 }
                 // A failed unlock goes straight to the server's question rather than asking
                 // for the vault passphrase again.

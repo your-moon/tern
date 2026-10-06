@@ -2,9 +2,12 @@
 //! the remote, and login questions are answered in the terminal itself (see `login.rs`).
 
 use gpui::{App, AppContext, Context, Entity, Subscription, Task, WeakEntity, Window};
-use tern_ssh::{ConnectSpec, InputError, SecretString, SessionEvent, SessionHandle, TermSize};
+use tern_ssh::{
+    ConnectSpec, InputError, MemoryKey, SecretString, SessionEvent, SessionHandle, TermSize,
+};
 use tern_term::{Terminal, TerminalEvent, TerminalView};
 
+use crate::keeper::Keeper;
 use crate::login::Login;
 use crate::runtime::SshRuntime;
 use crate::session_log::{self, SessionLog};
@@ -32,6 +35,9 @@ pub enum Launch {
 struct Link {
     spec: ConnectSpec,
     handle: Option<SessionHandle>,
+    /// Names of vault keys offered at login. They are looked up each time the session dials,
+    /// so the spec never holds key material between connections.
+    vault_keys: Vec<String>,
 }
 
 impl Status {
@@ -48,6 +54,8 @@ pub struct Session {
     connected_at: Option<std::time::Instant>,
     ended_at: Option<std::time::Instant>,
     flow: Option<vault::Flow>,
+    /// The vault passphrase is being asked for only so the connection can then dial.
+    connect_after_unlock: bool,
     /// The vault entry the open server question would answer.
     asking: Option<tern_vault::Key>,
     /// What the user typed for that question, offered for saving once connected.
@@ -79,6 +87,7 @@ pub struct Session {
 impl Session {
     pub fn open(
         launch: Launch,
+        vault_keys: Vec<String>,
         name: String,
         auto_log: bool,
         theme: TerminalTheme,
@@ -99,8 +108,14 @@ impl Session {
             });
             let idle = matches!(launch, Launch::SshIdle(_));
             let (Launch::Ssh(spec) | Launch::SshIdle(spec)) = launch;
-            let mut link = Link { spec, handle: None };
-            let task = if idle {
+            let mut link = Link {
+                spec,
+                handle: None,
+                vault_keys,
+            };
+            // A locked vault is unlocked before dialling, so its keys can be offered.
+            let unlock_first = !idle && Self::keys_need_unlock(&link, cx);
+            let task = if idle || unlock_first {
                 Task::ready(())
             } else {
                 Self::start(&mut link, size, cx)
@@ -114,6 +129,7 @@ impl Session {
                 connected_at: None,
                 ended_at: None,
                 flow: None,
+                connect_after_unlock: false,
                 asking: None,
                 typed: None,
                 tried: Vec::new(),
@@ -139,6 +155,9 @@ impl Session {
             if auto_log && !idle {
                 this.start_auto_log();
             }
+            if unlock_first {
+                this.ask_vault_before_dialling(cx);
+            }
             this
         })
     }
@@ -147,7 +166,17 @@ impl Session {
     /// the feed, so a reconnect never hears from the connection it replaced.
     fn start(link: &mut Link, size: TermSize, cx: &mut Context<Self>) -> Task<()> {
         tracing::info!(host = %link.spec.host, port = link.spec.port, "session_open");
-        let (handle, events) = tern_ssh::connect(link.spec.clone(), size, &SshRuntime::handle(cx));
+        let mut dial = link.spec.clone();
+        for name in &link.vault_keys {
+            let key = tern_vault::Key::SshKey { name: name.clone() };
+            if let Some(openssh) = Keeper::lookup(&key, cx) {
+                dial.memory_keys.push(MemoryKey {
+                    name: name.clone(),
+                    openssh,
+                });
+            }
+        }
+        let (handle, events) = tern_ssh::connect(dial, size, &SshRuntime::handle(cx));
         link.handle = Some(handle);
         cx.spawn(async move |this, cx| {
             while let Ok(event) = events.recv().await {
@@ -242,11 +271,25 @@ impl Session {
         if self.auto_log && self.log.is_none() {
             self.start_auto_log();
         }
-        self._session_events = Self::start(&mut self.link, self.size, cx);
         self.status = Status::Connecting;
         self.connected_at = None;
         self.ended_at = None;
+        if Self::keys_need_unlock(&self.link, cx) {
+            self.ask_vault_before_dialling(cx);
+        } else {
+            self.dial(cx);
+        }
         cx.notify();
+    }
+
+    /// Starts the connection now.
+    fn dial(&mut self, cx: &mut Context<Self>) {
+        self._session_events = Self::start(&mut self.link, self.size, cx);
+    }
+
+    /// The connection names vault keys, and the vault is locked.
+    fn keys_need_unlock(link: &Link, cx: &App) -> bool {
+        !link.vault_keys.is_empty() && Keeper::locked(cx)
     }
 
     /// `user@host:port` for the status line.

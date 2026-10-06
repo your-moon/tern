@@ -186,6 +186,7 @@ async fn run_inner(
 
     let identity_files = spec.identity_files.clone();
     Authenticator::new(&mut session, &spec.user, &spec.host, identity_files, events)
+        .with_memory_keys(spec.memory_keys.clone())
         .run()
         .await?;
 

@@ -14,7 +14,7 @@ use secrecy::{ExposeSecret, SecretString};
 
 use crate::error::Failure;
 use crate::hostkey::Handler;
-use crate::{ChallengePrompt, Prompt, SessionEvent};
+use crate::{ChallengePrompt, MemoryKey, Prompt, SessionEvent};
 
 const MAX_TRIES: usize = 3;
 
@@ -24,6 +24,7 @@ pub(crate) struct Authenticator<'a> {
     pub host: &'a str,
     pub identity_files: Vec<PathBuf>,
     pub events: &'a async_channel::Sender<SessionEvent>,
+    memory_keys: Vec<MemoryKey>,
     remaining: MethodSet,
 }
 
@@ -41,8 +42,15 @@ impl<'a> Authenticator<'a> {
             host,
             identity_files,
             events,
+            memory_keys: Vec::new(),
             remaining: MethodSet::client_supported(),
         }
+    }
+
+    /// Keys held in memory (the vault's), tried after the agent and before key files.
+    pub fn with_memory_keys(mut self, keys: Vec<MemoryKey>) -> Self {
+        self.memory_keys = keys;
+        self
     }
 
     fn allows(&self, m: MethodKind) -> bool {
@@ -71,6 +79,10 @@ impl<'a> Authenticator<'a> {
         if self.allows(MethodKind::PublicKey) {
             if self.try_agent().await? {
                 tracing::info!(host = %self.host, auth_method = "agent", "ssh_authenticated");
+                return Ok(());
+            }
+            if self.try_memory_keys().await? {
+                tracing::info!(host = %self.host, auth_method = "vault_key", "ssh_authenticated");
                 return Ok(());
             }
             if self.try_identity_files().await? {
@@ -125,6 +137,39 @@ impl<'a> Authenticator<'a> {
                     }
                 }
                 Err(e) => tracing::warn!(error = %e, "ssh_agent_sign_failed"),
+            }
+        }
+        Ok(false)
+    }
+
+    /// Offers each in-memory key; an unreadable one is skipped, never printed.
+    async fn try_memory_keys(&mut self) -> Result<bool, Failure> {
+        if self.memory_keys.is_empty() {
+            return Ok(false);
+        }
+        let rsa_hash = self.session.best_supported_rsa_hash().await?.flatten();
+        for mk in self.memory_keys.clone() {
+            if !self.allows(MethodKind::PublicKey) {
+                break;
+            }
+            let key = match russh::keys::decode_secret_key(mk.openssh.expose_secret(), None) {
+                Ok(k) => k,
+                Err(e) => {
+                    tracing::warn!(key = %mk.name, error = %e, "ssh_vault_key_unreadable");
+                    continue;
+                }
+            };
+            let hash = if key.algorithm().is_rsa() {
+                rsa_hash
+            } else {
+                None
+            };
+            let r = self
+                .session
+                .authenticate_publickey(self.user, PrivateKeyWithHashAlg::new(Arc::new(key), hash))
+                .await?;
+            if self.absorb(r) {
+                return Ok(true);
             }
         }
         Ok(false)

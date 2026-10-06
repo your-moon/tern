@@ -8,8 +8,10 @@
 //! Plaintext exists only inside this crate, in buffers zeroed on drop; callers get
 //! [`SecretString`]s.
 
-use std::io;
-use std::path::Path;
+use std::io::{self, Write as _};
+use std::path::{Path, PathBuf};
+
+pub mod keys;
 
 pub use age::secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
@@ -28,6 +30,9 @@ pub enum Key {
     },
     /// The passphrase of a private key file, by its path.
     KeyPassphrase { path: String },
+    /// A private key kept in the vault, by the name the person gave it. The value is the key
+    /// in OpenSSH text form.
+    SshKey { name: String },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -58,6 +63,17 @@ struct Contents {
 const VERSION: u32 = 1;
 /// scrypt cost, log2(N). age's own default targets about a second; 18 is that on current Macs.
 const WORK_FACTOR: u8 = 18;
+
+/// A new file only the owner can read.
+fn private_file(path: &Path) -> io::Result<std::fs::File> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)
+}
 
 /// An unlocked vault: secrets in memory, the passphrase kept to re-encrypt on save.
 pub struct Vault {
@@ -138,14 +154,51 @@ impl Vault {
     /// [`VaultError::Io`] when the file cannot be written; [`VaultError::Corrupt`] if encoding
     /// fails, which would be a bug.
     pub fn save(&self, path: &Path) -> Result<(), VaultError> {
+        let tmp = self.stage(path)?;
+        std::fs::rename(&tmp, path)?;
+        Ok(())
+    }
+
+    /// First half of [`Vault::save`]: the new vault, complete and flushed, in a temp file next
+    /// to `path`. Until the rename, `path` still holds the old vault.
+    fn stage(&self, path: &Path) -> Result<PathBuf, VaultError> {
         let ciphertext = self.to_bytes()?;
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
         let tmp = path.with_extension("age.tmp");
-        std::fs::write(&tmp, ciphertext)?;
-        std::fs::rename(&tmp, path)?;
-        Ok(())
+        let mut file = private_file(&tmp)?;
+        file.write_all(&ciphertext)?;
+        // On disk before the rename, or a crash could leave the new name on empty data.
+        file.sync_all()?;
+        Ok(tmp)
+    }
+
+    /// Opens the vault at `path` with `current`, re-seals it under `new` and replaces the file
+    /// (temp file and rename). Returns the open vault, now under `new`.
+    ///
+    /// # Errors
+    /// [`VaultError::WrongPassphrase`] when `current` does not open the file, in which case
+    /// nothing is written; otherwise as [`Vault::unlock`] and [`Vault::save`].
+    pub fn change_passphrase(
+        path: &Path,
+        current: SecretString,
+        new: SecretString,
+    ) -> Result<Vault, VaultError> {
+        Self::change_passphrase_with(path, current, new, WORK_FACTOR)
+    }
+
+    fn change_passphrase_with(
+        path: &Path,
+        current: SecretString,
+        new: SecretString,
+        work_factor: u8,
+    ) -> Result<Vault, VaultError> {
+        let mut vault = Self::unlock(path, current)?;
+        vault.passphrase = new;
+        vault.work_factor = work_factor;
+        vault.save(path)?;
+        Ok(vault)
     }
 
     /// The encrypted vault file, as [`Vault::save`] writes it.
@@ -216,6 +269,34 @@ impl Vault {
         let before = self.entries.len();
         self.entries.retain(|(k, _)| k != key);
         self.entries.len() != before
+    }
+
+    /// Every key with a secret, in the order they were added. Values stay inside.
+    pub fn keys(&self) -> impl Iterator<Item = &Key> {
+        self.entries.iter().map(|(k, _)| k)
+    }
+
+    /// The passphrase the vault is sealed with, for the Keychain opt-in. Callers must not log
+    /// or store it anywhere else.
+    pub fn passphrase(&self) -> &SecretString {
+        &self.passphrase
+    }
+
+    /// An independent copy, so a save can run off the UI thread while the original stays
+    /// editable.
+    pub fn snapshot(&self) -> Vault {
+        Vault {
+            passphrase: self.passphrase.clone(),
+            entries: self.entries.clone(),
+            work_factor: self.work_factor,
+        }
+    }
+
+    /// Drops every secret and the passphrase now, rather than whenever the value goes away.
+    /// They are [`SecretString`]s, zeroed as they are dropped.
+    pub fn wipe(&mut self) {
+        self.entries.clear();
+        self.passphrase = SecretString::from(String::new());
     }
 
     pub fn len(&self) -> usize {

@@ -30,6 +30,9 @@ pub struct Connection {
     /// Copied from `~/.ssh/config` on import; the form does not edit it, so an edit keeps it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_command: Option<String>,
+    /// Name of a private key kept in the vault, offered at login.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vault_key: Option<String>,
 }
 
 impl Connection {
@@ -59,6 +62,7 @@ impl Connection {
             group: None,
             tags: Vec::new(),
             proxy_command: entry.proxy_command.clone(),
+            vault_key: None,
         }
     }
 }
@@ -133,6 +137,7 @@ pub struct Draft {
     pub group: String,
     /// Comma separated, as typed.
     pub tags: String,
+    pub vault_key: String,
 }
 
 /// `"prod, web ,,prod"` → `["prod", "web"]`: trimmed, no blanks, no repeats, first spelling kept.
@@ -180,6 +185,9 @@ pub fn validate(draft: &Draft, others: &[&str]) -> Result<Connection, String> {
     let identity_file = Some(draft.identity_file.trim())
         .filter(|p| !p.is_empty())
         .map(str::to_owned);
+    let vault_key = Some(draft.vault_key.trim())
+        .filter(|k| !k.is_empty())
+        .map(str::to_owned);
     Ok(Connection {
         name: name.to_owned(),
         host: host.to_owned(),
@@ -191,6 +199,7 @@ pub fn validate(draft: &Draft, others: &[&str]) -> Result<Connection, String> {
             .map(str::to_owned),
         tags: parse_tags(&draft.tags),
         proxy_command: None,
+        vault_key,
     })
 }
 
@@ -208,6 +217,7 @@ mod tests {
             identity_file: String::new(),
             group: String::new(),
             tags: String::new(),
+            vault_key: String::new(),
         }
     }
 
@@ -217,6 +227,20 @@ mod tests {
         assert_eq!(c.name, "web");
         assert_eq!(c.port, 22);
         assert_eq!(c.identity_file, None);
+    }
+
+    #[test]
+    fn a_vault_key_name_is_trimmed_kept_and_survives_the_file() {
+        let mut d = draft("web", "10.0.0.5", "", "deploy");
+        d.vault_key = "  laptop ".into();
+        let c = validate(&d, &[]).unwrap();
+        assert_eq!(c.vault_key.as_deref(), Some("laptop"));
+        let dir = std::env::temp_dir().join(format!("tern-conn-vk-{}", std::process::id()));
+        save(&dir, std::slice::from_ref(&c)).unwrap();
+        assert_eq!(load(&dir).unwrap(), vec![c]);
+        let none = validate(&draft("web", "h", "", "u"), &[]).unwrap();
+        assert_eq!(none.vault_key, None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

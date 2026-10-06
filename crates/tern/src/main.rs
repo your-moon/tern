@@ -8,6 +8,7 @@ mod fonts;
 mod hover;
 mod icons;
 mod keeper;
+mod keychain;
 mod keymap;
 mod login;
 mod menus;
@@ -50,7 +51,11 @@ fn main() {
         .run(move |cx: &mut App| {
             fonts::register(cx);
             menus::init(cx);
-            keeper::Keeper::install(cx);
+            let keychain = settings::dir()
+                .map(|d| settings::Settings::load(&d).vault_keychain)
+                .unwrap_or(false);
+            keeper::Keeper::install(keychain, cx);
+            keeper::Keeper::unlock_from_keychain(cx);
             let keymap = settings::dir()
                 .map(|d| keymap::Keymap::load(&d))
                 .unwrap_or_default();

@@ -19,6 +19,11 @@ pub const FONT_DEFAULT: f32 = 13.0;
 pub const WALLPAPER_OPACITY_MIN: f32 = 0.1;
 pub const WALLPAPER_OPACITY_MAX: f32 = 1.0;
 pub const WALLPAPER_OPACITY_DEFAULT: f32 = 0.3;
+/// The idle lock choices in minutes; 0 is off.
+pub const VAULT_LOCK_CHOICES: [u32; 5] = [0, 5, 15, 30, 60];
+pub const VAULT_LOCK_DEFAULT: u32 = 15;
+/// Where [`VAULT_LOCK_DEFAULT`] sits in [`VAULT_LOCK_CHOICES`].
+pub const VAULT_LOCK_DEFAULT_INDEX: usize = 2;
 const FILE_NAME: &str = "settings.json";
 
 /// Which palette the window wears: macOS's own, or one of tern's two.
@@ -92,6 +97,10 @@ pub struct Settings {
     pub check_for_updates: bool,
     /// Sync at launch and after local changes, once a remote is set up.
     pub sync_auto: bool,
+    /// Minutes without key or mouse input before the open vault is locked; 0 is never.
+    pub vault_lock_minutes: u32,
+    /// The vault passphrase is kept in the macOS login Keychain and the vault opens at launch.
+    pub vault_keychain: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -138,6 +147,8 @@ impl Default for Settings {
             bell_bounces_dock: true,
             check_for_updates: true,
             sync_auto: true,
+            vault_lock_minutes: VAULT_LOCK_DEFAULT,
+            vault_keychain: false,
         }
     }
 }
@@ -187,6 +198,9 @@ impl Settings {
             WALLPAPER_OPACITY_MAX,
             WALLPAPER_OPACITY_DEFAULT,
         );
+        if !VAULT_LOCK_CHOICES.contains(&self.vault_lock_minutes) {
+            self.vault_lock_minutes = VAULT_LOCK_DEFAULT;
+        }
         self
     }
 
@@ -334,6 +348,8 @@ mod tests {
             bell_bounces_dock: false,
             check_for_updates: false,
             sync_auto: false,
+            vault_lock_minutes: 30,
+            vault_keychain: true,
         };
         saved.save(&dir).unwrap();
         assert_eq!(Settings::load(&dir), saved);

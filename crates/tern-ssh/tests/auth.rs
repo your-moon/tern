@@ -121,6 +121,15 @@ async fn login(
     identity_files: Vec<PathBuf>,
     answers: &[Option<&str>],
 ) -> (Vec<Ask>, Option<String>) {
+    login_with(port, identity_files, Vec::new(), answers).await
+}
+
+async fn login_with(
+    port: u16,
+    identity_files: Vec<PathBuf>,
+    memory_keys: Vec<tern_ssh::MemoryKey>,
+    answers: &[Option<&str>],
+) -> (Vec<Ask>, Option<String>) {
     let dir = tempfile::tempdir().unwrap();
     let spec = ConnectSpec {
         host: "127.0.0.1".into(),
@@ -129,6 +138,7 @@ async fn login(
         identity_files,
         proxy_command: None,
         known_hosts: Some(dir.path().join("known_hosts")),
+        memory_keys,
     };
     let size = TermSize {
         cols: 80,
@@ -232,4 +242,35 @@ async fn encrypted_key_is_unlocked_after_a_wrong_passphrase() {
     let (asked, error) = login(port, vec![path], &[Some("nope"), Some("correct horse")]).await;
     assert_eq!(error, None);
     assert_eq!(asked, [Ask::HostKey, Ask::Passphrase, Ask::Passphrase]);
+}
+
+fn memory_key(name: &str, key: &PrivateKey) -> tern_ssh::MemoryKey {
+    tern_ssh::MemoryKey {
+        name: name.into(),
+        openssh: SecretString::from(key.to_openssh(LineEnding::LF).unwrap().to_string()),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_key_held_in_memory_logs_in_without_any_prompt() {
+    let key = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519).unwrap();
+    let port = serve(Want::Key(key.public_key().clone()), MethodKind::PublicKey).await;
+    let dir = tempfile::tempdir().unwrap();
+    let wrong = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519).unwrap();
+    // The first key is refused by the server; the second is the one it wants.
+    let keys = vec![memory_key("wrong", &wrong), memory_key("right", &key)];
+    let (asked, error) = login_with(port, unused_key(&dir), keys, &[]).await;
+    assert_eq!(error, None);
+    assert_eq!(asked, [Ask::HostKey]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_memory_key_the_server_does_not_know_falls_through_to_the_password() {
+    let port = serve(Want::Password("hunter2"), MethodKind::Password).await;
+    let dir = tempfile::tempdir().unwrap();
+    let other = PrivateKey::random(&mut rand::rng(), Algorithm::Ed25519).unwrap();
+    let keys = vec![memory_key("other", &other)];
+    let (asked, error) = login_with(port, unused_key(&dir), keys, &[Some("hunter2")]).await;
+    assert_eq!(error, None);
+    assert_eq!(asked, [Ask::HostKey, Ask::Password]);
 }

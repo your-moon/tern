@@ -11,7 +11,6 @@ use gpui::{
 };
 
 use super::Shell;
-use crate::keeper::Keeper;
 use crate::keymap::{Keymap, Record, ShortcutId, badge, record};
 use crate::settings::{AppearanceMode, FONT_DEFAULT, FONT_MAX, FONT_MIN};
 use crate::settings_widgets as w;
@@ -130,6 +129,9 @@ impl Shell {
                         shell.settings_page = Some(s);
                         if s == Section::Sync {
                             shell.ensure_sync_ui(cx);
+                        }
+                        if s == Section::Vault {
+                            shell.ensure_vault_ui(cx);
                         }
                         cx.notify();
                     }),
@@ -480,45 +482,6 @@ impl Shell {
                 el.child(w::page_subtitle(&t, e).text_color(t.danger))
             })
             .child(w::section(&t, "Saved in tern", list))
-    }
-
-    fn vault_page(&self, cx: &mut Context<Self>) -> gpui::Div {
-        let t = self.theme;
-        let (status, detail): (&str, String) = if let Some(n) = Keeper::len(cx) {
-            (
-                "Unlocked",
-                format!("{n} saved secret{}", if n == 1 { "" } else { "s" }),
-            )
-        } else if Keeper::locked(cx) {
-            (
-                "Locked",
-                "Unlocks the first time a saved login is needed".into(),
-            )
-        } else {
-            (
-                "No vault yet",
-                "Created the first time you save a password".into(),
-            )
-        };
-        let lock = w::button(&t, "vault-lock", "Lock now")
-            .when(Keeper::len(cx).is_none(), |el| el.opacity(0.4))
-            .on_click(cx.listener(|s, _, _, cx| {
-                if Keeper::len(cx).is_some() {
-                    Keeper::lock(cx);
-                    s.notify_toast(super::ToastKind::Default, "Vault locked", cx);
-                }
-            }));
-        w::page_column()
-            .child(w::page_header(&t, "Vault"))
-            .child(w::page_subtitle(
-                &t,
-                "Passwords and key passphrases, encrypted with your vault passphrase (age, scrypt)",
-            ))
-            .child(w::section(
-                &t,
-                "Status",
-                w::card(&t).child(w::row(&t, true, status, Some(detail.into()), lock)),
-            ))
     }
 }
 

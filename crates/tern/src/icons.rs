@@ -43,6 +43,7 @@ icon_assets!(
     (CLOSE, "close"),
     (PEN, "pen"),
     (TRASH, "trash-bin-minimalistic"),
+    (COPY, "copy"),
     (PALETTE, "sun"),
     (TERMINAL, "terminal"),
     (SERVER, "remote-server"),

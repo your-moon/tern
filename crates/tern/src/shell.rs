@@ -61,6 +61,10 @@ mod term_options;
 mod toast;
 #[path = "shell_update.rs"]
 mod update_ui;
+#[path = "shell_vault_page.rs"]
+mod vault_page_ui;
+#[path = "shell_vault.rs"]
+mod vault_ui;
 #[path = "shell_wallpaper.rs"]
 mod wallpaper_ui;
 
@@ -157,6 +161,8 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 record_interceptor: None,
                 sync_ui: None,
                 auto_sync: sync_ui::AutoSync::default(),
+                vault_ui: None,
+                last_input: std::time::Instant::now(),
                 toasts: toast::Toasts::new(),
                 tab_scroll: gpui::ScrollHandle::new(),
                 context_menu: None,
@@ -196,6 +202,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
     // the focused element's path, so the shell itself must be focused for ⌘K to work.
     window.update(cx, |shell, window, cx| window.focus(&shell.focus, cx))?;
     window.update(cx, |shell, window, cx| shell.restore_tabs(window, cx))?;
+    window.update(cx, |shell, _, cx| shell.watch_idle(cx))?;
     Ok(window)
 }
 
@@ -240,6 +247,9 @@ pub struct Shell {
     record_interceptor: Option<Subscription>,
     sync_ui: Option<sync_ui::SyncUi>,
     auto_sync: sync_ui::AutoSync,
+    vault_ui: Option<vault_ui::VaultUi>,
+    /// The last key or mouse input to the window, for the vault's idle lock.
+    last_input: std::time::Instant,
     toasts: toast::Toasts,
     tab_scroll: gpui::ScrollHandle,
     context_menu: Option<menu::ContextMenu>,
@@ -607,6 +617,12 @@ impl Render for Shell {
         let handle = (!collapsed && self.sidebar_tween.is_none()).then(|| self.resize_handle(cx));
         let root = div()
             .track_focus(&self.focus)
+            .capture_key_down(cx.listener(|s, _, _, _| s.last_input = std::time::Instant::now()))
+            .capture_any_mouse_down(
+                cx.listener(|s, _, _, _| s.last_input = std::time::Instant::now()),
+            )
+            .on_mouse_move(cx.listener(|s, _, _, _| s.last_input = std::time::Instant::now()))
+            .on_scroll_wheel(cx.listener(|s, _, _, _| s.last_input = std::time::Instant::now()))
             .size_full()
             .relative()
             .flex()

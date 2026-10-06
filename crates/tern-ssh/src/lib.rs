@@ -43,7 +43,25 @@ pub struct ConnectSpec {
     pub proxy_command: Option<String>,
     /// known_hosts file to check and learn host keys in; `None` means `~/.ssh/known_hosts`.
     pub known_hosts: Option<PathBuf>,
+    /// Private keys held in memory (tern's vault), offered after the agent and before the key
+    /// files. Never written to disk or logged.
+    pub memory_keys: Vec<MemoryKey>,
 }
+
+/// An unencrypted OpenSSH private key held in memory, with a label for logs.
+#[derive(Debug, Clone)]
+pub struct MemoryKey {
+    pub name: String,
+    pub openssh: SecretString,
+}
+
+impl PartialEq for MemoryKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name && self.openssh.expose_secret() == other.openssh.expose_secret()
+    }
+}
+
+impl Eq for MemoryKey {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TermSize {

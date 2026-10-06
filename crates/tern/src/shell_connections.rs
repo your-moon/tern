@@ -30,6 +30,7 @@ pub(super) struct ConnectionForm {
     tags: Entity<TextInput>,
     /// Kept from an import; the form has no field for it.
     proxy_command: Option<String>,
+    vault_key: Entity<TextInput>,
     password: Entity<TextInput>,
     vault_pass: Entity<TextInput>,
     vault_repeat: Entity<TextInput>,
@@ -56,6 +57,7 @@ impl ConnectionForm {
             &self.key,
             &self.group,
             &self.tags,
+            &self.vault_key,
             &self.password,
             &self.vault_pass,
             &self.vault_repeat,
@@ -101,6 +103,7 @@ impl Shell {
             group: None,
             tags: Vec::new(),
             proxy_command: None,
+            vault_key: None,
         });
         let password_hint = if editing.is_some() {
             "Unchanged"
@@ -121,6 +124,11 @@ impl Shell {
             group: field("none", false, d.group.unwrap_or_default()),
             tags: field("comma separated, e.g. eu, db", false, d.tags.join(", ")),
             proxy_command: d.proxy_command,
+            vault_key: field(
+                "Name of a key in the vault (optional)",
+                false,
+                d.vault_key.unwrap_or_default(),
+            ),
             password: field(password_hint, true, String::new()),
             vault_pass: field("Vault passphrase", true, String::new()),
             vault_repeat: field("Repeat vault passphrase", true, String::new()),
@@ -182,6 +190,7 @@ impl Shell {
             &form.key,
             &form.group,
             &form.tags,
+            &form.vault_key,
             &form.password,
         ];
         if step != VaultStep::None {
@@ -238,6 +247,7 @@ impl Shell {
             identity_file: read(&form.key, cx),
             group: read(&form.group, cx),
             tags: read(&form.tags, cx),
+            vault_key: read(&form.vault_key, cx),
         };
         let editing = form.editing;
         let others: Vec<&str> = self
@@ -486,6 +496,7 @@ impl Shell {
             .child(row("Group", &form.group, t))
             .child(groups)
             .child(row("Tags", &form.tags, t))
+            .child(row("Vault key", &form.vault_key, t))
             .child(row("Password", &form.password, t));
         match step {
             VaultStep::None => {}

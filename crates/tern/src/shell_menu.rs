@@ -169,6 +169,28 @@ impl Shell {
         cx.notify();
     }
 
+    /// Right-click on an entry in Settings → Vault.
+    pub(crate) fn open_vault_menu(
+        &mut self,
+        key: tern_vault::Key,
+        position: Point<Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        let mut items = Vec::new();
+        if matches!(key, tern_vault::Key::SshKey { .. }) {
+            let copy = key.clone();
+            items.push(action(icons::COPY, "Copy public key", move |s, _, cx| {
+                s.copy_public_key(&copy, cx)
+            }));
+            items.push(Item::Separator);
+        }
+        items.push(destructive(icons::TRASH, "Delete", move |s, _, cx| {
+            s.delete_secret(&key, cx)
+        }));
+        self.context_menu = Some(ContextMenu { position, items });
+        cx.notify();
+    }
+
     /// A second session to the same host, even when one is already open.
     fn open_new_tab(&mut self, host: &HostEntry, window: &mut Window, cx: &mut Context<Self>) {
         match ConnectSpec::from_host_entry(host) {
