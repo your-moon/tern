@@ -23,6 +23,8 @@ pub fn init(cx: &mut App) {
         Menu {
             name: "tern".into(),
             items: vec![
+                MenuItem::action("Settings…", crate::shell::OpenSettings),
+                MenuItem::separator(),
                 MenuItem::action("Hide tern", Hide),
                 MenuItem::action("Hide Others", HideOthers),
                 MenuItem::action("Show All", ShowAll),

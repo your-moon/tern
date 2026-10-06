@@ -39,6 +39,16 @@ impl Keeper {
         cx.global::<Self>().open.as_ref()?.get(key).cloned()
     }
 
+    /// Number of saved secrets, when the vault is open.
+    pub fn len(cx: &App) -> Option<usize> {
+        cx.global::<Self>().open.as_ref().map(Vault::len)
+    }
+
+    /// Forgets the unlocked vault; the next use asks for the passphrase again.
+    pub fn lock(cx: &mut App) {
+        cx.global_mut::<Self>().open = None;
+    }
+
     pub fn take(cx: &mut App) -> Option<Vault> {
         cx.global_mut::<Self>().open.take()
     }

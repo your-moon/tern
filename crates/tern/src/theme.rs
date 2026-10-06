@@ -82,10 +82,28 @@ impl Theme {
         t
     }
 
+    /// Ink at `alpha`: zeron's dark `wash`, a light grey laid over the surface.
+    pub fn ink(&self, alpha: f32) -> Hsla {
+        hsla(0.0, 0.0, 0.92, alpha)
+    }
+
     /// The shell surface as frost: the blurred desktop shows through at 1 - `GLASS_ALPHA`.
     pub fn glass(&self) -> Hsla {
         self.shell.opacity(GLASS_ALPHA)
     }
+}
+
+/// `fg` composited over `bg`, as an opaque colour (zeron `theme::flatten`).
+pub fn flatten(fg: Hsla, bg: Hsla) -> Hsla {
+    let (f, b) = (gpui::Rgba::from(fg), gpui::Rgba::from(bg));
+    let a = fg.a;
+    gpui::Rgba {
+        r: f.r * a + b.r * (1.0 - a),
+        g: f.g * a + b.g * (1.0 - a),
+        b: f.b * a + b.b * (1.0 - a),
+        a: 1.0,
+    }
+    .into()
 }
 
 fn hex(value: u32) -> Hsla {

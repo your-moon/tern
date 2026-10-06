@@ -27,9 +27,13 @@ actions!(
         IncreaseFontSize,
         DecreaseFontSize,
         ResetFontSize,
-        NewConnection
+        NewConnection,
+        OpenSettings
     ]
 );
+
+#[path = "shell_settings.rs"]
+mod settings_ui;
 
 #[path = "shell_connections.rs"]
 mod connections_ui;
@@ -75,6 +79,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
             error: None,
             picker: None,
             sidebar_tween: None,
+            settings_page: None,
         };
         shell.refresh_hosts();
         cx.new(|_| shell)
@@ -106,6 +111,7 @@ pub struct Shell {
     error: Option<String>,
     picker: Option<Picker>,
     sidebar_tween: Option<WidthTween>,
+    settings_page: Option<settings_ui::Section>,
 }
 
 struct Tab {
@@ -158,6 +164,9 @@ impl Shell {
         };
         let theme = self.terminal_theme();
         let session = Session::open(spec, theme, window, cx);
+        let meta = self.settings.option_as_meta;
+        let view = session.read(cx).view.clone();
+        view.update(cx, |v, _| v.set_option_as_meta(meta));
         let repaint = cx.observe(&session, |_, _, cx| cx.notify());
         self.tabs.push(Tab {
             alias,
@@ -327,6 +336,14 @@ impl Shell {
         cx.notify();
     }
 
+    fn apply_option_as_meta(&self, cx: &mut Context<Self>) {
+        let on = self.settings.option_as_meta;
+        for tab in &self.tabs {
+            let view = tab.session.read(cx).view.clone();
+            view.update(cx, |v, _| v.set_option_as_meta(on));
+        }
+    }
+
     pub fn hosts(&self) -> &[HostEntry] {
         &self.hosts
     }
@@ -426,6 +443,13 @@ impl Render for Shell {
             .on_action(cx.listener(|s, _: &ToggleHostPicker, w, cx| s.toggle_picker(w, cx)))
             .on_action(cx.listener(|s, _: &ToggleSidebar, _, cx| s.toggle_sidebar(cx)))
             .on_action(cx.listener(|s, _: &NewConnection, w, cx| s.open_form(None, None, w, cx)))
+            .on_action(cx.listener(|s, _: &OpenSettings, w, cx| s.toggle_settings(w, cx)))
+            .on_key_down(cx.listener(|s, e: &gpui::KeyDownEvent, w, cx| {
+                if e.keystroke.key == "escape" && s.settings_page.is_some() && s.form.is_none() {
+                    s.toggle_settings(w, cx);
+                    cx.stop_propagation();
+                }
+            }))
             .on_action(cx.listener(|s, _: &IncreaseFontSize, _, cx| {
                 s.change_font(|st| st.step_font(1.0), cx)
             }))
@@ -441,8 +465,9 @@ impl Render for Shell {
                 }),
             )
             .child(titlebar::render(&t, window.is_fullscreen(), strip))
-            .child(
-                div()
+            .child(match self.settings_page {
+                Some(section) => self.render_settings(section, cx),
+                None => div()
                     .flex_1()
                     .min_h_0()
                     .flex()
@@ -471,8 +496,9 @@ impl Render for Shell {
                             .overflow_hidden()
                             .child(self.panel_content(cx)),
                     )
-                    .children(handle),
-            )
+                    .children(handle)
+                    .into_any_element(),
+            })
             .when_some(form, |el, form| el.child(form))
             .when_some(self.picker.as_ref(), |el, p| {
                 el.child(picker::render(

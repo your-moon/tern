@@ -23,6 +23,8 @@ pub struct Settings {
     pub terminal_font_size: f32,
     /// Hold looping animations still. macOS's own setting is not read yet (#18).
     pub reduce_motion: bool,
+    /// Option sends Meta (ESC-prefixed keys) to the remote, as most terminals offer.
+    pub option_as_meta: bool,
 }
 
 impl Default for Settings {
@@ -32,6 +34,7 @@ impl Default for Settings {
             sidebar_collapsed: false,
             terminal_font_size: FONT_DEFAULT,
             reduce_motion: false,
+            option_as_meta: true,
         }
     }
 }
@@ -122,6 +125,7 @@ mod tests {
             sidebar_collapsed: true,
             terminal_font_size: 15.0,
             reduce_motion: true,
+            option_as_meta: false,
         };
         saved.save(&dir).unwrap();
         assert_eq!(Settings::load(&dir), saved);

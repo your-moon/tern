@@ -1,0 +1,333 @@
+// Adapted from zeron crates/ui/src/shell.rs (settings route: nav column, section list,
+// toggle_settings, Escape to close) (MIT).
+//! The Settings page. ⌘, swaps the window body for it, as zeron does; Escape or Back returns.
+//! Every control writes `settings.json` at once.
+
+use gpui::prelude::FluentBuilder;
+use gpui::{
+    AnyElement, Context, InteractiveElement, IntoElement, ParentElement, SharedString,
+    StatefulInteractiveElement, Styled, Window, div, px,
+};
+
+use super::Shell;
+use crate::keeper::Keeper;
+use crate::settings::{FONT_DEFAULT, FONT_MAX, FONT_MIN};
+use crate::settings_widgets as w;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Section {
+    Appearance,
+    Terminal,
+    Connections,
+    Vault,
+    About,
+}
+
+impl Section {
+    const ALL: [Section; 5] = [
+        Section::Appearance,
+        Section::Terminal,
+        Section::Connections,
+        Section::Vault,
+        Section::About,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            Section::Appearance => "Appearance",
+            Section::Terminal => "Terminal",
+            Section::Connections => "Connections",
+            Section::Vault => "Vault",
+            Section::About => "About",
+        }
+    }
+
+    fn id(self) -> &'static str {
+        match self {
+            Section::Appearance => "nav-appearance",
+            Section::Terminal => "nav-terminal",
+            Section::Connections => "nav-connections",
+            Section::Vault => "nav-vault",
+            Section::About => "nav-about",
+        }
+    }
+}
+
+impl Shell {
+    pub(crate) fn toggle_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.settings_page.take().is_some() {
+            self.restore_focus(window, cx);
+        } else {
+            self.picker = None;
+            self.settings_page = Some(Section::Appearance);
+            window.focus(&self.focus, cx);
+            cx.notify();
+        }
+    }
+
+    pub(crate) fn render_settings(&self, section: Section, cx: &mut Context<Self>) -> AnyElement {
+        let t = self.theme;
+        let mut nav = div()
+            .w(px(self.settings.sidebar_width))
+            .flex_none()
+            .h_full()
+            .px(px(8.))
+            .pt(px(12.))
+            .pb(px(8.))
+            .flex()
+            .flex_col()
+            .gap(px(2.))
+            .child(
+                w::nav_tab(&t, false, "nav-back", "← Back")
+                    .on_click(cx.listener(|s, _, window, cx| s.toggle_settings(window, cx))),
+            )
+            .child(div().h(px(12.)));
+        for s in Section::ALL {
+            nav = nav.child(
+                w::nav_tab(&t, s == section, s.id(), s.label()).on_click(cx.listener(
+                    move |shell, _, _, cx| {
+                        shell.settings_page = Some(s);
+                        cx.notify();
+                    },
+                )),
+            );
+        }
+        let page = match section {
+            Section::Appearance => self.appearance_page(cx),
+            Section::Terminal => self.terminal_page(cx),
+            Section::Connections => self.connections_page(cx),
+            Section::Vault => self.vault_page(cx),
+            Section::About => about_page(&t),
+        };
+        div()
+            .flex_1()
+            .min_h_0()
+            .flex()
+            .child(nav)
+            .child(
+                div()
+                    .id("settings-scroll")
+                    .flex_1()
+                    .min_w_0()
+                    .h_full()
+                    .overflow_y_scroll()
+                    .child(page),
+            )
+            .into_any_element()
+    }
+
+    fn appearance_page(&self, cx: &mut Context<Self>) -> gpui::Div {
+        let t = self.theme;
+        let size = self.settings.terminal_font_size;
+        let (minus, value, plus) = w::stepper(&t, "font-size", format!("{size:.0} pt"));
+        let font =
+            div()
+                .flex()
+                .items_center()
+                .gap(px(6.))
+                .child(minus.on_click(
+                    cx.listener(|s, _, _, cx| s.change_font(|st| st.step_font(-1.0), cx)),
+                ))
+                .child(value)
+                .child(
+                    plus.on_click(
+                        cx.listener(|s, _, _, cx| s.change_font(|st| st.step_font(1.0), cx)),
+                    ),
+                )
+                .child(w::button(&t, "font-reset", "Reset").on_click(cx.listener(
+                    |s, _, _, cx| s.change_font(|st| st.terminal_font_size = FONT_DEFAULT, cx),
+                )));
+        let reduce = self.settings.reduce_motion;
+        w::page_column()
+            .child(w::page_header(&t, "Appearance"))
+            .child(w::section(
+                &t,
+                "Terminal text",
+                w::card(&t).child(w::row(
+                    &t,
+                    true,
+                    "Font size",
+                    Some(format!("{FONT_MIN:.0}–{FONT_MAX:.0} pt · ⌘= ⌘− ⌘0").into()),
+                    font,
+                )),
+            ))
+            .child(w::section(
+                &t,
+                "Motion",
+                w::card(&t).child(w::row(
+                    &t,
+                    true,
+                    "Reduce motion",
+                    Some("Hold the connecting pulse and sidebar slide still".into()),
+                    div()
+                        .id("toggle-reduce-motion")
+                        .cursor_pointer()
+                        .on_click(cx.listener(|s, _, _, cx| {
+                            s.update_settings(|st| st.reduce_motion = !st.reduce_motion, cx);
+                            cx.set_reduce_motion(s.settings.reduce_motion);
+                        }))
+                        .child(w::toggle(&t, reduce, "reduce-motion")),
+                )),
+            ))
+    }
+
+    fn terminal_page(&self, cx: &mut Context<Self>) -> gpui::Div {
+        let t = self.theme;
+        let meta = self.settings.option_as_meta;
+        w::page_column()
+            .child(w::page_header(&t, "Terminal"))
+            .child(w::section(
+                &t,
+                "Keyboard",
+                w::card(&t).child(w::row(
+                    &t,
+                    true,
+                    "Use Option as Meta",
+                    Some(
+                        "⌥B, ⌥F and friends reach the shell; off types the macOS character".into(),
+                    ),
+                    div()
+                        .id("toggle-option-meta")
+                        .cursor_pointer()
+                        .on_click(cx.listener(|s, _, _, cx| {
+                            s.update_settings(|st| st.option_as_meta = !st.option_as_meta, cx);
+                            s.apply_option_as_meta(cx);
+                        }))
+                        .child(w::toggle(&t, meta, "option-meta")),
+                )),
+            ))
+    }
+
+    fn connections_page(&self, cx: &mut Context<Self>) -> gpui::Div {
+        let t = self.theme;
+        let mut list = w::card(&t);
+        if self.connections.is_empty() {
+            list = list.child(w::row(
+                &t,
+                true,
+                "No connections yet",
+                Some("Hosts from ~/.ssh/config are listed in the sidebar".into()),
+                div(),
+            ));
+        }
+        for (ix, c) in self.connections.iter().enumerate() {
+            let address = if c.port == 22 {
+                format!("{}@{}", c.user, c.host)
+            } else {
+                format!("{}@{}:{}", c.user, c.host, c.port)
+            };
+            let confirming = self.confirm_delete == Some(ix);
+            let actions = div()
+                .flex()
+                .gap(px(6.))
+                .child(
+                    w::button(&t, ("settings-edit", ix), "Edit").on_click(cx.listener(
+                        move |s, _, window, cx| {
+                            let draft = s.connection(ix);
+                            s.open_form(Some(ix), draft, window, cx);
+                        },
+                    )),
+                )
+                .child(
+                    w::button(
+                        &t,
+                        ("settings-delete", ix),
+                        if confirming { "Delete?" } else { "Remove" },
+                    )
+                    .when(confirming, |el| el.text_color(t.danger))
+                    .on_click(cx.listener(move |s, _, _, cx| s.delete_connection(ix, cx))),
+                );
+            list = list.child(w::row(
+                &t,
+                ix == 0,
+                c.name.clone(),
+                Some(SharedString::from(address)),
+                actions,
+            ));
+        }
+        w::page_column()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .child(w::page_header(&t, "Connections"))
+                    .child(w::button(&t, "settings-new", "New connection").on_click(
+                        cx.listener(|s, _, window, cx| s.open_form(None, None, window, cx)),
+                    )),
+            )
+            .child(w::page_subtitle(
+                &t,
+                format!(
+                    "{} in tern · {} from ~/.ssh/config, read-only",
+                    self.connections.len(),
+                    self.ssh_hosts.len()
+                ),
+            ))
+            .when_some(self.store_error.clone(), |el, e| {
+                el.child(w::page_subtitle(&t, e).text_color(t.danger))
+            })
+            .child(w::section(&t, "Saved in tern", list))
+    }
+
+    fn vault_page(&self, cx: &mut Context<Self>) -> gpui::Div {
+        let t = self.theme;
+        let (status, detail): (&str, String) = if let Some(n) = Keeper::len(cx) {
+            (
+                "Unlocked",
+                format!("{n} saved secret{}", if n == 1 { "" } else { "s" }),
+            )
+        } else if Keeper::locked(cx) {
+            (
+                "Locked",
+                "Unlocks the first time a saved login is needed".into(),
+            )
+        } else {
+            (
+                "No vault yet",
+                "Created the first time you save a password".into(),
+            )
+        };
+        let lock = w::button(&t, "vault-lock", "Lock now")
+            .when(Keeper::len(cx).is_none(), |el| el.opacity(0.4))
+            .on_click(cx.listener(|_, _, _, cx| {
+                Keeper::lock(cx);
+                cx.notify();
+            }));
+        w::page_column()
+            .child(w::page_header(&t, "Vault"))
+            .child(w::page_subtitle(
+                &t,
+                "Passwords and key passphrases, encrypted with your vault passphrase (age, scrypt)",
+            ))
+            .child(w::section(
+                &t,
+                "Status",
+                w::card(&t).child(w::row(&t, true, status, Some(detail.into()), lock)),
+            ))
+    }
+}
+
+fn about_page(t: &crate::theme::Theme) -> gpui::Div {
+    w::page_column()
+        .child(w::page_header(t, "About"))
+        .child(w::section(
+            t,
+            "tern",
+            w::card(t)
+                .child(w::row(
+                    t,
+                    true,
+                    "Version",
+                    Some(env!("CARGO_PKG_VERSION").into()),
+                    div(),
+                ))
+                .child(w::row(
+                    t,
+                    false,
+                    "Logs",
+                    Some("~/Library/Logs/tern".into()),
+                    div(),
+                )),
+        ))
+}

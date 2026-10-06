@@ -12,6 +12,7 @@ mod picker;
 mod runtime;
 mod session;
 mod settings;
+mod settings_widgets;
 mod shell;
 mod sidebar;
 mod tabs;
@@ -37,6 +38,7 @@ fn main() {
             gpui::KeyBinding::new("cmd-k", picker::ToggleHostPicker, None),
             gpui::KeyBinding::new("cmd-b", shell::ToggleSidebar, None),
             gpui::KeyBinding::new("cmd-n", shell::NewConnection, None),
+            gpui::KeyBinding::new("cmd-,", shell::OpenSettings, None),
             gpui::KeyBinding::new("cmd-=", shell::IncreaseFontSize, None),
             gpui::KeyBinding::new("cmd-+", shell::IncreaseFontSize, None),
             gpui::KeyBinding::new("cmd--", shell::DecreaseFontSize, None),
