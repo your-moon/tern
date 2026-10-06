@@ -16,3 +16,18 @@ tern is GPL-3.0-or-later. It copies and adapts code from the projects below; eac
 | Solar Icons by 480 Design (via zeron) | CC BY 4.0 | UI icons, `crates/tern/assets/icons` |
 | daangn/seed-design | MIT | snackbar sizes, colours, motion and behaviour |
 | vercel/geist-font (via zeron) | SIL OFL 1.1 | Geist and Geist Mono fonts, `crates/tern/assets/fonts` |
+
+## Built-in wallpapers
+
+Public-domain works from The Metropolitan Museum of Art Open Access (CC0 1.0), cropped to the
+artwork and resized. `crates/tern/assets/wallpapers`:
+
+| File | Work | Met object ID |
+| --- | --- | --- |
+| great-wave.jpg | Katsushika Hokusai, *Under the Wave off Kanagawa (The Great Wave)* | 45434 |
+| red-fuji.jpg | Katsushika Hokusai, *South Wind, Clear Sky (Red Fuji)* | 36490 |
+| kanbara-snow.jpg | Utagawa Hiroshige, *Evening Snow at Kanbara* | 56915 |
+| shono-rain.jpg | Utagawa Hiroshige, *Sudden Shower at Shōno* | 36521 |
+| heart-of-the-andes.jpg | Frederic Edwin Church, *Heart of the Andes* | 10481 |
+| wheat-field.jpg | Vincent van Gogh, *Wheat Field with Cypresses* | 436535 |
+| fontainebleau-morning.jpg | Théodore Rousseau, *An Early Summer Morning in the Forest of Fontainebleau* | 437517 |
