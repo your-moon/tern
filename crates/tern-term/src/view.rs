@@ -19,14 +19,14 @@ use gpui::{
     Subscription, Task, TouchPhase, Window, div, px,
 };
 
+use crate::config::TerminalOptions;
+use crate::config::TerminalTheme;
 use crate::element::TerminalElement;
-use crate::find_bar::{FindKey, apply_key, paste_into};
 use crate::links::Link;
 use crate::mappings::keys::keystroke_bytes;
 use crate::mappings::mouse::{alt_scroll, mouse_button_report, mouse_moved_report, scroll_report};
-use crate::options::TerminalOptions;
+use crate::search::{FindKey, apply_key, paste_into};
 use crate::terminal::{SelectionType, Side, Terminal, TerminalEvent};
-use crate::theme::TerminalTheme;
 
 /// Inner padding of the grid area.
 pub const TERM_PADDING: f32 = 8.0;
@@ -700,8 +700,7 @@ pub fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
 #[path = "view_tests.rs"]
 mod tests;
 
-mod bell;
 mod cursor;
 mod find_links;
-use bell::{BELL_FLASH_MS, BELL_PEAK_OPACITY};
+use cursor::{BELL_FLASH_MS, BELL_PEAK_OPACITY};
 use find_links::{find_status, is_find_chord};

@@ -24,10 +24,10 @@ use alacritty_terminal::vte::ansi::{
 };
 use gpui::{Context, EventEmitter};
 
+use crate::config::CursorStyleSetting;
+use crate::config::TerminalTheme;
 use crate::links::Link;
-use crate::options::CursorStyleSetting;
 use crate::search::{Search, SearchMark, mark_at};
-use crate::theme::TerminalTheme;
 
 pub use alacritty_terminal::index::Side;
 pub use alacritty_terminal::selection::SelectionType;

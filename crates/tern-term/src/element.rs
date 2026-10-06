@@ -15,9 +15,9 @@ use gpui::{
 };
 
 use crate::box_drawing;
+use crate::config::TerminalTheme;
 use crate::search::SearchMark;
 use crate::terminal::{CellColor, CellSnapshot, CursorSnapshot};
-use crate::theme::TerminalTheme;
 use crate::view::{GridGeometry, TERM_PADDING, TerminalView};
 
 pub struct TerminalElement {

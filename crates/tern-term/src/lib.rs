@@ -3,21 +3,19 @@
 //! view, `TerminalTheme` the palette.
 
 mod box_drawing;
+mod config;
 mod element;
-mod find_bar;
 mod links;
 mod mappings;
-mod options;
 mod search;
 mod terminal;
-mod theme;
 mod view;
 
+pub use config::TerminalTheme;
+pub use config::{CursorStyleSetting, TerminalOptions};
 pub use links::Link;
-pub use options::{CursorStyleSetting, TerminalOptions};
 pub use search::SearchMark;
 pub use terminal::{
     CellColor, CellSnapshot, CursorSnapshot, SCROLLBACK_LINES, Terminal, TerminalEvent,
 };
-pub use theme::TerminalTheme;
 pub use view::{TerminalView, paste_bytes};
