@@ -118,10 +118,12 @@ impl Shell {
             )
     }
 
-    /// The main tile: fills what the side tile leaves. Under a terminal in a full-window
-    /// wallpaper it paints nothing, as the terminal draws its own glass at the same alpha.
+    /// The main tile: fills what the side tile leaves. When it shows a terminal over a
+    /// full-window wallpaper it paints nothing, as the terminal draws its own glass at the same
+    /// alpha; anything else it shows (Settings, the empty view) sits on the tile's tint.
     pub(super) fn main_tile(&self, panel: Hsla) -> gpui::Div {
-        let terminal_glass = !self.tabs.is_empty() && self.window_fill().is_some();
+        let shows_terminal = !self.tabs.is_empty() && self.settings_page.is_none();
+        let terminal_glass = shows_terminal && self.window_fill().is_some();
         div()
             .flex_1()
             .min_w_0()

@@ -139,14 +139,18 @@ impl Shell {
                 super::frame_ui::snap(self.settings.sidebar_width, self.frame.scale),
                 nav,
             ))
+            // The page is the body's main tile, so it carries the same tint as every other
+            // view of it over a wallpaper.
             .child(
-                div()
-                    .id("settings-scroll")
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
-                    .overflow_y_scroll()
-                    .child(page),
+                self.main_tile(self.panel_background()).child(
+                    div()
+                        .id("settings-scroll")
+                        .flex_1()
+                        .min_w_0()
+                        .h_full()
+                        .overflow_y_scroll()
+                        .child(page),
+                ),
             )
             .into_any_element()
     }

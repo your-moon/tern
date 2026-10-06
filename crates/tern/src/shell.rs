@@ -483,10 +483,10 @@ impl Shell {
     }
 
     /// The main panel's content: the active tab's panes, or the empty view, which carries the
-    /// wallpaper `hero` (already clipped and faded) above its text.
+    /// wallpaper `hero` (the picture filling the tile) under its text.
     fn panel_content(
         &self,
-        hero: Option<(AnyElement, f32)>,
+        hero: Option<AnyElement>,
         panel_bg: gpui::Hsla,
         cx: &mut Context<Self>,
     ) -> AnyElement {
@@ -521,24 +521,23 @@ impl Shell {
         };
         // Over the picture the text sits below its upper part, on a plate of the panel colour,
         // so it never depends on what the picture holds.
-        let hero_height = hero.as_ref().map(|(_, h)| *h);
+        let on_picture = hero.is_some();
         div()
             .size_full()
             .relative()
             .flex()
             .flex_col()
             .items_center()
-            .when(hero_height.is_none(), |el| el.justify_center())
-            .when_some(hero_height, |el, h| el.pt(px(h * 0.5)))
+            .justify_center()
             .gap(px(16.))
-            .children(hero.map(|(el, _)| el))
+            .children(hero)
             .child(
                 div()
                     .flex()
                     .flex_col()
                     .items_center()
                     .gap(px(4.))
-                    .when(hero_height.is_some(), |el| look::plate(el, panel_bg))
+                    .when(on_picture, |el| look::plate(el, panel_bg))
                     .child(div().text_size(px(15.)).text_color(t.text).child(title))
                     .when_some(detail, |el, d| {
                         el.child(div().text_sm().text_color(t.muted).child(d))
@@ -571,7 +570,7 @@ impl Shell {
                     .flex()
                     .flex_col()
                     .gap(px(8.))
-                    .when(hero_height.is_some(), |el| look::plate(el, panel_bg))
+                    .when(on_picture, |el| look::plate(el, panel_bg))
                     .child(hint(crate::keymap::ShortcutId::HostPicker, "Find a host"))
                     .child(hint(
                         crate::keymap::ShortcutId::NewConnection,
@@ -620,7 +619,7 @@ impl Render for Shell {
         let snippet_picker = self.render_snippet_picker(window, cx);
         let snippet_form = self.render_snippet_form(window, cx);
         let panel_bg = self.panel_background();
-        let hero = self.empty_view_hero(panel_bg, window);
+        let hero = self.empty_view_hero(window);
         let layers = self.backdrop();
         let status_line = self.render_status_line(self.veil(panel_bg), cx);
         let theme_picker = self.render_theme_picker(window, cx);

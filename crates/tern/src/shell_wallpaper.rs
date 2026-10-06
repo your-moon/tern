@@ -26,15 +26,6 @@ use crate::wallpaper_panel::{self, Panel};
 /// zeron `WALLPAPER_CROSSFADE`: an immediate attack with a short, soft landing.
 pub const CROSSFADE: Duration = Duration::from_millis(180);
 const CROSSFADE_CURVE: CubicBezier = CubicBezier::new(1.0 / 3.0, 1.0, 2.0 / 3.0, 1.0);
-/// zeron `NEW_THREAD_BACKGROUND_VIEWPORT_RATIO` / `_MAX_HEIGHT` (crates/ui/src/shell.rs:1064-1065):
-/// the hero is this share of the window's height, up to this many pixels.
-const HERO_VIEWPORT_RATIO: f32 = 0.72;
-const HERO_MAX_HEIGHT: f32 = 760.0;
-
-/// zeron `new_thread_background_height` (shell.rs:1322).
-pub(crate) fn hero_height(viewport_height: f32) -> f32 {
-    (viewport_height.max(0.0) * HERO_VIEWPORT_RATIO).min(HERO_MAX_HEIGHT)
-}
 
 /// What the window should be showing: a file with an effect.
 #[derive(Debug, Clone, PartialEq)]
@@ -176,19 +167,13 @@ impl Shell {
         }
     }
 
-    /// The hero for the empty view, with its height. The sharp picture is the empty view's
-    /// only: with a tab or the Settings page open nothing sits behind the content.
-    pub(super) fn empty_view_hero(
-        &mut self,
-        panel: gpui::Hsla,
-        window: &mut Window,
-    ) -> Option<(AnyElement, f32)> {
+    /// The empty view's picture, filling the main tile. Only the empty view has it: with a tab
+    /// or the Settings page open nothing sharp sits behind the content.
+    pub(super) fn empty_view_hero(&mut self, window: &mut Window) -> Option<AnyElement> {
         if self.tabs.get(self.active).is_some() || self.settings_page.is_some() {
             return None;
         }
-        let height = hero_height(f32::from(window.viewport_size().height));
-        self.wallpaper_hero(height, panel, window)
-            .map(|el| (el, height))
+        self.wallpaper_hero(window)
     }
 
     /// The blurred copy of the picture, when it should fill the window.
@@ -242,37 +227,20 @@ impl Shell {
         colour.opacity(self.window_fill().unwrap_or(1.0))
     }
 
-    /// The hero: the picture across the top of the empty view, at full strength and fading into
-    /// the panel colour `panel` along its height (zeron feathers it with an alpha mask; gpui
-    /// 0.3.8 has none, so a gradient to the opaque panel colour does the same). `None` without a
-    /// wallpaper. The crossfade layers sit inside it.
-    pub(super) fn wallpaper_hero(
-        &mut self,
-        height: f32,
-        panel: gpui::Hsla,
-        window: &mut Window,
-    ) -> Option<AnyElement> {
+    /// The hero: the sharp picture filling the empty view's tile, cover-fit, at full strength.
+    /// It fills the whole tile rather than a band, so no edge shows where it would end. `None`
+    /// without a wallpaper; the crossfade layers sit inside it.
+    pub(super) fn wallpaper_hero(&mut self, window: &mut Window) -> Option<AnyElement> {
         let layers = self.wallpaper_layers(window);
         if layers.is_empty() {
             return None;
         }
-        // The band fades into the panel at the panel's own opacity, so no step shows where the
-        // picture ends: opaque in hero-only mode, the glass alpha when the window is filled.
-        let panel = panel.opacity(self.window_fill().unwrap_or(1.0));
         Some(
             div()
                 .absolute()
-                .top_0()
-                .left_0()
-                .w_full()
-                .h(px(height))
+                .inset_0()
                 .overflow_hidden()
                 .children(layers)
-                .child(div().absolute().inset_0().bg(gpui::linear_gradient(
-                    180.0,
-                    gpui::linear_color_stop(panel.opacity(0.0), 0.0),
-                    gpui::linear_color_stop(panel, 1.0),
-                )))
                 .into_any_element(),
         )
     }
@@ -376,10 +344,9 @@ impl Shell {
             "Image",
             Some(match &self.wp.error {
                 Some(e) => e.clone().into(),
-                None => format!(
-                    "{current} · shown at the top of the empty view; the window takes its colours"
-                )
-                .into(),
+                None => {
+                    format!("{current} · fills the window; the empty view shows it sharp").into()
+                }
             }),
             div().flex().gap(px(6.)).child(choose).child(remove),
         ));
@@ -536,13 +503,6 @@ mod tests {
         // ...and reaches 1 exactly at the end.
         assert!((fade_in(0.18) - 1.0).abs() < 1e-3);
         assert!(fade_in(0.05) < fade_in(0.1));
-    }
-
-    #[test]
-    fn hero_is_zerons_share_of_the_window_up_to_its_cap() {
-        assert_eq!(hero_height(500.0), 360.0);
-        assert_eq!(hero_height(2000.0), 760.0);
-        assert_eq!(hero_height(-5.0), 0.0);
     }
 
     #[test]
