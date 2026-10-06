@@ -1,6 +1,6 @@
 //! Debug builds only: `TERN_DEV_KEYS="cmd-k s t b"` replays keystrokes into the window after
 //! start-up (`sleep-500` waits half a second, for a prompt to arrive; `click:x,y` and
-//! `dblclick:x,y` click, `rclick:x,y` right-clicks and `drag:x0,y0,x1,y1` drags at window points),
+//! `dblclick:x,y` click, `scroll:x,y,dy` scrolls, `type:text` types, `rclick:x,y` right-clicks and `drag:x0,y0,x1,y1` drags at window points),
 //! start-up, so a scripted visual check can drive the app without taking keyboard focus from
 //! whatever window the person at the machine is using.
 
@@ -26,6 +26,24 @@ pub fn replay(window: WindowHandle<Shell>, cx: &mut App) {
                 cx.background_executor()
                     .timer(Duration::from_millis(ms))
                     .await;
+                continue;
+            }
+            // `type:abc-1` types each character as itself; `-` cannot be a parsed key name.
+            if let Some(text) = source.strip_prefix("type:") {
+                for ch in text.chars() {
+                    let key = ch.to_string();
+                    let keystroke = Keystroke {
+                        modifiers: Modifiers::default(),
+                        key: key.clone(),
+                        key_char: Some(key),
+                    };
+                    let _ = cx.update_window(window.into(), |_, window, cx| {
+                        window.dispatch_keystroke(keystroke, cx)
+                    });
+                    cx.background_executor()
+                        .timer(Duration::from_millis(40))
+                        .await;
+                }
                 continue;
             }
             if let Some(events) = mouse(source) {
@@ -115,6 +133,15 @@ fn mouse(token: &str) -> Option<Vec<PlatformInput>> {
             up(at(*x, *y), 1),
             down(at(*x, *y), 2),
             up(at(*x, *y), 2),
+        ]),
+        ("scroll", [x, y, dy]) => Some(vec![
+            moved(at(*x, *y), false),
+            PlatformInput::ScrollWheel(gpui::ScrollWheelEvent {
+                position: at(*x, *y),
+                delta: gpui::ScrollDelta::Pixels(point(px(0.), px(*dy))),
+                modifiers: Modifiers::default(),
+                touch_phase: gpui::TouchPhase::Moved,
+            }),
         ]),
         ("drag", [x0, y0, x1, y1]) => {
             let mut events = vec![moved(at(*x0, *y0), false), down(at(*x0, *y0), 1)];
