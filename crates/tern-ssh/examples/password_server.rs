@@ -11,6 +11,9 @@
 //! without echo and checks it against the login password (`sudo: ok` or `Sorry, try again.`),
 //! for checking tern's "Fill password" shortcut.
 //!
+//! With `--open` any client logs in with no credentials (the `none` method), so other SSH
+//! apps can be measured connected without typing a password into them.
+//!
 //! With `--demo` the shell is a canned Ubuntu box (`web-01`, all data made up) with a MOTD, a
 //! coloured prompt and a table of commands (`docker ps`, `htop`, `df -h`, `tail -f`, `sudo ...`),
 //! for taking README screenshots of tern.
@@ -483,6 +486,8 @@ struct PasswordServer {
     typed: Vec<u8>,
     /// The canned shell (`--demo`).
     demo: bool,
+    /// Let anyone in with no credentials (`--open`), for benchmarking other clients.
+    open: bool,
     user: String,
     shell: demo::Shell,
     /// Session channels not yet claimed by a subsystem.
@@ -491,6 +496,19 @@ struct PasswordServer {
 
 impl server::Handler for PasswordServer {
     type Error = russh::Error;
+
+    async fn auth_none(&mut self, user: &str) -> Result<Auth, Self::Error> {
+        eprintln!("auth_none user={user} accepted={}", self.open);
+        self.user = user.to_owned();
+        Ok(if self.open {
+            Auth::Accept
+        } else {
+            Auth::Reject {
+                proceed_with_methods: None,
+                partial_success: false,
+            }
+        })
+    }
 
     async fn auth_password(&mut self, user: &str, password: &str) -> Result<Auth, Self::Error> {
         let ok = password == self.password.as_str();
@@ -661,6 +679,11 @@ async fn main() {
         .position(|a| a == "--demo")
         .map(|i| args.remove(i))
         .is_some();
+    let open = args
+        .iter()
+        .position(|a| a == "--open")
+        .map(|i| args.remove(i))
+        .is_some();
     let sftp_root = args.iter().position(|a| a == "--sftp").map(|i| {
         let dir = PathBuf::from(args.get(i + 1).cloned().expect("--sftp needs a directory"));
         args.drain(i..=i + 1);
@@ -673,7 +696,11 @@ async fn main() {
     let config = Arc::new(server::Config {
         // Only the password is offered at first; the code is offered after it, as sshd's
         // `AuthenticationMethods password,keyboard-interactive` does.
-        methods: MethodSet::from(&[MethodKind::Password][..]),
+        methods: if open {
+            MethodSet::from(&[MethodKind::None, MethodKind::Password][..])
+        } else {
+            MethodSet::from(&[MethodKind::Password][..])
+        },
         auth_rejection_time: Duration::ZERO,
         auth_rejection_time_initial: Some(Duration::ZERO),
         // A fixed key, so a restarted server is the same host to known_hosts (reconnect checks).
@@ -694,6 +721,7 @@ async fn main() {
             sftp_root: sftp_root.clone(),
             sudo,
             demo,
+            open,
             user: String::new(),
             shell: demo::Shell::default(),
             typed: Vec::new(),

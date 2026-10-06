@@ -62,20 +62,15 @@
 
 ## Memory
 
-Measured on the same Mac on 2026-10-06, using macOS `footprint` (the number Activity Monitor shows) summed over every process of each app:
+tern against the other two SSH clients, on the same Mac, the same day (2026-10-06), the same way. Each app was launched fresh and measured every 15 s for two minutes with macOS `footprint` (the number Activity Monitor shows), summed over all of its processes. The table gives the settled value at two minutes. "Connected" means one tab logged in to the same server.
 
-| App | Memory | What was measured |
-| --- | --- | --- |
-| **tern** | **83 MB** | fresh launch, idle, wallpaper on, 1 process |
-| **tern** | **124 MB** | one SSH session logged in, wallpaper on |
-| Tabby | 812 MB | one SSH tab open (at the password prompt), 5 processes |
-| iTerm2 | 200 MB | running with sessions |
-| Ghostty | 339 MB | running with sessions |
-| Termius | 627 MB | fresh launch, idle, 7 processes (Electron) |
-| Tabby | 752 MB | fresh launch, idle, 5 processes (Electron) |
-| Terminal.app | 30 MB | fresh launch: no SSH features, for scale |
+| App | Idle | Connected | Processes |
+| --- | --- | --- | --- |
+| **tern** | **86 MB** (108 MB with a wallpaper) | **76 MB** (125 MB with a wallpaper) | 1 |
+| Tabby | 471 MB | 580 MB | 5 (Electron) |
+| Termius | 583 MB | not measured | 7 (Electron) |
 
-Against the SSH clients it competes with, tern uses roughly a seventh to a ninth of the memory, idle or with a session open. Details and method are in [docs/perf.md](docs/perf.md).
+Connected, tern needs between a quarter and an eighth of Tabby's memory; idle, between a fifth and a seventh of either app's. The method, raw samples and the plain terminals (Terminal, iTerm2, Ghostty) are in [docs/perf.md](docs/perf.md).
 
 ## Keyboard
 
@@ -93,7 +88,7 @@ Every shortcut can be rebound in Settings → Shortcuts.
 
 ## Install
 
-**Download:** grab `tern-<version>-macos-arm64.zip` from [Releases](https://github.com/your-moon/tern/releases), unzip it, and move `tern.app` to Applications. Releases are signed with a Developer ID and notarised by Apple.
+**Download:** get `tern-<version>-macos-arm64.dmg` from [Releases](https://github.com/your-moon/tern/releases), open it, and drag tern to Applications. Releases are signed with a Developer ID and notarised by Apple, so it opens without a warning.
 
 **Build from source** (Rust 1.99+, macOS on Apple silicon):
 

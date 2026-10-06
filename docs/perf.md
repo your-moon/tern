@@ -79,16 +79,27 @@ bounds rather than idle figures.
 | Termius | 627 MB | 7 | fresh, idle |
 | Tabby | 752 MB | 5 | fresh, idle |
 
-### With an SSH session open
+### SSH clients, same protocol (supersedes the rows above for tern, Tabby, Termius)
 
-Same method, each app pointed at the demo server
-(`cargo run -p tern-ssh --example password_server -- --demo`, 127.0.0.1:2399).
+Each app launched fresh, `phys_footprint` summed over its processes every 15 s for 120 s.
+Connected = one tab logged in to `password_server --open --demo` on 127.0.0.1:2399 (the
+`--open` flag lets any client in with the `none` method, so no password is typed into any app).
+Release build of 0.1.0, notarised bundle.
 
-| App | phys_footprint | Processes | State |
-| --- | --- | --- | --- |
-| tern 0.1.0 | 124 MB | 1 | one tab, logged in, wallpaper on |
-| Tabby | 812–829 MB | 5 | one SSH tab open, at the password prompt (Tabby crashed before the login finished) |
+| App, state | 15s | 30s | 45s | 60s | 75s | 90s | 105s | 120s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| tern idle, no wallpaper | 67 | 67 | 67 | 67 | 67 | 91 | 86 | 86 |
+| tern idle, wallpaper | 124 | 129 | 124 | 129 | 124 | 124 | 107 | 108 |
+| tern connected, no wallpaper | 180 | 181 | 180 | 82 | 76 | 76 | 76 | 76 |
+| tern connected, wallpaper | 131 | 125 | 125 | 125 | 125 | 125 | 125 | 125 |
+| Tabby idle (empty profile) | 555 | 477 | 485 | 474 | 469 | 469 | 470 | 471 |
+| Tabby connected | 835 | 811 | 806 | 794 | 587 | 577 | 579 | 580 |
+| Termius idle | 632 | 599 | 594 | 589 | 587 | 583 | 581 | 583 |
 
-Termius was not measured with a live session: driving its UI on the owner's screen was
-stopped after Tabby crashed. Its idle figure above (627 MB) is already five times tern's
-figure with a session open.
+Notes:
+- The first minute is noisy for every app (start-up allocations, the wallpaper decode); the
+  README quotes the 120 s value.
+- Tabby connected ran with the owner's profile, so two of their old tabs were restored
+  (not connected). The empty profile did not connect from the command line, so it gives
+  only the idle figure.
+- Termius has no connected figure: its quick-connect could not be driven by script.
