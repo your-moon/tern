@@ -591,16 +591,12 @@ impl Session {
     }
 }
 
-#[path = "session_command.rs"]
-mod command;
-#[path = "session_fill.rs"]
-mod fill;
+#[path = "session_actions.rs"]
+mod actions;
 #[path = "session_vault.rs"]
 mod vault;
 
-#[path = "session_forwards.rs"]
-mod forwards;
-pub use forwards::SessionNote;
+pub use actions::SessionNote;
 
 /// A closed tab reconnects on Enter only, so a stray keystroke into a dead tab does not dial
 /// the server again. Enter arrives as CR from both the main and the keypad key.
