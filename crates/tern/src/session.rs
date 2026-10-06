@@ -43,6 +43,10 @@ impl Status {
 
 pub struct Session {
     pub status: Status,
+    /// When the current connection came up, and when it ended; the status line shows the
+    /// time between (or since).
+    connected_at: Option<std::time::Instant>,
+    ended_at: Option<std::time::Instant>,
     flow: Option<vault::Flow>,
     /// The vault entry the open server question would answer.
     asking: Option<tern_vault::Key>,
@@ -107,6 +111,8 @@ impl Session {
                 } else {
                     Status::Connecting
                 },
+                connected_at: None,
+                ended_at: None,
                 flow: None,
                 asking: None,
                 typed: None,
@@ -238,7 +244,21 @@ impl Session {
         }
         self._session_events = Self::start(&mut self.link, self.size, cx);
         self.status = Status::Connecting;
+        self.connected_at = None;
+        self.ended_at = None;
         cx.notify();
+    }
+
+    /// `user@host:port` for the status line.
+    pub fn label(&self) -> String {
+        let spec = &self.link.spec;
+        crate::statusline::host_label(&spec.user, &spec.host, spec.port)
+    }
+
+    /// How long this connection has been up (frozen when it closed); `None` before it connects.
+    pub fn elapsed(&self) -> Option<std::time::Duration> {
+        let start = self.connected_at?;
+        Some(self.ended_at.unwrap_or_else(std::time::Instant::now) - start)
     }
 
     fn on_session_event(&mut self, event: SessionEvent, cx: &mut Context<Self>) {
@@ -252,11 +272,14 @@ impl Session {
             SessionEvent::Prompt(prompt) => self.on_prompt(prompt, cx),
             SessionEvent::Connected => {
                 self.status = Status::Connected;
+                self.connected_at = Some(std::time::Instant::now());
+                self.ended_at = None;
                 self.offer_save(cx);
                 cx.notify();
             }
             SessionEvent::Closed { exit_status, error } => {
                 self.status = Status::Closed;
+                self.ended_at = Some(std::time::Instant::now());
                 self.login = None;
                 self.flow = None;
                 self.asking = None;

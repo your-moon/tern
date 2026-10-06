@@ -184,6 +184,7 @@ impl Shell {
                     |s, _, _, cx| s.change_font(|st| st.terminal_font_size = FONT_DEFAULT, cx),
                 )));
         let reduce = self.settings.reduce_motion;
+        let show_status = self.settings.show_status_line;
         let mut appearance_modes = div().flex().gap(px(6.));
         for (id, label, mode) in [
             ("appearance-system", "System", AppearanceMode::System),
@@ -214,6 +215,19 @@ impl Shell {
                     "Appearance",
                     Some("System follows macOS; the default terminal colours follow it too".into()),
                     appearance_modes,
+                ))
+                .child(w::row(
+                    &t,
+                    false,
+                    "Show status line",
+                    Some("Host, connection state and session time under the terminal".into()),
+                    div()
+                        .id("toggle-status-line")
+                        .cursor_pointer()
+                        .on_click(cx.listener(|s, _, _, cx| {
+                            s.update_settings(|st| st.show_status_line = !st.show_status_line, cx)
+                        }))
+                        .child(w::toggle(&t, show_status, "status-line")),
                 ))
                 .child(w::row(
                     &t,

@@ -19,7 +19,7 @@ use crate::settings::{self, SIDEBAR_DEFAULT, Settings};
 use crate::split::{self, PaneId};
 use crate::tabs::{self, ActivateTab, CloseTab, NextTab, PrevTab, TabInfo};
 use crate::theme::{PANEL_RADIUS, SPACE_SM, Theme, UI_FONT};
-use crate::{sidebar, titlebar};
+use crate::{sidebar, statusline, titlebar};
 
 actions!(
     tern,
@@ -162,6 +162,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 import: None,
                 wp: wallpaper_ui::State::default(),
                 system_light: false,
+                _clock: None,
             };
             shell.refresh_hosts();
             shell
@@ -178,6 +179,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
         shell.system_light = is_light(window.appearance());
         shell.apply_appearance(cx);
         shell.install_input_colors(cx);
+        shell.start_clock(cx);
         cx.observe_window_appearance(window, |shell, window, cx| {
             shell.system_light = is_light(window.appearance());
             shell.apply_appearance(cx);
@@ -244,6 +246,7 @@ pub struct Shell {
     wp: wallpaper_ui::State,
     /// Whether macOS is in its light appearance; what `Appearance: System` follows.
     system_light: bool,
+    _clock: Option<gpui::Task<()>>,
 }
 
 /// Debug builds: keep scripted logins out of the real ~/.ssh/known_hosts.
@@ -452,6 +455,44 @@ impl Shell {
         }
     }
 
+    /// The strip under the active tab's terminal, when the setting is on.
+    fn render_status_line(&self, bg: gpui::Hsla, cx: &App) -> Option<impl IntoElement + use<>> {
+        if !self.settings.show_status_line {
+            return None;
+        }
+        let session = self.tabs.get(self.active)?.session().read(cx);
+        Some(statusline::render(
+            &self.theme,
+            &session.label(),
+            &session.status,
+            session.elapsed(),
+            bg,
+        ))
+    }
+
+    /// Repaints once a second while the active tab is connected, so its session time counts.
+    fn start_clock(&mut self, cx: &mut Context<Self>) {
+        self._clock = Some(cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_secs(1))
+                    .await;
+                let alive = this.update(cx, |s, cx| {
+                    let ticking = s.settings.show_status_line
+                        && s.tabs
+                            .get(s.active)
+                            .is_some_and(|t| t.session().read(cx).status == Status::Connected);
+                    if ticking {
+                        cx.notify();
+                    }
+                });
+                if alive.is_err() {
+                    break;
+                }
+            }
+        }));
+    }
+
     fn refresh_hosts(&mut self) {
         self.hosts = self.connections.iter().map(Connection::entry).collect();
     }
@@ -654,6 +695,7 @@ impl Render for Shell {
             panel_bg
         };
         let layers = self.wallpaper_layers(window);
+        let status_line = self.render_status_line(panel_bg, cx);
         let theme_picker = self.render_theme_picker(window, cx);
         let toast = self.render_toast(window, cx);
         let context_menu = self.render_menu(cx);
@@ -787,7 +829,10 @@ impl Render for Shell {
                             // fill; a second one here would stack.
                             .when(!(wallpaper && has_tab), |el| el.bg(panel_bg))
                             .overflow_hidden()
-                            .child(self.panel_content(cx)),
+                            .flex()
+                            .flex_col()
+                            .child(div().flex_1().min_h_0().child(self.panel_content(cx)))
+                            .when_some(status_line, |el, line| el.child(line)),
                     )
                     .children(handle)
                     .into_any_element(),

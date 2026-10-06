@@ -22,6 +22,7 @@ mod shell;
 mod sidebar;
 mod snippets;
 mod split;
+mod statusline;
 mod tabs;
 mod tabs_store;
 mod text_input;
