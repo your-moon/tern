@@ -14,11 +14,15 @@ use tern_vault::{Key, Vault, VaultError};
 use super::{Shell, Toast, ToastKind};
 use crate::connections::{self, Connection, DEFAULT_KEEP_ALIVE, Draft};
 use crate::keeper::Keeper;
-use crate::settings_widgets::toggle;
 use crate::sidebar;
 use crate::text_input::{InputColors, TextInput};
 use crate::theme::Theme;
 
+#[path = "shell_connection_advanced.rs"]
+mod advanced;
+
+/// Space kept free around the form sheet, per side.
+const FORM_MARGIN: f32 = 24.;
 const FORWARD_HINT: &str = "-L 8080:db:5432   (-R and -D too)";
 
 pub(super) struct ConnectionForm {
@@ -34,6 +38,8 @@ pub(super) struct ConnectionForm {
     proxy_jump: Entity<TextInput>,
     keep_alive: Entity<TextInput>,
     forward_agent: bool,
+    /// Whether the collapsed "Advanced" section is showing its fields.
+    advanced_open: bool,
     /// Kept from an import; the form has no field for these.
     proxy_command: Option<String>,
     vault_key: Entity<TextInput>,
@@ -121,18 +127,29 @@ impl Shell {
         } else {
             "Optional, saved to the vault"
         };
+        let advanced_open = advanced::in_use(&d);
         let form = ConnectionForm {
             editing,
+            advanced_open,
             name: field("production-web", false, d.name),
             host: field("10.0.0.5 or example.com", false, d.host),
-            port: field("22", false, d.port.to_string()),
+            // A default port stays blank so the field looks like its neighbours; blank saves as 22.
+            port: field(
+                "22",
+                false,
+                if d.port == 22 {
+                    String::new()
+                } else {
+                    d.port.to_string()
+                },
+            ),
             user: field("deploy", false, d.user),
             key: field(
                 "~/.ssh/id_ed25519 (optional)",
                 false,
                 d.identity_file.unwrap_or_default(),
             ),
-            group: field("none", false, d.group.unwrap_or_default()),
+            group: field("No group", false, d.group.unwrap_or_default()),
             tags: field("comma separated, e.g. eu, db", false, d.tags.join(", ")),
             proxy_jump: field("bastion, or user@host:port (optional)", false, d.proxy_jump),
             keep_alive: field(
@@ -214,76 +231,6 @@ impl Shell {
         cx.notify();
     }
 
-    /// The "Port forwards" list: one row per spec with a remove button, and an add button.
-    fn forward_rows(&self, form: &ConnectionForm, cx: &mut Context<Self>) -> impl IntoElement {
-        let t = &self.theme;
-        let mut list = div().flex().flex_col().gap(px(6.)).child(
-            div()
-                .flex()
-                .items_center()
-                .justify_between()
-                .child(div().text_xs().text_color(t.muted).child("Port forwards"))
-                .child(
-                    div()
-                        .id("form-add-forward")
-                        .px(px(8.))
-                        .py(px(2.))
-                        .rounded(px(6.))
-                        .text_xs()
-                        .text_color(t.accent)
-                        .cursor_pointer()
-                        .hover(|s| s.bg(t.row_hover))
-                        .on_click(
-                            cx.listener(|shell, _, window, cx| shell.add_forward_row(window, cx)),
-                        )
-                        .child("+ Add"),
-                ),
-        );
-        for (ix, input) in form.forwards.iter().enumerate() {
-            list =
-                list.child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(px(6.))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .h(px(30.))
-                                .px(px(10.))
-                                .flex()
-                                .items_center()
-                                .rounded(px(8.))
-                                .border_1()
-                                .border_color(t.border)
-                                .bg(t.row_hover)
-                                .overflow_hidden()
-                                .text_sm()
-                                .child(input.clone()),
-                        )
-                        .child(
-                            div()
-                                .id(("form-remove-forward", ix))
-                                .flex_none()
-                                .size(px(24.))
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .rounded(px(6.))
-                                .text_color(t.muted)
-                                .cursor_pointer()
-                                .hover(|s| s.bg(t.row_hover))
-                                .on_click(cx.listener(move |shell, _, _, cx| {
-                                    shell.remove_forward_row(ix, cx)
-                                }))
-                                .child("×"),
-                        ),
-                );
-        }
-        list
-    }
-
     pub(crate) fn connection(&self, ix: usize) -> Option<Connection> {
         self.connections.get(ix).cloned()
     }
@@ -322,16 +269,18 @@ impl Shell {
             &form.key,
             &form.group,
             &form.tags,
-            &form.proxy_jump,
-            &form.keep_alive,
-        ];
-        fields.extend(&form.forwards);
-        fields.extend([
-            &form.vault_key,
-            &form.password_command,
-            &form.sudo_password_command,
             &form.password,
-        ]);
+        ];
+        // A collapsed section is skipped; its fields are not on screen to land on.
+        if form.advanced_open {
+            fields.extend([&form.proxy_jump, &form.keep_alive]);
+            fields.extend(&form.forwards);
+            fields.extend([
+                &form.vault_key,
+                &form.password_command,
+                &form.sudo_password_command,
+            ]);
+        }
         if step != VaultStep::None {
             fields.push(&form.vault_pass);
         }
@@ -623,42 +572,8 @@ impl Shell {
             .child(row("Group", &form.group, t))
             .child(groups)
             .child(row("Tags", &form.tags, t))
-            .child(row("Jump host", &form.proxy_jump, t))
-            .child(
-                div()
-                    .flex()
-                    .items_end()
-                    .gap(px(10.))
-                    .child(div().w(px(160.)).child(row(
-                        "Keep-alive (seconds, 0 = off)",
-                        &form.keep_alive,
-                        t,
-                    )))
-                    .child(
-                        div()
-                            .id("form-forward-agent")
-                            .h(px(30.))
-                            .flex_1()
-                            .flex()
-                            .items_center()
-                            .justify_end()
-                            .gap(px(8.))
-                            .cursor_pointer()
-                            .on_click(cx.listener(|shell, _, _, cx| {
-                                if let Some(form) = shell.form.as_mut() {
-                                    form.forward_agent = !form.forward_agent;
-                                }
-                                cx.notify();
-                            }))
-                            .child(div().text_sm().child("Forward SSH agent"))
-                            .child(toggle(t, form.forward_agent, "form-forward-agent")),
-                    ),
-            )
-            .child(self.forward_rows(form, cx))
-            .child(row("Vault key", &form.vault_key, t))
-            .child(row("Password command", &form.password_command, t))
-            .child(row("Sudo password command", &form.sudo_password_command, t))
-            .child(row("Password", &form.password, t));
+            .child(row("Password", &form.password, t))
+            .child(self.advanced_section(form, cx));
         match step {
             VaultStep::None => {}
             VaultStep::Unlock => body = body.child(row("Vault passphrase", &form.vault_pass, t)),
@@ -672,19 +587,17 @@ impl Shell {
                     .child(row("Repeat passphrase", &form.vault_repeat, t));
             }
         }
-        if let Some(e) = &form.error {
-            body = body.child(
-                div()
-                    .text_xs()
-                    .text_color(t.danger)
-                    .child(SharedString::from(e.clone())),
-            );
-        }
         let busy = form.busy;
         let card =
             div()
                 .id("connection-form")
-                .w(px(460.0_f32.min(f32::from(viewport.width) - 32.0)))
+                .w(px(
+                    460.0_f32.min(f32::from(viewport.width) - 2. * FORM_MARGIN)
+                ))
+                // The sheet never outgrows the window: the body scrolls between a header and
+                // a footer that stay put, so Save is always reachable.
+                .max_h(viewport.height - px(2. * FORM_MARGIN))
+                .overflow_hidden()
                 .flex()
                 .flex_col()
                 .rounded(px(16.))
@@ -695,6 +608,7 @@ impl Shell {
                 .on_key_down(cx.listener(Self::on_form_key))
                 .child(
                     div()
+                        .flex_none()
                         .px(px(16.))
                         .py(px(12.))
                         .border_b_1()
@@ -702,16 +616,32 @@ impl Shell {
                         .text_size(px(14.))
                         .child(title),
                 )
-                .child(body)
                 .child(
                     div()
+                        .id("connection-form-body")
+                        .flex_1()
+                        .min_h_0()
+                        .overflow_y_scroll()
+                        .child(body),
+                )
+                .child(
+                    div()
+                        .flex_none()
                         .px(px(16.))
                         .py(px(10.))
                         .border_t_1()
                         .border_color(t.hairline)
                         .flex()
-                        .justify_end()
+                        .items_center()
                         .gap(px(8.))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .text_xs()
+                                .text_color(t.danger)
+                                .children(form.error.clone().map(SharedString::from)),
+                        )
                         .child(button("form-cancel", "Cancel", false, t).on_click(
                             cx.listener(|shell, _, window, cx| shell.close_form(window, cx)),
                         ))
