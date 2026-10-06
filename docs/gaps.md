@@ -82,7 +82,7 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 | F3 | Keyboard-interactive (2FA) in the app | Tested in tern-ssh only |
 | ✓ F4 | Window at its 900×600 minimum, fullscreen | Not checked since tabs and settings |
 | ✓ F5 | Many hosts (200+) in sidebar and picker | Scroll and speed not measured |
-| F6 | Crash reported this morning | Not reproduced; panic.log now records any |
+| ✓ F6 | Crash reported this morning | It was the forced-panic test (same binary UUID d0ce8089); no panic since |
 | F7 | 153 MB start-up memory peak | Unexplained (docs/perf.md) |
 | ✓ F8 | macOS Reduce motion | Follows the system setting via objc2-app-kit (safe), re-read on activation |
 
