@@ -59,11 +59,11 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 
 | # | Gap | Impact |
 | --- | --- | --- |
-| V1 | Keychain unlock (opt-in) | Passphrase every launch (#15) |
-| V2 | Keys stored in the vault, key generation | Keys must be files on disk (#15) |
-| V3 | List and delete saved secrets | Vault page shows a count only |
-| V4 | Change vault passphrase | Not possible |
-| V5 | Auto-lock after idle | Stays unlocked until quit |
+| ✓ V1 | Keychain unlock (opt-in) | Passphrase every launch (#15) |
+| ✓ V2 | Keys stored in the vault, key generation | Keys must be files on disk (#15) |
+| ✓ V3 | List and delete saved secrets | Vault page shows a count only |
+| ✓ V4 | Change vault passphrase | Not possible |
+| ✓ V5 | Auto-lock after idle | Stays unlocked until quit |
 
 ## 5. Sync
 

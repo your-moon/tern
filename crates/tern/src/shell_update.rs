@@ -119,7 +119,8 @@ impl Shell {
     /// Runs the daily check when the setting allows it. The attempt is stamped even when it
     /// fails, so being offline does not retry on every launch.
     pub(crate) fn check_for_updates(&mut self, cx: &mut Context<Self>) {
-        if !self.settings.check_for_updates {
+        // Debug builds are test instances, started many times a day; they never call GitHub.
+        if cfg!(debug_assertions) || !self.settings.check_for_updates {
             return;
         }
         let Some(dir) = settings::dir() else { return };
