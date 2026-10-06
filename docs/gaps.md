@@ -83,7 +83,7 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 | F5 | Many hosts (200+) in sidebar and picker | Scroll and speed not measured |
 | F6 | Crash reported this morning | Not reproduced; panic.log now records any |
 | F7 | 153 MB start-up memory peak | Unexplained (docs/perf.md) |
-| F8 | macOS Reduce motion | Needs a safe API (#18) |
+| ✓ F8 | macOS Reduce motion | Follows the system setting via objc2-app-kit (safe), re-read on activation |
 
 ## 7. Shipping
 

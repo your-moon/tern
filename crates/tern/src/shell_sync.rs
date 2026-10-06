@@ -260,7 +260,7 @@ impl Shell {
             return;
         };
         self.settings = crate::settings::Settings::load(&dir);
-        cx.set_reduce_motion(self.settings.reduce_motion);
+        crate::motion::apply(self.settings.reduce_motion, cx);
         cx.set_global(crate::keymap::Keymap::load(&dir));
         crate::keymap::apply(cx);
         match crate::connections::load(&dir) {

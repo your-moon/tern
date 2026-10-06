@@ -221,13 +221,13 @@ impl Shell {
                     &t,
                     true,
                     "Reduce motion",
-                    Some("Hold the connecting pulse and sidebar slide still".into()),
+                    Some("Hold the connecting pulse and sidebar slide still. On by itself when macOS Reduce motion is on".into()),
                     div()
                         .id("toggle-reduce-motion")
                         .cursor_pointer()
                         .on_click(cx.listener(|s, _, _, cx| {
                             s.update_settings(|st| st.reduce_motion = !st.reduce_motion, cx);
-                            cx.set_reduce_motion(s.settings.reduce_motion);
+                            crate::motion::apply(s.settings.reduce_motion, cx);
                         }))
                         .child(w::toggle(&t, reduce, "reduce-motion")),
                 )),

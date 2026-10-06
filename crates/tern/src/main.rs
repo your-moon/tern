@@ -9,6 +9,7 @@ mod keeper;
 mod keymap;
 mod login;
 mod menus;
+mod motion;
 mod pane;
 mod picker;
 mod runtime;

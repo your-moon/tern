@@ -7187,6 +7187,7 @@ dependencies = [
  "gpui-pre",
  "gpui-pre-platform",
  "nucleo-matcher",
+ "objc2-app-kit 0.3.2",
  "serde",
  "serde_json",
  "tempfile",

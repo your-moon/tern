@@ -105,8 +105,14 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
         shell.refresh_hosts();
         cx.new(|_| shell)
     })?;
-    window.update(cx, |shell, _, cx| {
-        cx.set_reduce_motion(shell.settings.reduce_motion)
+    window.update(cx, |shell, window, cx| {
+        crate::motion::apply(shell.settings.reduce_motion, cx);
+        // macOS posts no notification gpui forwards, so re-read the preference whenever tern
+        // comes to the front: the user changes it in System Settings, then switches back.
+        cx.observe_window_activation(window, |shell, _, cx| {
+            crate::motion::apply(shell.settings.reduce_motion, cx);
+        })
+        .detach();
     })?;
     // With no tab open nothing else holds focus, and gpui only dispatches key bindings along
     // the focused element's path, so the shell itself must be focused for ⌘K to work.
