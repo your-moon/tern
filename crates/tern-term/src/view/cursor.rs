@@ -17,11 +17,12 @@ pub(super) fn blink_phase(on: bool, blinking: bool, since_input: Duration) -> bo
 }
 
 impl TerminalView {
-    /// Apply behaviour options (cursor style, blink, ...). Cheap; call it
+    /// Apply behaviour options (cursor style, blink, scrollback, ...). Cheap; call it
     /// whenever the app's settings change.
     pub fn set_options(&mut self, options: TerminalOptions, cx: &mut Context<Self>) {
         self.terminal.update(cx, |t, cx| {
             t.set_default_cursor(options.cursor_style, options.cursor_blink);
+            t.set_scrollback(options.scrollback_lines);
             cx.notify();
         });
         self.options = options;

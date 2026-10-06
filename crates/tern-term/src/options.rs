@@ -5,6 +5,8 @@
 
 use alacritty_terminal::vte::ansi::{CursorShape, CursorStyle};
 
+use crate::terminal::SCROLLBACK_LINES;
+
 /// The cursor drawn until the remote picks its own with DECSCUSR.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CursorStyleSetting {
@@ -39,6 +41,8 @@ pub struct TerminalOptions {
     /// Whether the default cursor blinks. The remote's DECSCUSR (odd = blink,
     /// even = steady) overrides it until reset.
     pub cursor_blink: bool,
+    /// Lines of scrollback kept client-side.
+    pub scrollback_lines: usize,
 }
 
 impl Default for TerminalOptions {
@@ -46,6 +50,7 @@ impl Default for TerminalOptions {
         Self {
             cursor_style: CursorStyleSetting::Block,
             cursor_blink: false,
+            scrollback_lines: SCROLLBACK_LINES,
         }
     }
 }

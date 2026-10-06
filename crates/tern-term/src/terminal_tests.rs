@@ -128,3 +128,38 @@ fn utf8_split_across_feeds_reassembles() {
     t.process(&b[1..]);
     assert_eq!(t.row_text(0), "é");
 }
+
+#[test]
+fn history_is_capped_by_the_constructor_argument() {
+    let mut t = Terminal::with_scrollback(10, 3, 5);
+    for i in 1..=40 {
+        t.process(format!("line{i}\r\n").as_bytes());
+    }
+    assert_eq!(t.history_size(), 5);
+    t.scroll(100);
+    assert_eq!(t.row_text(0), "line34");
+    assert_eq!(Terminal::new(10, 3).history_size(), 0);
+}
+
+#[test]
+fn scrollback_resizes_at_runtime_without_losing_what_fits() {
+    let mut t = Terminal::with_scrollback(10, 3, 20);
+    for i in 1..=30 {
+        t.process(format!("line{i}\r\n").as_bytes());
+    }
+    assert_eq!(t.history_size(), 20);
+    t.set_scrollback(8);
+    assert_eq!(t.history_size(), 8, "shrinking drops the oldest lines");
+    t.scroll(100);
+    assert_eq!(
+        t.row_text(0),
+        "line21",
+        "the newest 8 history lines survive"
+    );
+    t.scroll_to_bottom();
+    t.set_scrollback(50);
+    for i in 31..=60 {
+        t.process(format!("line{i}\r\n").as_bytes());
+    }
+    assert_eq!(t.history_size(), 38);
+}

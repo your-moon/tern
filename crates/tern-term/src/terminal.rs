@@ -208,9 +208,14 @@ impl EventEmitter<TerminalEvent> for Terminal {}
 
 impl Terminal {
     pub fn new(cols: u16, rows: u16) -> Self {
+        Self::with_scrollback(cols, rows, SCROLLBACK_LINES)
+    }
+
+    /// Like [`Self::new`] with a chosen history size (lines).
+    pub fn with_scrollback(cols: u16, rows: u16, scrollback_lines: usize) -> Self {
         let capture = EventCapture::default();
         let config = Config {
-            scrolling_history: SCROLLBACK_LINES,
+            scrolling_history: scrollback_lines,
             ..Config::default()
         };
         let term = Term::new(config.clone(), &GridSize::new(cols, rows), capture.clone());
@@ -302,6 +307,15 @@ impl Terminal {
     fn apply_config(&mut self) {
         self.term.set_options(self.config.clone());
         self.capture.events.borrow_mut().clear();
+    }
+
+    /// Change the history size at runtime. Shrinking drops the oldest lines
+    /// at once; growing keeps what is there and makes room for more.
+    pub fn set_scrollback(&mut self, lines: usize) {
+        if self.config.scrolling_history != lines {
+            self.config.scrolling_history = lines;
+            self.apply_config();
+        }
     }
 
     /// The cursor used until the remote sends DECSCUSR (and after `CSI 0 SP q`).
