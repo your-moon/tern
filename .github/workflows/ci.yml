@@ -28,7 +28,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-mutants --locked
       - run: cargo mutants -p tern-vault -p tern-sync --no-shuffle
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mutants-report
