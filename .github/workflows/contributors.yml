@@ -1,0 +1,82 @@
+name: contributors
+# Greets a first-time contributor when they open a pull request, and congratulates them when
+# their first one is merged, the way LLVM's bot does.
+#
+# pull_request_target runs with this repository's token even for pull requests from forks, so
+# it never checks out or runs the pull request's code: it only posts comments. Untrusted values
+# (the author's login) reach the shell through env, never through ${{ }} inside a script.
+on:
+  pull_request_target:
+    types: [opened, closed]
+permissions:
+  pull-requests: write
+jobs:
+  welcome:
+    if: >-
+      github.event.action == 'opened' &&
+      (github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR' ||
+       github.event.pull_request.author_association == 'FIRST_TIMER')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      AUTHOR: ${{ github.event.pull_request.user.login }}
+    steps:
+      - name: Welcome comment
+        run: |
+          marker='<!-- tern-welcome -->'
+          if gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --jq '.[].body' | grep -qF "$marker"; then
+            exit 0
+          fi
+          cat > body.md <<EOF
+          $marker
+          Hello @$AUTHOR :wave:
+
+          Thank you for submitting a pull request to tern. Since this is your first one, here is what a reviewer will look for, from [CONTRIBUTING.md](https://github.com/$GITHUB_REPOSITORY/blob/main/CONTRIBUTING.md):
+
+          - [ ] The description links its issue with \`Closes #N\` and says how you verified the change: the command and its result. If you couldn't run something, say so.
+          - [ ] \`cargo fmt --all\`, \`cargo clippy --workspace --all-targets -- -D warnings\`, \`cargo test --workspace\` and \`scripts/check-craft.sh\` pass.
+          - [ ] For risky logic (parsing, key encoding, host keys, buffering), you broke the code on purpose and the new test failed.
+          - [ ] UI changes have a screenshot.
+          - [ ] Anything a user would notice has a line under \`## [Unreleased]\` in CHANGELOG.md.
+
+          AI tools are welcome. You are still the author, so read every line and be ready to explain it.
+
+          ### Frequently asked questions
+
+          **Why haven't the checks started?** GitHub holds CI for a first-time contributor until a maintainer approves the run. That is a GitHub rule, not a judgement on the change.
+
+          **What if there are no comments?** If nobody has replied after a week, comment "ping".
+
+          **Found a security problem?** Report it privately as described in [SECURITY.md](https://github.com/$GITHUB_REPOSITORY/blob/main/SECURITY.md), not in a pull request.
+          EOF
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file body.md
+
+  congratulate:
+    if: github.event.action == 'closed' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      AUTHOR: ${{ github.event.pull_request.user.login }}
+      OWNER: ${{ github.repository_owner }}
+    steps:
+      - name: Congratulate a first merged pull request
+        run: |
+          [ "$AUTHOR" = "$OWNER" ] && exit 0
+          case "$AUTHOR" in *'[bot]') exit 0 ;; esac
+          # The pulls list, not search: search lags behind a merge that just happened.
+          merged=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls?state=closed&per_page=100" \
+            --jq ".[] | select(.user.login == \"$AUTHOR\" and .merged_at != null) | .number" | wc -l | tr -d " ")
+          [ "$merged" = 1 ] || exit 0
+          cat > body.md <<EOF
+          <!-- tern-first-merge -->
+          @$AUTHOR Congratulations on having your first pull request merged into tern!
+
+          Your change is now on \`main\`, where CI builds and tests it again on macOS, Windows and Linux, and it will ship in the next release. If a build on \`main\` breaks, you may get a comment on this pull request.
+
+          If your change does cause a problem, it may be reverted, or you can revert it yourself. That is a normal part of development, not a judgement on the work: fix it and open a new pull request.
+
+          If you don't hear anything, no action is needed from you. Your change is working as expected, well done!
+          EOF
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file body.md
