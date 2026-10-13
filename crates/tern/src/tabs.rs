@@ -168,7 +168,7 @@ fn tab_pill(
             if e.click_count() >= 2 {
                 shell.start_rename(ix, window, cx);
             } else {
-                shell.activate_tab(ix, window, cx);
+                shell.show_tab(ix, window, cx);
             }
         }))
         .on_drag(dragged, |tab, _, _, cx| cx.new(|_| tab.clone()))

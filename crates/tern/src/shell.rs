@@ -661,12 +661,12 @@ impl Render for Shell {
                 s.move_pane_focus(split::Direction::Down, w, cx)
             }))
             .on_action(cx.listener(|s, _: &NextTab, w, cx| {
-                s.activate_tab(tabs::step(s.active, s.tabs.len(), 1), w, cx)
+                s.show_tab(tabs::step(s.active, s.tabs.len(), 1), w, cx)
             }))
             .on_action(cx.listener(|s, _: &PrevTab, w, cx| {
-                s.activate_tab(tabs::step(s.active, s.tabs.len(), -1), w, cx)
+                s.show_tab(tabs::step(s.active, s.tabs.len(), -1), w, cx)
             }))
-            .on_action(cx.listener(|s, a: &ActivateTab, w, cx| s.activate_tab(a.0, w, cx)))
+            .on_action(cx.listener(|s, a: &ActivateTab, w, cx| s.show_tab(a.0, w, cx)))
             .on_action(cx.listener(|s, _: &ToggleHostPicker, w, cx| s.toggle_picker(w, cx)))
             .on_action(cx.listener(|s, _: &FocusHostSearch, w, cx| s.focus_search(w, cx)))
             .on_action(cx.listener(|s, _: &ToggleSnippets, w, cx| s.toggle_snippet_picker(w, cx)))

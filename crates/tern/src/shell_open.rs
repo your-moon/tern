@@ -26,7 +26,7 @@ impl Shell {
                     s.reconnect(cx);
                 }
             });
-            return self.activate_tab(ix, window, cx);
+            return self.show_tab(ix, window, cx);
         }
         match ConnectSpec::from_host_entry(&host) {
             Ok(spec) => self.open_tab(Launch::Ssh(spec), host.alias, window, cx),
@@ -65,7 +65,7 @@ impl Shell {
             panes: vec![pane],
         });
         self.error = None;
-        self.activate_tab(self.tabs.len() - 1, window, cx);
+        self.show_tab(self.tabs.len() - 1, window, cx);
     }
 
     /// A session with the settings applied, and an eye on it for the day it drops.
@@ -120,8 +120,7 @@ impl Shell {
                             Toast::new(ToastKind::Critical, format!("{alias} disconnected"))
                                 .action("Show", move |s, window, cx| {
                                     if let Some(ix) = s.tabs.iter().position(|t| t.alias == alias) {
-                                        s.settings_page = None;
-                                        s.activate_tab(ix, window, cx);
+                                        s.show_tab(ix, window, cx);
                                     }
                                 }),
                             cx,
@@ -147,6 +146,8 @@ impl Shell {
         }
     }
 
+    /// Makes tab `ix` the active one. Settings, when open, stays open over it: this runs for
+    /// reorders, closes and restores too, which are not a request to see the session.
     pub fn activate_tab(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some(tab) = self.tabs.get(ix) else {
             return;
@@ -154,10 +155,19 @@ impl Shell {
         self.active = ix;
         self.persist_tabs();
         self.tab_scroll.scroll_to_item(ix);
-        let focus = tab.session().read(cx).view.focus_handle(cx);
-        window.focus(&focus, cx);
+        // Behind Settings the terminal is hidden, and keys sent to it would be typed blind.
+        if self.settings_page.is_none() {
+            let focus = tab.session().read(cx).view.focus_handle(cx);
+            window.focus(&focus, cx);
+        }
         self.apply_broadcast(cx);
         cx.notify();
+    }
+
+    /// Shows tab `ix` because the user asked for that session, so Settings closes.
+    pub fn show_tab(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.settings_page = None;
+        self.activate_tab(ix, window, cx);
     }
 
     /// Closing a tab drops its session, which ends the connection.

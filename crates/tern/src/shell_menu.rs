@@ -116,7 +116,7 @@ impl Shell {
                     let session = tab.session().clone();
                     session.update(cx, |s, cx| s.reconnect(cx));
                 }
-                s.activate_tab(ix, w, cx);
+                s.show_tab(ix, w, cx);
             }));
         }
         let again = alias.clone();
