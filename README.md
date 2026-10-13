@@ -23,11 +23,13 @@ Or download the DMG from [Releases](https://github.com/your-moon/tern/releases).
 
 ## Why tern
 
-tern does what Termius and Tabby do for a list of servers: saved hosts, ⌘K to any of them, SFTP, splits, snippets and port forwards. It runs as one native process, and one connected tab takes 76 MB where Tabby takes 580 MB ([how it was measured](docs/perf.md)).
+At work I jump between a lot of servers, and that meant Termius and Tabby every day. What I actually used them for was the host list and the vault, and for that each one sat at around 500 MB of RAM. Termius also wanted a paid plan just to sync my vault between Macs. So I built my own, with a little of my own taste added.
+
+tern does the Termius and Tabby job for a list of servers: saved hosts, ⌘K to any of them, SFTP, splits, snippets and port forwards. It runs as one native process, and one connected tab takes 76 MB where Tabby takes 580 MB ([how I measured it](docs/perf.md)).
 
 Passwords come from your SSH key, from a password-manager command such as `gopass show -o work/ssh/web-01`, or from tern's age-encrypted vault. At a `sudo` prompt, ⌘\\ types the password. It never types one on its own.
 
-Hosts, snippets and settings sync to a private Git repository you own, encrypted on your Mac first.
+Hosts, snippets and settings sync to a private Git repository you own, encrypted on your Mac first. No account, no subscription.
 
 ## A closer look
 
@@ -57,6 +59,10 @@ Every shortcut can be rebound in Settings. The full list, with the Windows and L
 ## Other platforms and building
 
 Windows and Linux builds are on the [Releases](https://github.com/your-moon/tern/releases) page as a preview: they pass CI but haven't been run on a real desktop yet, so reports are welcome. To build tern yourself on any platform, see [docs/building.md](docs/building.md). To contribute, start with [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Feedback
+
+tern is young (0.1.3), and I use it every day. If it's missing the one thing that keeps you on Termius, or something breaks, [open an issue](https://github.com/your-moon/tern/issues). I read all of them. Small fixes are very welcome too: the issues labelled [`good first issue`](https://github.com/your-moon/tern/labels/good%20first%20issue) are a good place to start.
 
 ## Credits
 
