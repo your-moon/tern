@@ -57,7 +57,9 @@ All four must pass; CI runs the same commands plus `cargo deny`. [CRAFT.md](CRAF
 
 ## Using AI tools
 
-AI tools are welcome. You are still the author: read every line you submit, run the checks above, and be ready to explain the change in review. Mentioning which tool you used helps the reviewer but isn't required.
+AI tools are welcome, and using one is nothing to hide. If a tool helped with a change, say so in the pull request description, for example "Drafted with an AI assistant; I reviewed and tested every line", and mention anything you didn't check yourself. It tells the reviewer where to look harder. It never counts against the change.
+
+You are still the author: read every line you submit, run the checks above, and be ready to explain the change in review.
 
 ## Review
 

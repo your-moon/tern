@@ -39,8 +39,7 @@ jobs:
           - [ ] For risky logic (parsing, key encoding, host keys, buffering), you broke the code on purpose and the new test failed.
           - [ ] UI changes have a screenshot.
           - [ ] Anything a user would notice has a line under \`## [Unreleased]\` in CHANGELOG.md.
-
-          AI tools are welcome. You are still the author, so read every line and be ready to explain it.
+          - [ ] If an AI tool helped, the description says so. That's welcome, not something to hide: it tells the reviewer where to look harder. You are still the author, so read every line and be ready to explain it.
 
           ### Frequently asked questions
 
