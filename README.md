@@ -15,17 +15,19 @@
   <img src="docs/screenshots/demo.gif" alt="⌘K finds web-01, tern connects, runs docker ps, then ⌘\ fills the sudo password" width="900">
 </p>
 
+```sh
+brew install --cask your-moon/tern/tern
+```
+
+Or download the DMG from [Releases](https://github.com/your-moon/tern/releases). It is signed and notarised, so it opens without a warning.
+
 ## Why tern
 
-tern does what Termius and Tabby do for a list of servers: saved hosts, ⌘K to any of them, SFTP, splits, snippets and port forwards. It runs as one native process, and one connected tab takes 76 MB where Tabby takes 580 MB ([Memory](#memory)).
+tern does what Termius and Tabby do for a list of servers: saved hosts, ⌘K to any of them, SFTP, splits, snippets and port forwards. It runs as one native process, and one connected tab takes 76 MB where Tabby takes 580 MB ([how it was measured](docs/perf.md)).
 
 Passwords come from your SSH key, from a password-manager command such as `gopass show -o work/ssh/web-01`, or from tern's age-encrypted vault. At a `sudo` prompt, ⌘\\ types the password. It never types one on its own.
 
-Hosts, snippets and settings sync to a private Git repository you own. They are encrypted on your Mac first, so the repository holds `.age` files plus a plain `tern-meta.json` with the bundle's hash and time.
-
-<p align="center">
-  <img src="docs/screenshots/hero.jpg" alt="tern: hosts grouped in a frosted sidebar over Hokusai's Great Wave" width="900">
-</p>
+Hosts, snippets and settings sync to a private Git repository you own, encrypted on your Mac first.
 
 ## A closer look
 
@@ -33,136 +35,32 @@ Hosts, snippets and settings sync to a private Git repository you own. They are 
 | --- | --- |
 | <img src="docs/screenshots/docker.jpg" alt="sudo docker ps with the sudo password filled by ⌘\"><br>**⌘\\ fills `sudo`**: the password comes from your password manager, typed only when you ask and only at a password prompt. | <img src="docs/screenshots/snippets.jpg" alt="The snippets picker filtering docker commands"><br>**Snippets (⇧⌘S)**: saved commands. ↵ marks the ones that run when picked; the rest are typed for you to finish. |
 | <img src="docs/screenshots/split.jpg" alt="Two panes side by side with find in scrollback"><br>**Splits and find**: ⌘D and ⌘⇧D split a tab; ⌘F searches the scrollback. | <img src="docs/screenshots/sftp.jpg" alt="The SFTP side panel listing a remote home folder"><br>**Files (⇧⌘O)**: browse the remote side over SFTP; download, or drop files to upload. |
-| <img src="docs/screenshots/settings.jpg" alt="Settings, Appearance, with the wallpaper gallery"><br>**Wallpapers and fonts**: seven public-domain artworks built in, or any image; light, dark or follow macOS; any monospace font. | <img src="docs/screenshots/light.jpg" alt="tern in light appearance over Van Gogh's Wheat Field"><br>**Light and dark**: the window takes its colours from the wallpaper, and body text stays at least 4.5:1 against it (faint text 3:1). |
+| <img src="docs/screenshots/settings.jpg" alt="Settings, Appearance, with the wallpaper gallery"><br>**Wallpapers and fonts**: seven public-domain artworks built in, or any image; light, dark or follow macOS; any monospace font. | <img src="docs/screenshots/light.jpg" alt="tern in light appearance over Van Gogh's Wheat Field"><br>**Light and dark**: the window takes its colours from the wallpaper, and body text stays at least 4.5:1 against it. |
 
-## Features
+## Also in the box
 
-**Connections**
-- Saved connections with groups and tags, search (⇧⌘F), and a ⌘K picker ordered by what you used last.
-- Import from `~/.ssh/config` as a one-time copy; tern keeps its own list.
-- ProxyJump chains, local, remote and dynamic (SOCKS) port forwards, agent forwarding, and keep-alive per host.
-- Automatic reconnect after a network drop, with backoff. It never reconnects after you type `exit`.
-- Two-factor (keyboard-interactive) logins, and a hard stop on changed host keys, with the exact `ssh-keygen -R` line to fix one you trust.
+- **Connections:** groups and tags, a one-time import from `~/.ssh/config`, ProxyJump chains, local, remote and SOCKS forwards, agent forwarding, and two-factor logins.
+- **Staying connected:** automatic reconnect after a network drop, but never after you type `exit`. A changed host key stops the connection and shows the exact `ssh-keygen -R` line to fix one you trust.
+- **Terminal:** tabs that reopen on launch, broadcast input to chosen tabs, ⌘-click links (including OSC 8), session logging, and a status line with latency.
+- **Vault:** passwords and SSH keys in an age-encrypted file that unlocks with a PIN or the Keychain and locks when you're idle. A password command that arrives through sync must be approved once on each Mac.
+- **Sync:** runs on its own, merges per host when both Macs changed, and only asks about a real conflict.
 
-**Terminal**
-- Tabs you can rename, reorder and reopen on launch; split panes; broadcast input to chosen tabs.
-- Find in scrollback, ⌘-click links (including OSC 8), cursor shape and blink, scrollback length, copy on select, and visual bell.
-- SFTP browser, session logging to a file, and a status line showing host, state, latency and session time.
-
-**Passwords and keys**
-- **Password command** per connection, such as `gopass show -o work/ssh/web-01`. tern runs it when the server asks and never stores the result. A command that arrives through sync must be approved once on each Mac.
-- **Vault**: an age-encrypted file for passwords and SSH keys (generate ed25519, import, copy the public key). It unlocks with a PIN or through the macOS Keychain, and locks after you've been idle.
-- **⌘\\ Fill password** at `sudo` and other password prompts. It never types on its own.
-
-**Sync**
-- To a private Git repository through your own `git` and SSH key (or a GitHub gist). Everything is encrypted with your vault passphrase before it leaves the Mac.
-- It runs on its own when something changes and every few minutes. When both sides changed, it merges per file and per host, and only asks about a real conflict.
-
-**Look**
-- Panels are frosted glass over your wallpaper and take their tint from it; the picture shows sharp when no session is open. The layout follows [zeron](https://github.com/zeronsh/zeron).
-- Light, dark or system appearance. A "sharper text" mode for 1× monitors. Reduce motion follows macOS.
-
-## Memory
-
-tern against the other two SSH clients, on the same Mac, the same day (2026-10-06), the same way. Each app was launched fresh and measured every 15 s for two minutes with macOS `footprint` (the number Activity Monitor shows), summed over all of its processes. The table gives the settled value at two minutes. "Connected" means one tab logged in to the same server.
-
-| App | Idle | Connected | Processes |
-| --- | --- | --- | --- |
-| **tern** | **86 MB** (108 MB with a wallpaper) | **76 MB** (125 MB with a wallpaper) | 1 |
-| Tabby | 471 MB | 580 MB | 5 (Electron) |
-| Termius | 583 MB | not measured | 7 (Electron) |
-
-Connected, tern uses 76 MB against Tabby's 580 MB, or 125 MB with a wallpaper. The lead is over Electron apps: OxideTerm, another GPUI SSH client, reports 81 MB idle for itself (not measured here). The method, raw samples and the plain terminals (Terminal, iTerm2, Ghostty) are in [docs/perf.md](docs/perf.md).
-
-## Keyboard
-
-| Action | macOS | Windows / Linux |
-| --- | --- | --- |
-| Host picker | ⌘K | Ctrl+Shift+K |
-| Search hosts | ⇧⌘F | Ctrl+Alt+F |
-| New connection | ⌘N | Ctrl+Shift+N |
-| Snippets | ⇧⌘S | Ctrl+Alt+S |
-| Browse files | ⇧⌘O | Ctrl+Alt+O |
-| Settings | ⌘, | Ctrl+, |
-| Toggle sidebar | ⌘B | Ctrl+Shift+B |
-| Split right / down | ⌘D / ⌘⇧D | Ctrl+Shift+D / Ctrl+Alt+D |
-| Move between panes | ⌥⌘ + arrows | Ctrl+Alt + arrows |
-| Find in scrollback | ⌘F | Ctrl+Shift+F |
-| Fill password | ⌘\\ | Ctrl+Shift+\\ |
-| Close pane / tab | ⌘W | Ctrl+Shift+W |
-| Next / previous tab | ⇧⌘] / ⇧⌘[ | Ctrl+Shift+] / Ctrl+Shift+[ |
-| Text size | ⌘= / ⌘− / ⌘0 | Ctrl+= / Ctrl+− / Ctrl+0 |
-
-Every shortcut can be rebound in Settings → Shortcuts.
-
-## Install
-
-**Homebrew:** `brew install --cask your-moon/tern/tern`
-
-**Download:** get `tern-<version>-macos-arm64.dmg` from [Releases](https://github.com/your-moon/tern/releases), open it, and drag tern to Applications. Releases are signed with a Developer ID and notarised by Apple, so it opens without a warning.
-
-**Windows and Linux (preview):** `tern-<version>-windows-x86_64.zip` and `tern-<version>-linux-<arch>.tar.gz` are on the same Releases page. They build and pass the tests in CI but have not been run on a real Windows or Linux desktop yet; reports are welcome. Shortcuts there use Ctrl+Shift / Ctrl+Alt in place of ⌘ (see the [Keyboard](#keyboard) table above, or `crates/tern/src/keymap.rs`).
-
-**Build from source** (Rust 1.99+, macOS on Apple silicon):
-
-```sh
-git clone https://github.com/your-moon/tern && cd tern
-scripts/make-local-identity.sh   # once: a stable local signature, so Keychain access survives updates
-scripts/bundle-app.sh            # builds target/release/bundle/tern.app
-cp -R target/release/bundle/tern.app /Applications/
-cargo install --locked --path crates/tern   # the `tern` command (tern <host>, tern vault init)
-```
-
-**Linux (Debian/Ubuntu):** these are the packages CI installs on `ubuntu-latest` before `cargo build --release -p tern` (see `.github/workflows/build.yml`). Other distributions need the equivalents.
-
-```sh
-sudo apt-get update
-sudo apt-get install -y --no-install-recommends \
-  build-essential cmake clang pkg-config \
-  libasound2-dev libfontconfig-dev libssl-dev libzstd-dev \
-  libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev \
-  libx11-xcb-dev libxcb1-dev libxcb-xkb-dev libxcb-shape0-dev libxcb-xfixes0-dev \
-  libvulkan-dev libdbus-1-dev
-git clone https://github.com/your-moon/tern && cd tern
-cargo build --release -p tern
-```
-
-**Windows:** after installing a Rust toolchain targeting `x86_64-pc-windows-msvc`, the same `cargo build --release -p tern` produces the binary CI packages.
-
+Every shortcut can be rebound in Settings. The full list, with the Windows and Linux keys, is in [docs/keyboard.md](docs/keyboard.md).
 
 ## Security
 
 - Host keys are checked against `~/.ssh/known_hosts`. A changed key refuses the connection.
 - Secrets live in the vault (age, scrypt) or in your password manager. They are never written to logs, and never typed into the terminal unless you press ⌘\\.
 - Sync data is encrypted before it leaves your Mac. The repository sees `.age` files and a plain `tern-meta.json` (hash and time, nothing else).
-- Report vulnerabilities privately, as described in [SECURITY.md](SECURITY.md).
+- Losing a Mac doesn't lose your setup: see [docs/recovery.md](docs/recovery.md). Report vulnerabilities privately, as described in [SECURITY.md](SECURITY.md).
 
-Losing a Mac doesn't lose your setup: see [docs/recovery.md](docs/recovery.md).
+## Other platforms and building
 
-## Architecture
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-dark.svg">
-    <img src="docs/architecture.svg" alt="tern architecture: the GPUI app (Shell, Session, Keeper) over the tern-term, tern-ssh, tern-vault and tern-sync crates, with config, password manager, Keychain, Git repo and SSH servers around it" width="900">
-  </picture>
-</p>
-
-Editable source: [docs/architecture.excalidraw](docs/architecture.excalidraw) (open it at excalidraw.com).
-
-## Design and development
-
-- [Architecture](docs/architecture.html), [UI spec](docs/ui.md), [performance](docs/perf.md), and the [craft rules](CRAFT.md) every change passes.
-- `cargo test --workspace` runs the suite, including SSH tests against an in-process server. `cargo run -p tern-ssh --example password_server -- --demo` starts the demo server used for these screenshots.
+Windows and Linux builds are on the [Releases](https://github.com/your-moon/tern/releases) page as a preview: they pass CI but haven't been run on a real desktop yet, so reports are welcome. To build tern yourself on any platform, see [docs/building.md](docs/building.md). To contribute, start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Credits
 
-tern copies and adapts code from well-maintained projects rather than reinventing it, and each copied file names its origin. The full list is in [NOTICE.md](NOTICE.md).
-- **Code:** [zeron](https://github.com/zeronsh/zeron)'s UI (MIT), [russh](https://github.com/Eugeny/russh) (Apache-2.0), [alacritty_terminal](https://github.com/alacritty/alacritty) (Apache-2.0) and Zed's GPUI.
-- **Assets:**
-  - icons from Solar by 480 Design (CC BY 4.0) and Geist fonts (OFL);
-  - terminal themes from [iTerm2-Color-Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes);
-  - built-in wallpapers from [The Met Open Access](https://www.metmuseum.org/about-the-met/policies-and-documents/open-access) (CC0): Hokusai, Hiroshige, Church, Van Gogh and Rousseau.
+tern copies and adapts code from well-maintained projects rather than reinventing it, and each copied file names its origin ([NOTICE.md](NOTICE.md)): [zeron](https://github.com/zeronsh/zeron)'s UI (MIT), [russh](https://github.com/Eugeny/russh) (Apache-2.0), [alacritty_terminal](https://github.com/alacritty/alacritty) (Apache-2.0) and Zed's GPUI. Icons are Solar by 480 Design (CC BY 4.0), fonts are Geist (OFL), terminal themes come from [iTerm2-Color-Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes), and the wallpapers are from [The Met Open Access](https://www.metmuseum.org/about-the-met/policies-and-documents/open-access) (CC0).
 
 ## License
 

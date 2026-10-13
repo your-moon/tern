@@ -16,7 +16,7 @@ Thanks for helping. This file is short on purpose; the rules that matter are enf
 
 ## Setting up
 
-Install Rust with [rustup](https://rustup.rs). tern needs Rust 1.99 or newer, which distribution packages usually don't ship. On Linux, install the system packages listed in the README under "Build from source" first.
+Install Rust with [rustup](https://rustup.rs). tern needs Rust 1.99 or newer, which distribution packages usually don't ship. [docs/building.md](docs/building.md) has the build steps for macOS, Linux (with the system packages to install first) and Windows.
 
 | Crate | What it does |
 | --- | --- |
@@ -25,6 +25,8 @@ Install Rust with [rustup](https://rustup.rs). tern needs Rust 1.99 or newer, wh
 | `crates/tern-ssh` | SSH sessions, forwards and SFTP on russh |
 | `crates/tern-vault` | The age-encrypted store for passwords and keys |
 | `crates/tern-sync` | Encrypted sync to a Git repository or gist |
+
+How they fit together is drawn in [docs/architecture.svg](docs/architecture.svg) (editable source: [docs/architecture.excalidraw](docs/architecture.excalidraw)) and explained in [docs/architecture.html](docs/architecture.html). The [UI spec](docs/ui.md) and [performance notes](docs/perf.md) cover the rest.
 
 ## Making a change
 

@@ -103,3 +103,5 @@ Notes:
   (not connected). The empty profile did not connect from the command line, so it gives
   only the idle figure.
 - Termius has no connected figure: its quick-connect could not be driven by script.
+- The lead is over Electron apps, not over native ones: OxideTerm, another GPUI SSH client,
+  reports 81 MB idle for itself (not measured here).
