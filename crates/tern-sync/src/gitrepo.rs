@@ -13,6 +13,9 @@ const META: &str = "tern-meta.json";
 const VAULT: &str = "vault.age";
 const DATA: &str = "data.age";
 const BRANCH: &str = "main";
+/// The most a synced `vault.age` or `data.age` may hold; a real vault is kilobytes, so a bigger
+/// file is a broken or hostile remote, and reading it whole would balloon memory.
+const MAX_FILE: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Meta {
@@ -26,6 +29,18 @@ struct Meta {
 pub struct GitRepo {
     remote: String,
     dir: PathBuf,
+}
+
+/// The file at `path`, refused before it is read when it is longer than `cap` bytes.
+fn read_capped(path: &Path, name: &str, cap: u64) -> Result<Vec<u8>, GithubError> {
+    let format = |e: &dyn std::fmt::Display| GithubError::Format(format!("{name}: {e}"));
+    let len = std::fs::metadata(path).map_err(|e| format(&e))?.len();
+    if len > cap {
+        return Err(format(&format_args!(
+            "{len} bytes is over the {cap} byte limit"
+        )));
+    }
+    std::fs::read(path).map_err(|e| format(&e))
 }
 
 // Runs on a background thread, never on an executor, so blocking on git is fine here.
@@ -145,10 +160,7 @@ impl GitRepo {
         };
         let meta: Meta =
             serde_json::from_str(&meta).map_err(|e| GithubError::Format(e.to_string()))?;
-        let read = |name: &str| {
-            std::fs::read(self.dir.join(name))
-                .map_err(|e| GithubError::Format(format!("{name}: {e}")))
-        };
+        let read = |name: &str| read_capped(&self.dir.join(name), name, MAX_FILE);
         Ok(Some(RemoteBundle {
             hash: meta.hash,
             updated_at: meta.updated_at,
@@ -443,5 +455,32 @@ mod tests {
 
         let err = create_github_repo().unwrap_err();
         assert_eq!(err.to_string(), "GitHub: gh: gh executable not found");
+    }
+
+    #[test]
+    fn a_file_over_the_cap_is_refused_and_one_at_the_cap_is_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("vault.age");
+        std::fs::write(&path, [7u8; 8]).unwrap();
+        assert_eq!(read_capped(&path, "vault.age", 8).unwrap(), [7u8; 8]);
+        let err = read_capped(&path, "vault.age", 7).unwrap_err().to_string();
+        assert!(
+            err.contains("vault.age: 8 bytes is over the 7 byte limit"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn the_real_cap_refuses_a_sparse_file_one_byte_over() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("data.age");
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(MAX_FILE + 1).unwrap();
+        assert!(read_capped(&path, "data.age", MAX_FILE).is_err());
+        file.set_len(MAX_FILE).unwrap();
+        assert_eq!(
+            read_capped(&path, "data.age", MAX_FILE).unwrap().len() as u64,
+            MAX_FILE
+        );
     }
 }
