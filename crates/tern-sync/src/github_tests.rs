@@ -500,3 +500,9 @@ fn a_response_at_the_cap_is_refused_and_one_byte_under_is_parsed() {
 fn the_gist_response_limit_is_four_mebibytes() {
     assert_eq!(MAX_RESPONSE, 4 * 1024 * 1024);
 }
+
+#[test]
+fn every_method_maps_to_its_http_verb() {
+    assert_eq!(verb(Method::Post), "POST");
+    assert_eq!(verb(Method::Patch), "PATCH");
+}

@@ -124,6 +124,14 @@ pub(crate) enum Method {
     Patch,
 }
 
+/// The HTTP verb for a [`Method`]; ureq 3 has no string-verb request, so `send` feeds this to `http::Request`.
+fn verb(method: Method) -> &'static str {
+    match method {
+        Method::Post => "POST",
+        Method::Patch => "PATCH",
+    }
+}
+
 pub(crate) trait GithubHttp: std::fmt::Debug + Send + Sync {
     fn get(&self, token: &str, path: &str) -> Result<Value, GithubError>;
     fn send(&self, token: &str, method: Method, path: &str, body: Value)
@@ -187,16 +195,15 @@ impl GithubHttp for UreqHttp {
         path: &str,
         body: Value,
     ) -> Result<(), GithubError> {
-        let url = format!("{API}{path}");
-        let builder = match method {
-            Method::Post => self.agent.post(url),
-            Method::Patch => self.agent.patch(url),
-        };
-        builder
+        let request = ureq::http::Request::builder()
+            .method(verb(method))
+            .uri(format!("{API}{path}"))
             .header("Authorization", format!("Bearer {token}"))
             .header("Accept", "application/vnd.github+json")
             .header("User-Agent", "tern")
-            .send_json(body)?;
+            .body(ureq::SendBody::from_json(&body)?)
+            .map_err(|e| GithubError::Http(e.to_string()))?;
+        self.agent.run(request)?;
         Ok(())
     }
 
