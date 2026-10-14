@@ -1,5 +1,7 @@
 //! The gist side: find or create the private `tern-sync` gist, read and write its files.
 //! Blocking HTTP (ureq with the system TLS); callers run it off the UI thread.
+// Test builds swap in fakes at `current_*`, so the real adapters are never built there.
+#![cfg_attr(test, allow(dead_code))]
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
@@ -124,6 +126,33 @@ pub(crate) enum Method {
     Patch,
 }
 
+/// The request `send` makes: the verb, the GitHub headers and the JSON body. Built apart from
+/// the agent so a test can read it. `send_json` set the Content-Type itself; this must too.
+fn write_request(
+    token: &str,
+    method: Method,
+    url: &str,
+    body: &Value,
+) -> Result<ureq::http::Request<ureq::SendBody<'static>>, GithubError> {
+    ureq::http::Request::builder()
+        .method(verb(method))
+        .uri(url)
+        .header("Authorization", format!("Bearer {token}"))
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "tern")
+        .header("Content-Type", "application/json; charset=utf-8")
+        .body(ureq::SendBody::from_json(body)?)
+        .map_err(|e| GithubError::Http(e.to_string()))
+}
+
+/// The HTTP verb for a [`Method`]; ureq 3 has no string-verb request, so `send` feeds this to `http::Request`.
+fn verb(method: Method) -> &'static str {
+    match method {
+        Method::Post => "POST",
+        Method::Patch => "PATCH",
+    }
+}
+
 pub(crate) trait GithubHttp: std::fmt::Debug + Send + Sync {
     fn get(&self, token: &str, path: &str) -> Result<Value, GithubError>;
     fn send(&self, token: &str, method: Method, path: &str, body: Value)
@@ -187,143 +216,12 @@ impl GithubHttp for UreqHttp {
         path: &str,
         body: Value,
     ) -> Result<(), GithubError> {
-        let url = format!("{API}{path}");
-        let builder = match method {
-            Method::Post => self.agent.post(url),
-            Method::Patch => self.agent.patch(url),
-        };
-        builder
-            .header("Authorization", format!("Bearer {token}"))
-            .header("Accept", "application/vnd.github+json")
-            .header("User-Agent", "tern")
-            .send_json(body)?;
+        let request = write_request(token, method, &format!("{API}{path}"), &body)?;
+        self.agent.run(request)?;
         Ok(())
     }
 
     fn clone_box(&self) -> Box<dyn GithubHttp> {
-        Box::new(self.clone())
-    }
-}
-
-#[cfg(test)]
-#[derive(Debug, Clone)]
-struct UnsetKeychain;
-
-#[cfg(test)]
-impl Keychain for UnsetKeychain {
-    fn get(&self) -> Result<String, keyring::Error> {
-        Err(keyring::Error::PlatformFailure(Box::new(
-            std::io::Error::other("keychain not configured in test"),
-        )))
-    }
-
-    fn set(&self, _token: &str) -> Result<(), keyring::Error> {
-        Err(keyring::Error::PlatformFailure(Box::new(
-            std::io::Error::other("keychain not configured in test"),
-        )))
-    }
-
-    fn delete(&self) -> Result<(), keyring::Error> {
-        Err(keyring::Error::PlatformFailure(Box::new(
-            std::io::Error::other("keychain not configured in test"),
-        )))
-    }
-
-    fn clone_box(&self) -> Box<dyn Keychain> {
-        Box::new(self.clone())
-    }
-}
-
-#[cfg(test)]
-#[derive(Debug, Clone)]
-struct UnsetGh;
-
-#[cfg(test)]
-impl GhCli for UnsetGh {
-    fn run(&self, _args: &[&str]) -> Result<GhOutput, std::io::Error> {
-        Err(std::io::Error::other("gh cli not configured in test"))
-    }
-
-    fn clone_box(&self) -> Box<dyn GhCli> {
-        Box::new(self.clone())
-    }
-}
-
-#[cfg(test)]
-#[derive(Debug, Clone)]
-struct UnsetHttp;
-
-#[cfg(test)]
-impl GithubHttp for UnsetHttp {
-    fn get(&self, _token: &str, _path: &str) -> Result<Value, GithubError> {
-        Err(GithubError::Http("http not configured in test".to_owned()))
-    }
-
-    fn send(
-        &self,
-        _token: &str,
-        _method: Method,
-        _path: &str,
-        _body: Value,
-    ) -> Result<(), GithubError> {
-        Err(GithubError::Http("http not configured in test".to_owned()))
-    }
-
-    fn clone_box(&self) -> Box<dyn GithubHttp> {
-        Box::new(self.clone())
-    }
-}
-
-#[cfg(test)]
-pub(crate) type GhResponseQueue = std::collections::VecDeque<Result<GhOutput, String>>;
-
-#[cfg(test)]
-#[derive(Debug, Default, Clone)]
-pub(crate) struct FakeGh {
-    pub(crate) responses:
-        std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, GhResponseQueue>>>,
-    pub(crate) calls: std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>>,
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-impl FakeGh {
-    pub(crate) fn respond(&self, key: impl Into<String>, res: Result<GhOutput, String>) {
-        self.responses
-            .lock()
-            .unwrap()
-            .entry(key.into())
-            .or_default()
-            .push_back(res);
-    }
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-impl GhCli for FakeGh {
-    fn run(&self, args: &[&str]) -> Result<GhOutput, std::io::Error> {
-        let key = args.join(" ");
-        self.calls
-            .lock()
-            .unwrap()
-            .push(args.iter().map(|s| (*s).to_owned()).collect());
-        let mut map = self.responses.lock().unwrap();
-        if let Some(queue) = map.get_mut(&key)
-            && let Some(res) = queue.pop_front()
-        {
-            return match res {
-                Ok(out) => Ok(out),
-                Err(e) => Err(std::io::Error::other(e)),
-            };
-        }
-        Ok(GhOutput {
-            success: false,
-            stdout: Vec::new(),
-            stderr: b"command failed".to_vec(),
-        })
-    }
-
-    fn clone_box(&self) -> Box<dyn GhCli> {
         Box::new(self.clone())
     }
 }
@@ -335,36 +233,39 @@ thread_local! {
     static TEST_HTTP: std::cell::RefCell<Option<Box<dyn GithubHttp>>> = const { std::cell::RefCell::new(None) };
 }
 
+#[cfg(test)]
 pub(crate) fn current_keychain() -> Box<dyn Keychain> {
-    #[cfg(test)]
-    if let Some(kc) = TEST_KEYCHAIN.with(|k| k.borrow().as_ref().map(|b| b.clone_box())) {
-        return kc;
-    } else {
-        return Box::new(UnsetKeychain);
-    }
-    #[allow(unreachable_code)]
+    TEST_KEYCHAIN
+        .with(|slot| slot.borrow().as_ref().map(|b| b.clone_box()))
+        .unwrap_or_else(|| Box::new(UnsetKeychain))
+}
+
+#[cfg(not(test))]
+pub(crate) fn current_keychain() -> Box<dyn Keychain> {
     Box::new(OsKeychain)
 }
 
+#[cfg(test)]
 pub(crate) fn current_gh() -> Box<dyn GhCli> {
-    #[cfg(test)]
-    if let Some(gh) = TEST_GH.with(|g| g.borrow().as_ref().map(|b| b.clone_box())) {
-        return gh;
-    } else {
-        return Box::new(UnsetGh);
-    }
-    #[allow(unreachable_code)]
+    TEST_GH
+        .with(|slot| slot.borrow().as_ref().map(|b| b.clone_box()))
+        .unwrap_or_else(|| Box::new(UnsetGh))
+}
+
+#[cfg(not(test))]
+pub(crate) fn current_gh() -> Box<dyn GhCli> {
     Box::new(SystemGh)
 }
 
+#[cfg(test)]
 pub(crate) fn current_http() -> Box<dyn GithubHttp> {
-    #[cfg(test)]
-    if let Some(h) = TEST_HTTP.with(|h| h.borrow().as_ref().map(|b| b.clone_box())) {
-        return h;
-    } else {
-        return Box::new(UnsetHttp);
-    }
-    #[allow(unreachable_code)]
+    TEST_HTTP
+        .with(|slot| slot.borrow().as_ref().map(|b| b.clone_box()))
+        .unwrap_or_else(|| Box::new(UnsetHttp))
+}
+
+#[cfg(not(test))]
+pub(crate) fn current_http() -> Box<dyn GithubHttp> {
     Box::new(UreqHttp::new())
 }
 
@@ -605,6 +506,14 @@ impl Gist {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "github_test_support.rs"]
+mod test_support;
+#[cfg(test)]
+pub(crate) use test_support::FakeGh;
+#[cfg(test)]
+use test_support::{UnsetGh, UnsetHttp, UnsetKeychain};
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::disallowed_methods)]
