@@ -53,42 +53,10 @@ impl Keychain for FakeKeychain {
     }
 }
 
-#[derive(Debug, Default, Clone)]
-struct FakeGh {
-    responses: Arc<Mutex<HashMap<String, Result<GhOutput, String>>>>,
-    calls: Arc<Mutex<Vec<Vec<String>>>>,
-}
-
-impl GhCli for FakeGh {
-    fn run(&self, args: &[&str]) -> Result<GhOutput, std::io::Error> {
-        let key = args.join(" ");
-        self.calls
-            .lock()
-            .unwrap()
-            .push(args.iter().map(|s| (*s).to_owned()).collect());
-        if let Some(res) = self.responses.lock().unwrap().get(&key) {
-            match res {
-                Ok(out) => Ok(out.clone()),
-                Err(e) => Err(std::io::Error::other(e.clone())),
-            }
-        } else {
-            Ok(GhOutput {
-                success: false,
-                stdout: Vec::new(),
-                stderr: b"command failed".to_vec(),
-            })
-        }
-    }
-
-    fn clone_box(&self) -> Box<dyn GhCli> {
-        Box::new(self.clone())
-    }
-}
-
 #[derive(Debug, Clone)]
 struct FakeHttp {
     get_responses: Arc<Mutex<HashMap<String, Result<Value, String>>>>,
-    send_calls: Arc<Mutex<Vec<(String, String, Value)>>>,
+    send_calls: Arc<Mutex<Vec<(Method, String, Value)>>>,
     send_result: Arc<Mutex<Result<(), String>>>,
 }
 
@@ -115,12 +83,18 @@ impl GithubHttp for FakeHttp {
         }
     }
 
-    fn send(&self, token: &str, method: &str, path: &str, body: Value) -> Result<(), GithubError> {
+    fn send(
+        &self,
+        token: &str,
+        method: Method,
+        path: &str,
+        body: Value,
+    ) -> Result<(), GithubError> {
         assert_eq!(token, "test-token");
         self.send_calls
             .lock()
             .unwrap()
-            .push((method.to_owned(), path.to_owned(), body));
+            .push((method, path.to_owned(), body));
         self.send_result
             .lock()
             .unwrap()
@@ -155,8 +129,8 @@ fn token_from_keychain_whitespace_falls_back_to_gh() {
     let _g1 = set_test_keychain(Box::new(kc));
 
     let gh = FakeGh::default();
-    gh.responses.lock().unwrap().insert(
-        "auth token".into(),
+    gh.respond(
+        "auth token",
         Ok(GhOutput {
             success: true,
             stdout: b"gh-secret\n".to_vec(),
@@ -176,8 +150,8 @@ fn token_from_gh_cli_when_keychain_empty() {
     let _g1 = set_test_keychain(Box::new(kc));
 
     let gh = FakeGh::default();
-    gh.responses.lock().unwrap().insert(
-        "auth token".into(),
+    gh.respond(
+        "auth token",
         Ok(GhOutput {
             success: true,
             stdout: b"gh-token-123\n".to_vec(),
@@ -189,7 +163,6 @@ fn token_from_gh_cli_when_keychain_empty() {
     let (t, src) = token().unwrap();
     assert_eq!(t, "gh-token-123");
     assert_eq!(src, TokenSource::GhCli);
-    assert_eq!(gh_token().unwrap(), "gh-token-123");
 }
 
 #[test]
@@ -198,8 +171,8 @@ fn token_no_token_when_both_empty() {
     let _g1 = set_test_keychain(Box::new(kc));
 
     let gh = FakeGh::default();
-    gh.responses.lock().unwrap().insert(
-        "auth token".into(),
+    gh.respond(
+        "auth token",
         Ok(GhOutput {
             success: false,
             stdout: Vec::new(),
@@ -209,7 +182,6 @@ fn token_no_token_when_both_empty() {
     let _g2 = set_test_gh(Box::new(gh));
 
     assert!(matches!(token().unwrap_err(), GithubError::NoToken));
-    assert!(gh_token().is_none());
 }
 
 #[test]
@@ -218,8 +190,8 @@ fn token_no_token_when_gh_whitespace_only() {
     let _g1 = set_test_keychain(Box::new(kc));
 
     let gh = FakeGh::default();
-    gh.responses.lock().unwrap().insert(
-        "auth token".into(),
+    gh.respond(
+        "auth token",
         Ok(GhOutput {
             success: true,
             stdout: b"   \n".to_vec(),
@@ -430,7 +402,7 @@ fn gist_push_creates_new_gist_when_none_exists() {
     let calls = http.send_calls.lock().unwrap();
     assert_eq!(calls.len(), 1);
     let (method, path, body) = &calls[0];
-    assert_eq!(method, "POST");
+    assert_eq!(*method, Method::Post);
     assert_eq!(path, "/gists");
     assert_eq!(body["description"], "tern-sync");
     assert_eq!(body["public"], false);
@@ -459,10 +431,26 @@ fn gist_push_patches_existing_gist() {
     let calls = http.send_calls.lock().unwrap();
     assert_eq!(calls.len(), 1);
     let (method, path, body) = &calls[0];
-    assert_eq!(method, "PATCH");
+    assert_eq!(*method, Method::Patch);
     assert_eq!(path, "/gists/existing-456");
     assert!(body.get("description").is_none());
     assert!(body["files"].is_object());
+}
+
+#[test]
+fn unconfigured_seams_in_test_return_error() {
+    let kc = current_keychain();
+    assert!(kc.get().is_err());
+    assert!(kc.set("x").is_err());
+    assert!(kc.delete().is_err());
+
+    let gh = current_gh();
+    assert!(gh.run(&["auth", "token"]).is_err());
+
+    let http = current_http();
+    assert!(http.get("tok", "/test").is_err());
+    assert!(http.send("tok", Method::Post, "/test", json!({})).is_err());
+    assert!(http.send("tok", Method::Patch, "/test", json!({})).is_err());
 }
 
 #[test]

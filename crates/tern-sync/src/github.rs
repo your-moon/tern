@@ -99,6 +99,7 @@ impl Clone for Box<dyn GhCli> {
 #[derive(Debug, Default, Clone)]
 pub(crate) struct SystemGh;
 
+// Runs on a background thread, never on an executor, so the blocking call is fine here.
 #[allow(clippy::disallowed_methods)]
 impl GhCli for SystemGh {
     fn run(&self, args: &[&str]) -> Result<GhOutput, std::io::Error> {
@@ -115,9 +116,16 @@ impl GhCli for SystemGh {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Method {
+    Post,
+    Patch,
+}
+
 pub(crate) trait GithubHttp: std::fmt::Debug + Send + Sync {
     fn get(&self, token: &str, path: &str) -> Result<Value, GithubError>;
-    fn send(&self, token: &str, method: &str, path: &str, body: Value) -> Result<(), GithubError>;
+    fn send(&self, token: &str, method: Method, path: &str, body: Value)
+    -> Result<(), GithubError>;
     fn clone_box(&self) -> Box<dyn GithubHttp>;
 }
 
@@ -164,10 +172,17 @@ impl GithubHttp for UreqHttp {
             .map_err(|e| GithubError::Http(e.to_string()))
     }
 
-    fn send(&self, token: &str, method: &str, path: &str, body: Value) -> Result<(), GithubError> {
+    fn send(
+        &self,
+        token: &str,
+        method: Method,
+        path: &str,
+        body: Value,
+    ) -> Result<(), GithubError> {
+        let url = format!("{API}{path}");
         let builder = match method {
-            "POST" => self.agent.post(format!("{API}{path}")),
-            _ => self.agent.patch(format!("{API}{path}")),
+            Method::Post => self.agent.post(url),
+            Method::Patch => self.agent.patch(url),
         };
         builder
             .header("Authorization", format!("Bearer {token}"))
@@ -183,6 +198,129 @@ impl GithubHttp for UreqHttp {
 }
 
 #[cfg(test)]
+#[derive(Debug, Clone)]
+struct UnsetKeychain;
+
+#[cfg(test)]
+impl Keychain for UnsetKeychain {
+    fn get(&self) -> Result<String, keyring::Error> {
+        Err(keyring::Error::PlatformFailure(Box::new(
+            std::io::Error::other("keychain not configured in test"),
+        )))
+    }
+
+    fn set(&self, _token: &str) -> Result<(), keyring::Error> {
+        Err(keyring::Error::PlatformFailure(Box::new(
+            std::io::Error::other("keychain not configured in test"),
+        )))
+    }
+
+    fn delete(&self) -> Result<(), keyring::Error> {
+        Err(keyring::Error::PlatformFailure(Box::new(
+            std::io::Error::other("keychain not configured in test"),
+        )))
+    }
+
+    fn clone_box(&self) -> Box<dyn Keychain> {
+        Box::new(self.clone())
+    }
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone)]
+struct UnsetGh;
+
+#[cfg(test)]
+impl GhCli for UnsetGh {
+    fn run(&self, _args: &[&str]) -> Result<GhOutput, std::io::Error> {
+        Err(std::io::Error::other("gh cli not configured in test"))
+    }
+
+    fn clone_box(&self) -> Box<dyn GhCli> {
+        Box::new(self.clone())
+    }
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone)]
+struct UnsetHttp;
+
+#[cfg(test)]
+impl GithubHttp for UnsetHttp {
+    fn get(&self, _token: &str, _path: &str) -> Result<Value, GithubError> {
+        Err(GithubError::Http("http not configured in test".to_owned()))
+    }
+
+    fn send(
+        &self,
+        _token: &str,
+        _method: Method,
+        _path: &str,
+        _body: Value,
+    ) -> Result<(), GithubError> {
+        Err(GithubError::Http("http not configured in test".to_owned()))
+    }
+
+    fn clone_box(&self) -> Box<dyn GithubHttp> {
+        Box::new(self.clone())
+    }
+}
+
+#[cfg(test)]
+pub(crate) type GhResponseQueue = std::collections::VecDeque<Result<GhOutput, String>>;
+
+#[cfg(test)]
+#[derive(Debug, Default, Clone)]
+pub(crate) struct FakeGh {
+    pub(crate) responses:
+        std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, GhResponseQueue>>>,
+    pub(crate) calls: std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>>,
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+impl FakeGh {
+    pub(crate) fn respond(&self, key: impl Into<String>, res: Result<GhOutput, String>) {
+        self.responses
+            .lock()
+            .unwrap()
+            .entry(key.into())
+            .or_default()
+            .push_back(res);
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+impl GhCli for FakeGh {
+    fn run(&self, args: &[&str]) -> Result<GhOutput, std::io::Error> {
+        let key = args.join(" ");
+        self.calls
+            .lock()
+            .unwrap()
+            .push(args.iter().map(|s| (*s).to_owned()).collect());
+        let mut map = self.responses.lock().unwrap();
+        if let Some(queue) = map.get_mut(&key)
+            && let Some(res) = queue.pop_front()
+        {
+            return match res {
+                Ok(out) => Ok(out),
+                Err(e) => Err(std::io::Error::other(e)),
+            };
+        }
+        Ok(GhOutput {
+            success: false,
+            stdout: Vec::new(),
+            stderr: b"command failed".to_vec(),
+        })
+    }
+
+    fn clone_box(&self) -> Box<dyn GhCli> {
+        Box::new(self.clone())
+    }
+}
+
+#[cfg(test)]
 thread_local! {
     static TEST_KEYCHAIN: std::cell::RefCell<Option<Box<dyn Keychain>>> = const { std::cell::RefCell::new(None) };
     static TEST_GH: std::cell::RefCell<Option<Box<dyn GhCli>>> = const { std::cell::RefCell::new(None) };
@@ -191,31 +329,34 @@ thread_local! {
 
 pub(crate) fn current_keychain() -> Box<dyn Keychain> {
     #[cfg(test)]
-    {
-        if let Some(kc) = TEST_KEYCHAIN.with(|k| k.borrow().as_ref().map(|b| b.clone_box())) {
-            return kc;
-        }
+    if let Some(kc) = TEST_KEYCHAIN.with(|k| k.borrow().as_ref().map(|b| b.clone_box())) {
+        return kc;
+    } else {
+        return Box::new(UnsetKeychain);
     }
+    #[allow(unreachable_code)]
     Box::new(OsKeychain)
 }
 
 pub(crate) fn current_gh() -> Box<dyn GhCli> {
     #[cfg(test)]
-    {
-        if let Some(gh) = TEST_GH.with(|g| g.borrow().as_ref().map(|b| b.clone_box())) {
-            return gh;
-        }
+    if let Some(gh) = TEST_GH.with(|g| g.borrow().as_ref().map(|b| b.clone_box())) {
+        return gh;
+    } else {
+        return Box::new(UnsetGh);
     }
+    #[allow(unreachable_code)]
     Box::new(SystemGh)
 }
 
 pub(crate) fn current_http() -> Box<dyn GithubHttp> {
     #[cfg(test)]
-    {
-        if let Some(h) = TEST_HTTP.with(|h| h.borrow().as_ref().map(|b| b.clone_box())) {
-            return h;
-        }
+    if let Some(h) = TEST_HTTP.with(|h| h.borrow().as_ref().map(|b| b.clone_box())) {
+        return h;
+    } else {
+        return Box::new(UnsetHttp);
     }
+    #[allow(unreachable_code)]
     Box::new(UreqHttp::new())
 }
 
@@ -281,12 +422,6 @@ pub(crate) fn token_with(
     gh_token_with(gh)
         .map(|t| (t, TokenSource::GhCli))
         .ok_or(GithubError::NoToken)
-}
-
-// Runs on a background thread, never on an executor, so the blocking call is fine here.
-#[allow(clippy::disallowed_methods, dead_code)]
-pub(crate) fn gh_token() -> Option<String> {
-    gh_token_with(&*current_gh())
 }
 
 pub(crate) fn gh_token_with(gh: &dyn GhCli) -> Option<String> {
@@ -449,13 +584,13 @@ impl Gist {
         match self.find()? {
             Some(id) => self.http.send(
                 &self.token,
-                "PATCH",
+                Method::Patch,
                 &format!("/gists/{id}"),
                 json!({ "files": files }),
             ),
             None => self.http.send(
                 &self.token,
-                "POST",
+                Method::Post,
                 "/gists",
                 json!({ "description": DESCRIPTION, "public": false, "files": files }),
             ),

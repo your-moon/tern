@@ -276,6 +276,7 @@ pub(crate) fn create_github_repo_with(gh: &dyn GhCli) -> Result<String, GithubEr
 #[allow(clippy::unwrap_used, clippy::disallowed_methods)]
 mod tests {
     use super::*;
+    use crate::github::FakeGh;
 
     /// Inside a git hook `GIT_DIR` names the outer repository and beats `-C`; the sync clone's
     /// git must not inherit it.
@@ -343,62 +344,17 @@ mod tests {
         );
     }
 
-    type ResponseMap = std::sync::Arc<
-        std::sync::Mutex<
-            std::collections::HashMap<
-                String,
-                std::collections::VecDeque<Result<crate::github::GhOutput, String>>,
-            >,
-        >,
-    >;
-
-    #[derive(Debug, Default, Clone)]
-    struct FakeGh {
-        responses: ResponseMap,
-        calls: std::sync::Arc<std::sync::Mutex<Vec<Vec<String>>>>,
-    }
-
-    impl crate::github::GhCli for FakeGh {
-        fn run(&self, args: &[&str]) -> Result<crate::github::GhOutput, std::io::Error> {
-            let key = args.join(" ");
-            self.calls
-                .lock()
-                .unwrap()
-                .push(args.iter().map(|s| (*s).to_owned()).collect());
-            let mut map = self.responses.lock().unwrap();
-            if let Some(queue) = map.get_mut(&key)
-                && let Some(res) = queue.pop_front()
-            {
-                return match res {
-                    Ok(out) => Ok(out),
-                    Err(e) => Err(std::io::Error::other(e)),
-                };
-            }
-            Ok(crate::github::GhOutput {
-                success: false,
-                stdout: Vec::new(),
-                stderr: b"command failed".to_vec(),
-            })
-        }
-
-        fn clone_box(&self) -> Box<dyn crate::github::GhCli> {
-            Box::new(self.clone())
-        }
-    }
-
     #[test]
     fn create_github_repo_returns_existing_without_creating() {
         let gh = FakeGh::default();
-        gh.responses
-            .lock()
-            .unwrap()
-            .entry("repo view tern-sync --json sshUrl -q .sshUrl".into())
-            .or_default()
-            .push_back(Ok(crate::github::GhOutput {
+        gh.respond(
+            "repo view tern-sync --json sshUrl -q .sshUrl",
+            Ok(crate::github::GhOutput {
                 success: true,
                 stdout: b"git@github.com:user/tern-sync.git\n".to_vec(),
                 stderr: Vec::new(),
-            }));
+            }),
+        );
         let _g = crate::github::set_test_gh(Box::new(gh.clone()));
 
         let url = create_github_repo().unwrap();
@@ -412,34 +368,33 @@ mod tests {
     #[test]
     fn create_github_repo_creates_when_not_existing() {
         let gh = FakeGh::default();
-        {
-            let mut res = gh.responses.lock().unwrap();
-            let view_queue = res
-                .entry("repo view tern-sync --json sshUrl -q .sshUrl".into())
-                .or_default();
-            // First view fails
-            view_queue.push_back(Ok(crate::github::GhOutput {
+        // First view fails
+        gh.respond(
+            "repo view tern-sync --json sshUrl -q .sshUrl",
+            Ok(crate::github::GhOutput {
                 success: false,
                 stdout: Vec::new(),
                 stderr: b"not found".to_vec(),
-            }));
-            // Second view succeeds
-            view_queue.push_back(Ok(crate::github::GhOutput {
+            }),
+        );
+        // Second view succeeds
+        gh.respond(
+            "repo view tern-sync --json sshUrl -q .sshUrl",
+            Ok(crate::github::GhOutput {
                 success: true,
                 stdout: b"git@github.com:user/tern-sync.git\n".to_vec(),
                 stderr: Vec::new(),
-            }));
-            // Create succeeds
-            res.entry(
-                "repo create tern-sync --private --description tern sync data (encrypted)".into(),
-            )
-            .or_default()
-            .push_back(Ok(crate::github::GhOutput {
+            }),
+        );
+        // Create succeeds
+        gh.respond(
+            "repo create tern-sync --private --description tern sync data (encrypted)",
+            Ok(crate::github::GhOutput {
                 success: true,
                 stdout: Vec::new(),
                 stderr: Vec::new(),
-            }));
-        }
+            }),
+        );
         let _g = crate::github::set_test_gh(Box::new(gh.clone()));
 
         let url = create_github_repo().unwrap();
@@ -455,25 +410,22 @@ mod tests {
     #[test]
     fn create_github_repo_error_when_creation_fails() {
         let gh = FakeGh::default();
-        {
-            let mut res = gh.responses.lock().unwrap();
-            res.entry("repo view tern-sync --json sshUrl -q .sshUrl".into())
-                .or_default()
-                .push_back(Ok(crate::github::GhOutput {
-                    success: false,
-                    stdout: Vec::new(),
-                    stderr: b"not found".to_vec(),
-                }));
-            res.entry(
-                "repo create tern-sync --private --description tern sync data (encrypted)".into(),
-            )
-            .or_default()
-            .push_back(Ok(crate::github::GhOutput {
+        gh.respond(
+            "repo view tern-sync --json sshUrl -q .sshUrl",
+            Ok(crate::github::GhOutput {
+                success: false,
+                stdout: Vec::new(),
+                stderr: b"not found".to_vec(),
+            }),
+        );
+        gh.respond(
+            "repo create tern-sync --private --description tern sync data (encrypted)",
+            Ok(crate::github::GhOutput {
                 success: false,
                 stdout: Vec::new(),
                 stderr: b"name taken\n".to_vec(),
-            }));
-        }
+            }),
+        );
         let _g = crate::github::set_test_gh(Box::new(gh));
 
         let err = create_github_repo().unwrap_err();
@@ -483,12 +435,10 @@ mod tests {
     #[test]
     fn create_github_repo_error_when_cli_fails_to_spawn() {
         let gh = FakeGh::default();
-        gh.responses
-            .lock()
-            .unwrap()
-            .entry("repo view tern-sync --json sshUrl -q .sshUrl".into())
-            .or_default()
-            .push_back(Err("gh executable not found".into()));
+        gh.respond(
+            "repo view tern-sync --json sshUrl -q .sshUrl",
+            Err("gh executable not found".into()),
+        );
         let _g = crate::github::set_test_gh(Box::new(gh));
 
         let err = create_github_repo().unwrap_err();
