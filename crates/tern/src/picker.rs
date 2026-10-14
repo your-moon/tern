@@ -14,7 +14,7 @@ use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
 use tern_ssh::HostEntry;
 
-use crate::empty_state::{self, Listing};
+use crate::empty_state;
 use crate::shell::Shell;
 use crate::shell::connections_ui::button;
 use crate::sidebar;
@@ -317,9 +317,7 @@ pub fn render(
                 .gap(px(2.))
                 .children(rows)
                 .when(matches.is_empty(), |el| {
-                    // A typed target still connects with no hosts, so only a blank query is "empty".
-                    let blank = picker.query.trim().is_empty();
-                    if blank && empty_state::listing(hosts.len(), matches.len()) == Listing::Empty {
+                    if empty_state::picker_is_empty(&picker.query, hosts.len(), matches.len()) {
                         return el.child(
                             div().py(px(24.)).child(
                                 empty_state::view(t, empty_state::HOSTS, "No hosts yet.")

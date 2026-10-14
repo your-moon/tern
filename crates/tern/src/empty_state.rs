@@ -28,6 +28,13 @@ pub fn listing(total: usize, shown: usize) -> Listing {
     }
 }
 
+/// The host picker shows its empty state only for a blank query: a typed target still connects
+/// with no saved hosts, so it is not "empty".
+#[must_use]
+pub fn picker_is_empty(query: &str, total: usize, shown: usize) -> bool {
+    query.trim().is_empty() && listing(total, shown) == Listing::Empty
+}
+
 /// Icon over one muted line, centered. Add the action button as the next child.
 pub fn view(t: &Theme, glyph: &'static str, line: impl Into<SharedString>) -> Div {
     div()
@@ -66,5 +73,20 @@ mod tests {
     fn items_that_survive_the_filter_are_listed() {
         assert_eq!(listing(3, 2), Listing::List);
         assert_eq!(listing(1, 1), Listing::List);
+    }
+
+    #[test]
+    fn the_picker_is_empty_only_for_a_blank_query_with_no_hosts() {
+        assert!(picker_is_empty("", 0, 0));
+        assert!(picker_is_empty("   ", 0, 0));
+        assert!(
+            !picker_is_empty("user@host", 0, 0),
+            "a typed target still connects"
+        );
+        assert!(!picker_is_empty("", 3, 3));
+        assert!(
+            !picker_is_empty("", 3, 0),
+            "hosts exist, none match: not the empty state"
+        );
     }
 }
