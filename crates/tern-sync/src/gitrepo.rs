@@ -341,6 +341,13 @@ mod tests {
         assert_eq!(a.fetch().unwrap().unwrap().hash, "h2");
     }
 
+    /// The limits are part of the behaviour: a slipped `*` in the arithmetic is a test failure.
+    #[test]
+    fn the_limits_are_the_documented_sizes() {
+        assert_eq!(MAX_FILE, 16 * 1024 * 1024);
+        assert_eq!(MAX_META, 64 * 1024);
+    }
+
     /// The metadata file comes from the remote, so a huge one is refused like the other files.
     #[test]
     fn an_oversized_metadata_file_is_refused() {
@@ -354,10 +361,29 @@ mod tests {
         assert!(status.success());
         let url = bare.to_string_lossy().into_owned();
 
-        let big_device = "d".repeat(128 * 1024);
-        GitRepo::new(url.clone(), tmp.path().join("a"))
-            .push("h1", &big_device, b"v", b"s")
-            .unwrap();
+        // A device name that long would not fit on a command line (Windows allows 32 KiB), so the
+        // oversized file is committed by hand into the first clone.
+        let a = GitRepo::new(url.clone(), tmp.path().join("a"));
+        a.push("h1", "mac-a", b"v", b"s").unwrap();
+        std::fs::write(a.dir.join(META), vec![b' '; 128 * 1024]).unwrap();
+        let dir = Some(a.dir.as_path());
+        ok(run(dir, &["add", META]).unwrap(), "add").unwrap();
+        let commit = [
+            "-c",
+            "user.name=tern",
+            "-c",
+            "user.email=tern@localhost",
+            "commit",
+            "--quiet",
+            "-m",
+            "big meta",
+        ];
+        ok(run(dir, &commit).unwrap(), "commit").unwrap();
+        ok(
+            run(dir, &["push", "--quiet", "origin", BRANCH]).unwrap(),
+            "push",
+        )
+        .unwrap();
         let err = GitRepo::new(url, tmp.path().join("b"))
             .fetch()
             .unwrap_err()

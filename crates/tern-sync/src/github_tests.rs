@@ -494,3 +494,9 @@ fn a_response_at_the_cap_is_refused_and_one_byte_under_is_parsed() {
     let mut at = served(json(cap));
     assert!(read_json_capped(at.body_mut(), cap as u64).is_err());
 }
+
+/// The limit is part of the behaviour: a slipped `*` in the arithmetic is a test failure.
+#[test]
+fn the_gist_response_limit_is_four_mebibytes() {
+    assert_eq!(MAX_RESPONSE, 4 * 1024 * 1024);
+}
