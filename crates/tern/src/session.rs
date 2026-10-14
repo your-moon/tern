@@ -525,6 +525,7 @@ impl Session {
                     let answer = step.done.then(|| login.take_answer()).flatten();
                     if step.done {
                         self.login = None;
+                        cx.notify();
                     }
                     self.show(&step.display, cx);
                     if step.done {
