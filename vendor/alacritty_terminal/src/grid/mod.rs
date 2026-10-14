@@ -137,7 +137,7 @@ pub struct Grid<T> {
     max_scroll_limit: usize,
 }
 
-impl<T: GridCell + Default + PartialEq> Grid<T> {
+impl<T: GridCell + Default + PartialEq + Clone> Grid<T> {
     pub fn new(lines: usize, columns: usize, max_scroll_limit: usize) -> Grid<T> {
         Grid {
             raw: Storage::with_capacity(lines, columns),
@@ -285,6 +285,14 @@ impl<T: GridCell + Default + PartialEq> Grid<T> {
                 self.raw.swap(i, i + positions);
             }
 
+            // The top rows are about to become history: keep only the cells they use.
+            // tern: trimmed history rows.
+            if self.max_scroll_limit > 0 {
+                for i in (0..min(positions, self.lines)).map(|i| Line(i as i32)) {
+                    self.raw[i].trim();
+                }
+            }
+
             // Rotate the entire line buffer upward.
             self.raw.rotate(-(positions as isize));
 
@@ -356,7 +364,7 @@ impl<T> Grid<T> {
     /// Reset a visible region within the grid.
     pub fn reset_region<D, R: RangeBounds<Line>>(&mut self, bounds: R)
     where
-        T: ResetDiscriminant<D> + GridCell + Default,
+        T: ResetDiscriminant<D> + GridCell + Default + Clone,
         D: PartialEq,
     {
         let start = match bounds.start_bound() {
@@ -434,7 +442,10 @@ impl<T> Grid<T> {
     }
 
     #[inline]
-    pub fn cursor_cell(&mut self) -> &mut T {
+    pub fn cursor_cell(&mut self) -> &mut T
+    where
+        T: Clone,
+    {
         let point = self.cursor.point;
         &mut self[point.line][point.column]
     }
@@ -475,7 +486,7 @@ impl<T> Index<Point> for Grid<T> {
     }
 }
 
-impl<T> IndexMut<Point> for Grid<T> {
+impl<T: Clone> IndexMut<Point> for Grid<T> {
     #[inline]
     fn index_mut(&mut self, point: Point) -> &mut T {
         &mut self[point.line][point.column]

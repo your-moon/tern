@@ -9,7 +9,7 @@ use crate::term::cell::{Flags, ResetDiscriminant};
 use crate::grid::row::Row;
 use crate::grid::{Dimensions, Grid, GridCell};
 
-impl<T: GridCell + Default + PartialEq> Grid<T> {
+impl<T: GridCell + Default + PartialEq + Clone> Grid<T> {
     /// Resize the grid's width and/or height.
     pub fn resize<D>(&mut self, reflow: bool, lines: usize, columns: usize)
     where
@@ -29,6 +29,18 @@ impl<T: GridCell + Default + PartialEq> Grid<T> {
             Ordering::Less => self.grow_columns(reflow, columns),
             Ordering::Greater => self.shrink_columns(reflow, columns),
             Ordering::Equal => (),
+        }
+
+        // Resizing can move rows between history and the screen (taller screen, reflow that
+        // merges lines). Screen rows get their full width back, history rows are trimmed again.
+        // tern: trimmed history rows.
+        for line in (0..self.lines).map(|l| Line(l as i32)) {
+            self.raw[line].expand();
+        }
+        if self.max_scroll_limit > 0 {
+            for line in (self.topmost_line().0..0).map(Line::from) {
+                self.raw[line].trim();
+            }
         }
 
         // Restore template cell.
