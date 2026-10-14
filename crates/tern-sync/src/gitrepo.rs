@@ -13,6 +13,11 @@ const META: &str = "tern-meta.json";
 const VAULT: &str = "vault.age";
 const DATA: &str = "data.age";
 const BRANCH: &str = "main";
+/// The most a synced `vault.age` or `data.age` may hold; a real vault is kilobytes, so a bigger
+/// file is a broken or hostile remote, and reading it whole would balloon memory.
+const MAX_FILE: u64 = 16 * 1024 * 1024;
+/// `tern-meta.json` is a hash, a time and a device name.
+const MAX_META: u64 = 64 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Meta {
@@ -26,6 +31,18 @@ struct Meta {
 pub struct GitRepo {
     remote: String,
     dir: PathBuf,
+}
+
+/// The file at `path`, refused before it is read when it is longer than `cap` bytes.
+fn read_capped(path: &Path, name: &str, cap: u64) -> Result<Vec<u8>, GithubError> {
+    let format = |e: &dyn std::fmt::Display| GithubError::Format(format!("{name}: {e}"));
+    let len = std::fs::metadata(path).map_err(|e| format(&e))?.len();
+    if len > cap {
+        return Err(format(&format_args!(
+            "{len} bytes is over the {cap} byte limit"
+        )));
+    }
+    std::fs::read(path).map_err(|e| format(&e))
 }
 
 // Runs on a background thread, never on an executor, so blocking on git is fine here.
@@ -140,15 +157,14 @@ impl GitRepo {
     /// wrong format.
     pub fn fetch(&self) -> Result<Option<RemoteBundle>, GithubError> {
         self.refresh()?;
-        let Ok(meta) = std::fs::read_to_string(self.dir.join(META)) else {
+        let meta_path = self.dir.join(META);
+        if std::fs::metadata(&meta_path).is_err() {
             return Ok(None);
-        };
+        }
+        let meta = read_capped(&meta_path, META, MAX_META)?;
         let meta: Meta =
-            serde_json::from_str(&meta).map_err(|e| GithubError::Format(e.to_string()))?;
-        let read = |name: &str| {
-            std::fs::read(self.dir.join(name))
-                .map_err(|e| GithubError::Format(format!("{name}: {e}")))
-        };
+            serde_json::from_slice(&meta).map_err(|e| GithubError::Format(e.to_string()))?;
+        let read = |name: &str| read_capped(&self.dir.join(name), name, MAX_FILE);
         Ok(Some(RemoteBundle {
             hash: meta.hash,
             updated_at: meta.updated_at,
@@ -325,6 +341,56 @@ mod tests {
         assert_eq!(a.fetch().unwrap().unwrap().hash, "h2");
     }
 
+    /// The limits are part of the behaviour: a slipped `*` in the arithmetic is a test failure.
+    #[test]
+    fn the_limits_are_the_documented_sizes() {
+        assert_eq!(MAX_FILE, 16 * 1024 * 1024);
+        assert_eq!(MAX_META, 64 * 1024);
+    }
+
+    /// The metadata file comes from the remote, so a huge one is refused like the other files.
+    #[test]
+    fn an_oversized_metadata_file_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bare = tmp.path().join("remote.git");
+        let status = std::process::Command::new("git")
+            .args(["init", "--quiet", "--bare", "-b", "main"])
+            .arg(&bare)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let url = bare.to_string_lossy().into_owned();
+
+        // A device name that long would not fit on a command line (Windows allows 32 KiB), so the
+        // oversized file is committed by hand into the first clone.
+        let a = GitRepo::new(url.clone(), tmp.path().join("a"));
+        a.push("h1", "mac-a", b"v", b"s").unwrap();
+        std::fs::write(a.dir.join(META), vec![b' '; 128 * 1024]).unwrap();
+        let dir = Some(a.dir.as_path());
+        ok(run(dir, &["add", META]).unwrap(), "add").unwrap();
+        let commit = [
+            "-c",
+            "user.name=tern",
+            "-c",
+            "user.email=tern@localhost",
+            "commit",
+            "--quiet",
+            "-m",
+            "big meta",
+        ];
+        ok(run(dir, &commit).unwrap(), "commit").unwrap();
+        ok(
+            run(dir, &["push", "--quiet", "origin", BRANCH]).unwrap(),
+            "push",
+        )
+        .unwrap();
+        let err = GitRepo::new(url, tmp.path().join("b"))
+            .fetch()
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("tern-meta.json"), "{err}");
+    }
+
     #[test]
     fn ok_extracts_first_non_empty_error_line_or_fails() {
         let mut out = command(None, &["unknown-command-xyz"]).output().unwrap();
@@ -443,5 +509,32 @@ mod tests {
 
         let err = create_github_repo().unwrap_err();
         assert_eq!(err.to_string(), "GitHub: gh: gh executable not found");
+    }
+
+    #[test]
+    fn a_file_over_the_cap_is_refused_and_one_at_the_cap_is_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("vault.age");
+        std::fs::write(&path, [7u8; 8]).unwrap();
+        assert_eq!(read_capped(&path, "vault.age", 8).unwrap(), [7u8; 8]);
+        let err = read_capped(&path, "vault.age", 7).unwrap_err().to_string();
+        assert!(
+            err.contains("vault.age: 8 bytes is over the 7 byte limit"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn the_real_cap_refuses_a_sparse_file_one_byte_over() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("data.age");
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(MAX_FILE + 1).unwrap();
+        assert!(read_capped(&path, "data.age", MAX_FILE).is_err());
+        file.set_len(MAX_FILE).unwrap();
+        assert_eq!(
+            read_capped(&path, "data.age", MAX_FILE).unwrap().len() as u64,
+            MAX_FILE
+        );
     }
 }

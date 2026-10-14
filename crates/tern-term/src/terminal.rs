@@ -32,6 +32,10 @@ use crate::search::{Search, SearchMark, mark_at};
 pub use alacritty_terminal::index::Side;
 pub use alacritty_terminal::selection::SelectionType;
 
+/// The most text one OSC 52 request may put on the clipboard. The program on the other end of
+/// the connection chooses the payload, so a larger one is dropped rather than copied.
+const MAX_CLIPBOARD_BYTES: usize = 1024 * 1024;
+
 /// Scrollback history kept client-side (lines).
 pub const SCROLLBACK_LINES: usize = 10_000;
 
@@ -268,7 +272,9 @@ impl Terminal {
                     notices.push(Notice::Event(TerminalEvent::TitleChanged(String::new())))
                 }
                 Event::Bell => notices.push(Notice::Event(TerminalEvent::Bell)),
-                Event::ClipboardStore(_, text) => notices.push(Notice::ClipboardStore(text)),
+                Event::ClipboardStore(_, text) if text.len() <= MAX_CLIPBOARD_BYTES => {
+                    notices.push(Notice::ClipboardStore(text));
+                }
                 // OSC 10/11/12 and OSC 4 queries: vim/neovim use these to pick
                 // a light or dark scheme.
                 Event::ColorRequest(index, format) => {

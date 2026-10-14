@@ -11,6 +11,8 @@ const DESCRIPTION: &str = "tern-sync";
 const META: &str = "tern-meta.json";
 const VAULT: &str = "vault.age.b64";
 const DATA: &str = "data.age.b64";
+/// The most of a gist response that is read; two base64 files of a few KiB come to far less.
+const MAX_RESPONSE: u64 = 4 * 1024 * 1024;
 const KEYCHAIN_SERVICE: &str = "tern";
 const KEYCHAIN_ACCOUNT: &str = "github-token";
 
@@ -158,6 +160,14 @@ impl UreqHttp {
     }
 }
 
+/// Parses the body as JSON, failing once it reaches `cap` bytes instead of buffering all of it.
+fn read_json_capped(body: &mut ureq::Body, cap: u64) -> Result<Value, GithubError> {
+    body.with_config()
+        .limit(cap)
+        .read_json::<Value>()
+        .map_err(|e| GithubError::Http(e.to_string()))
+}
+
 impl GithubHttp for UreqHttp {
     fn get(&self, token: &str, path: &str) -> Result<Value, GithubError> {
         let mut res = self
@@ -167,9 +177,7 @@ impl GithubHttp for UreqHttp {
             .header("Accept", "application/vnd.github+json")
             .header("User-Agent", "tern")
             .call()?;
-        res.body_mut()
-            .read_json::<Value>()
-            .map_err(|e| GithubError::Http(e.to_string()))
+        read_json_capped(res.body_mut(), MAX_RESPONSE)
     }
 
     fn send(

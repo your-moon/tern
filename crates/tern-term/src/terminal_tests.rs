@@ -258,3 +258,31 @@ mod fuzz {
         }
     }
 }
+
+/// An OSC 52 request that copies `len` bytes of `a` (len is 1 mod 3: base64 of "a" is `YQ==`).
+fn osc52(len: usize) -> Vec<u8> {
+    assert_eq!(len % 3, 1);
+    let mut seq = b"\x1b]52;c;".to_vec();
+    seq.extend(b"YWFh".repeat(len / 3));
+    seq.extend(b"YQ==\x07");
+    seq
+}
+
+fn clipboard_len(notices: &[Notice]) -> Option<usize> {
+    notices.iter().find_map(|n| match n {
+        Notice::ClipboardStore(text) => Some(text.len()),
+        Notice::Event(_) => None,
+    })
+}
+
+#[test]
+fn an_osc52_copy_up_to_the_cap_reaches_the_clipboard_and_a_larger_one_does_not() {
+    let mut t = term(80, 24);
+    assert_eq!(
+        clipboard_len(&t.process(&osc52(1024 * 1024))),
+        Some(1024 * 1024)
+    );
+    assert_eq!(clipboard_len(&t.process(&osc52(1024 * 1024 + 3))), None);
+    // Dropping one request leaves the terminal working.
+    assert_eq!(clipboard_len(&t.process(&osc52(4))), Some(4));
+}

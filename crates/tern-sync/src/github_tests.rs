@@ -459,3 +459,44 @@ fn debug_never_shows_the_token() {
     assert!(!format!("{g:?}").contains("ghp_secret123"));
     assert_eq!(format!("{g:?}"), "Gist { .. }");
 }
+
+/// Serves `body` once on localhost and returns the response a plain ureq agent gets for it.
+fn served(body: String) -> ureq::http::Response<ureq::Body> {
+    use std::io::{Read as _, Write as _};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut request = [0u8; 1024];
+        let _ = stream.read(&mut request);
+        let head = format!(
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+            body.len()
+        );
+        let _ = stream.write_all(head.as_bytes());
+        let _ = stream.write_all(body.as_bytes());
+    });
+    ureq::get(format!("http://127.0.0.1:{port}/"))
+        .call()
+        .unwrap()
+}
+
+#[test]
+fn a_response_at_the_cap_is_refused_and_one_byte_under_is_parsed() {
+    // ureq reads once more after `cap` bytes to find the end, so a body of exactly `cap`
+    // bytes already trips its limit: the largest accepted body is `cap - 1`.
+    let cap = 64;
+    // {"k":"<pad>"} is 8 bytes plus the padding.
+    let json = |len: usize| format!(r#"{{"k":"{}"}}"#, "a".repeat(len - 8));
+    let mut under = served(json(cap - 1));
+    let value = read_json_capped(under.body_mut(), cap as u64).unwrap();
+    assert_eq!(value["k"].as_str().unwrap().len(), cap - 9);
+    let mut at = served(json(cap));
+    assert!(read_json_capped(at.body_mut(), cap as u64).is_err());
+}
+
+/// The limit is part of the behaviour: a slipped `*` in the arithmetic is a test failure.
+#[test]
+fn the_gist_response_limit_is_four_mebibytes() {
+    assert_eq!(MAX_RESPONSE, 4 * 1024 * 1024);
+}

@@ -120,9 +120,15 @@ pub struct Prepared {
     pub backdrop: Vec<[u8; 3]>,
 }
 
-/// The picture as frosted glass: scaled down, gaussian-blurred and lifted in saturation.
+/// Borrowing form of [`frosted_owned`], for the tests.
+#[cfg(test)]
 pub fn frosted(source: &RgbaImage) -> RgbaImage {
-    let small = image::DynamicImage::ImageRgba8(source.clone())
+    frosted_owned(source.clone())
+}
+
+/// The picture as frosted glass: scaled down, gaussian-blurred and lifted in saturation.
+fn frosted_owned(source: RgbaImage) -> RgbaImage {
+    let small = image::DynamicImage::ImageRgba8(source)
         .thumbnail(FROST_EDGE, FROST_EDGE)
         .to_rgba8();
     let sigma = FROST_SIGMA * small.width().max(small.height()) as f32;
@@ -161,6 +167,9 @@ pub fn prepare(
     let bytes = std::fs::read(source).map_err(|e| format!("Cannot read the wallpaper: {e}"))?;
     let decoded =
         image::load_from_memory(&bytes).map_err(|e| format!("Cannot decode the wallpaper: {e}"))?;
+    // Only the length is still needed, for the cache name; the encoded file can be tens of MB.
+    let len = bytes.len() as u64;
+    drop(bytes);
     let decoded = if decoded.width() > MAX_EDGE || decoded.height() > MAX_EDGE {
         decoded.thumbnail(MAX_EDGE, MAX_EDGE)
     } else {
@@ -168,23 +177,33 @@ pub fn prepare(
     };
     let accent = wallpaper_fx::extract(decoded.thumbnail(64, 64).to_rgba8().pixels().map(|p| p.0));
     let dir = cache(config);
-    let path = dir.join(cache_name(source, bytes.len() as u64, effect, light));
+    let path = dir.join(cache_name(source, len, effect, light));
+    // The picture just rendered, kept so the frosted copy is made from memory, not by decoding
+    // the PNG that was just written.
+    let mut fresh = None;
     if image::open(&path).is_err() {
-        let rgba = decoded.to_rgba8();
+        let rgba = decoded.into_rgba8();
         let (w, h) = rgba.dimensions();
         let out = wallpaper_fx::render(rgba.into_raw(), w, h, effect, light);
         let out = RgbaImage::from_raw(w, h, out).ok_or("Wallpaper effect lost pixels")?;
         std::fs::create_dir_all(&dir).map_err(|e| format!("Cannot create {dir:?}: {e}"))?;
         out.save_with_format(&path, ImageFormat::Png)
             .map_err(|e| format!("Cannot cache the wallpaper: {e}"))?;
+        fresh = Some(out);
+    } else {
+        drop(decoded);
     }
     let blurred = path.with_extension("blur.png");
     let frost = match image::open(&blurred) {
         Ok(cached) => cached.to_rgba8(),
         Err(_) => {
-            let rendered =
-                image::open(&path).map_err(|e| format!("Cannot read the cached wallpaper: {e}"))?;
-            let frost = frosted(&rendered.to_rgba8());
+            let rendered = match fresh {
+                Some(out) => out,
+                None => image::open(&path)
+                    .map_err(|e| format!("Cannot read the cached wallpaper: {e}"))?
+                    .into_rgba8(),
+            };
+            let frost = frosted_owned(rendered);
             frost
                 .save_with_format(&blurred, ImageFormat::Png)
                 .map_err(|e| format!("Cannot cache the frosted wallpaper: {e}"))?;

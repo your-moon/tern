@@ -11,6 +11,7 @@
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
+mod gate;
 pub mod keys;
 pub mod pin;
 
@@ -119,14 +120,15 @@ impl Vault {
     /// As [`Vault::unlock`], without the I/O case.
     pub fn unlock_bytes(ciphertext: &[u8], passphrase: SecretString) -> Result<Self, VaultError> {
         let identity = age::scrypt::Identity::new(passphrase.clone());
-        let plaintext =
-            Zeroizing::new(age::decrypt(&identity, ciphertext).map_err(|e| match e {
+        let plaintext = Zeroizing::new(
+            gate::one_at_a_time(|| age::decrypt(&identity, ciphertext)).map_err(|e| match e {
                 age::DecryptError::DecryptionFailed
                 | age::DecryptError::KeyDecryptionFailed
                 | age::DecryptError::NoMatchingKeys
                 | age::DecryptError::InvalidMac => VaultError::WrongPassphrase,
                 other => VaultError::Corrupt(other.to_string()),
-            })?);
+            })?,
+        );
         let mut contents: Contents =
             serde_json::from_slice(&plaintext).map_err(|e| VaultError::Corrupt(e.to_string()))?;
         if contents.version != VERSION {
@@ -242,7 +244,8 @@ impl Vault {
     pub fn seal(&self, plaintext: &[u8]) -> Result<Vec<u8>, VaultError> {
         let mut recipient = age::scrypt::Recipient::new(self.passphrase.clone());
         recipient.set_work_factor(self.work_factor);
-        age::encrypt(&recipient, plaintext).map_err(|e| VaultError::Corrupt(e.to_string()))
+        gate::one_at_a_time(|| age::encrypt(&recipient, plaintext))
+            .map_err(|e| VaultError::Corrupt(e.to_string()))
     }
 
     /// Reverses [`Vault::seal`].
@@ -251,7 +254,7 @@ impl Vault {
     /// [`VaultError::WrongPassphrase`] when sealed under another passphrase or altered.
     pub fn open(&self, ciphertext: &[u8]) -> Result<Zeroizing<Vec<u8>>, VaultError> {
         let identity = age::scrypt::Identity::new(self.passphrase.clone());
-        age::decrypt(&identity, ciphertext)
+        gate::one_at_a_time(|| age::decrypt(&identity, ciphertext))
             .map(Zeroizing::new)
             .map_err(|_| VaultError::WrongPassphrase)
     }
