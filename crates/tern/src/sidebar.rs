@@ -16,7 +16,7 @@ use tern_ssh::HostEntry;
 
 use crate::connections::Connection;
 use crate::icons::{self, icon};
-use crate::session::Status;
+use crate::indicator::Dot;
 use crate::shell::Shell;
 use crate::tabs::{self, TabInfo};
 use crate::text_input::TextInput;
@@ -108,7 +108,7 @@ pub fn render(
             .iter()
             .rev()
             .find(|tab| tab.alias == host.alias)
-            .map(|tab| &tab.status);
+            .map(|tab| tab.dot);
         let active = s.active_alias == Some(host.alias.as_str());
         row(scope, ix, host, status, active, top, inner, t, cx)
     };
@@ -315,12 +315,16 @@ fn section_header(
 }
 
 /// The leading 13 pt slot: a 6 pt dot coloured by the host's newest tab.
-fn status_dot(status: Option<&Status>, t: &Theme) -> impl IntoElement + use<> {
-    let color: Option<Hsla> = status.map(|s| match s {
-        Status::Idle => t.faint.opacity(0.8),
-        Status::Connected => t.success.opacity(0.9),
-        Status::Connecting => t.accent.opacity(0.6),
-        Status::Closed => t.danger.opacity(0.65),
+fn status_dot(status: Option<Dot>, t: &Theme) -> impl IntoElement + use<> {
+    let color: Option<(Hsla, bool)> = status.map(|d| {
+        let alpha = match d {
+            Dot::Idle => 0.8,
+            Dot::Connected => 0.9,
+            Dot::Connecting => 0.6,
+            Dot::WaitingForInput => 0.9,
+            Dot::Closed => 0.65,
+        };
+        (d.color(t).opacity(alpha), d.hollow())
     });
     div()
         .flex_none()
@@ -328,13 +332,13 @@ fn status_dot(status: Option<&Status>, t: &Theme) -> impl IntoElement + use<> {
         .flex()
         .items_center()
         .justify_center()
-        .when_some(color, |el, c| {
-            el.child(
-                div()
-                    .size(px(crate::theme::fit(13., 6.)))
-                    .rounded_full()
-                    .bg(c),
-            )
+        .when_some(color, |el, (c, hollow)| {
+            let disc = div().size(px(crate::theme::fit(13., 6.))).rounded_full();
+            el.child(if hollow {
+                disc.border_1().border_color(c)
+            } else {
+                disc.bg(c)
+            })
         })
 }
 
@@ -353,7 +357,7 @@ fn row(
     scope: &'static str,
     ix: usize,
     host: &HostEntry,
-    status: Option<&Status>,
+    status: Option<Dot>,
     active: bool,
     top: bool,
     inner: f32,

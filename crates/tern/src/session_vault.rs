@@ -150,6 +150,9 @@ impl Session {
         let (login, question) = Login::start(prompt);
         self.login = Some(login);
         self.show(&question, cx);
+        // The tab, sidebar and status dots read `is_asking`; a session nobody is drawing would
+        // otherwise keep the connecting dot (with Reduce Motion nothing else redraws it).
+        cx.notify();
     }
 
     pub(super) fn ask_local(&mut self, text: &str, echo: bool, flow: Flow, cx: &mut Context<Self>) {
@@ -157,6 +160,7 @@ impl Session {
         self.login = Some(login);
         self.flow = Some(flow);
         self.show(&question, cx);
+        cx.notify();
     }
 
     /// Asks to save a typed secret once the remote has been quiet for [`QUIET`] (at most
