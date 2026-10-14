@@ -1,6 +1,7 @@
 //! tern: a fast, low-memory SSH terminal.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+mod alloc;
 mod chrome;
 mod connections;
 #[cfg(debug_assertions)]
@@ -63,14 +64,9 @@ fn parse_cli(arg: Option<String>) -> Cli {
     }
 }
 
-/// libmalloc keeps the 256 MiB scrypt scratch of a vault unlock resident (about 275 MB of
-/// footprint at launch with the Keychain on); mimalloc returns large blocks to the OS.
-#[cfg(target_os = "macos")]
-#[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
 #[allow(clippy::print_stdout, clippy::print_stderr)]
 fn main() {
+    alloc::init();
     let target = match parse_cli(std::env::args().nth(1)) {
         Cli::Open(target) => target,
         Cli::Print(text) => {

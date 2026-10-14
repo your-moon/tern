@@ -33,6 +33,7 @@ strip-ansi-escapes = "0.2.1"
 security-framework.workspace = true
 # libmalloc keeps a freed 256 MiB scrypt block resident; mimalloc hands it back to the OS.
 mimalloc = { version = "0.1", default-features = false }
+libmimalloc-sys = { version = "0.1", features = ["extended"] }
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSWorkspace", "NSAccessibility"] }
 
 [dev-dependencies]
