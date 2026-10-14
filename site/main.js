@@ -26,31 +26,55 @@ function showPlatform(platform) {
   }
 }
 
+// GitHub's API allows 60 requests an hour per network, which a shared office or
+// VPN uses up quickly. shields.io serves the same numbers from its own cache, so it
+// is asked first; the GitHub API is only the fallback.
+async function fetchShield(path) {
+  const response = await fetch(`https://img.shields.io/github/${path}/${REPO}.json`);
+  if (!response.ok) return null;
+  const { value } = await response.json();
+  return value && value !== "invalid" ? value : null;
+}
+
+async function fetchGitHub(path) {
+  const response = await fetch(`https://api.github.com/repos/${REPO}${path}`);
+  return response.ok ? response.json() : null;
+}
+
+// The latest release tag, like "v0.1.3", or null if neither source answers.
+async function latestReleaseTag() {
+  const tag = (await fetchShield("v/release").catch(() => null))
+    ?? (await fetchGitHub("/releases/latest").catch(() => null))?.tag_name;
+  return /^v\d+\.\d+\.\d+$/.test(tag ?? "") ? tag : null;
+}
+
+// The star count as text, like "37" or "1.2k", or null if neither source answers.
+async function starCountText() {
+  const shown = await fetchShield("stars").catch(() => null);
+  if (shown) return shown;
+  const stars = (await fetchGitHub("").catch(() => null))?.stargazers_count;
+  if (typeof stars !== "number") return null;
+  return stars >= 1000 ? `${(stars / 1000).toFixed(1).replace(/\.0$/, "")}k` : String(stars);
+}
+
 // Points every download link at the latest release's file names, and shows its
 // version, so the page never links to a release that has been replaced.
 async function followLatestRelease() {
-  const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
-  if (!response.ok) return;
-  const release = await response.json();
-  if (!/^v\d+\.\d+\.\d+$/.test(release.tag_name)) return;
-
-  const version = release.tag_name.slice(1);
+  const tag = await latestReleaseTag();
+  if (!tag) return;
+  const version = tag.slice(1);
   for (const link of document.querySelectorAll("a[data-asset]")) {
     link.href = `${DOWNLOAD_BASE}/tern-${version}-${link.dataset.asset}`;
   }
   for (const el of document.querySelectorAll(".release-version")) {
-    el.textContent = release.tag_name;
+    el.textContent = tag;
   }
 }
 
 // Shows the repository's star count next to the GitHub links.
 async function showStarCount() {
-  const response = await fetch(`https://api.github.com/repos/${REPO}`);
-  if (!response.ok) return;
-  const { stargazers_count: stars } = await response.json();
-  if (typeof stars !== "number") return;
-
-  const text = stars >= 1000 ? `${(stars / 1000).toFixed(1).replace(/\.0$/, "")}k` : String(stars);
+  const text = await starCountText();
+  if (!text) return;
   for (const el of document.querySelectorAll(".star-count")) {
     el.textContent = `★ ${text}`;
     el.hidden = false;
@@ -86,6 +110,6 @@ function setUpTabs(tablist) {
 
 showPlatform(detectPlatform());
 document.querySelectorAll('[role="tablist"]').forEach(setUpTabs);
-// Both requests are optional: if GitHub doesn't answer, the static links and text stay.
+// Both are optional: if no source answers, the static links and text stay.
 followLatestRelease().catch(() => {});
 showStarCount().catch(() => {});
