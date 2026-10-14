@@ -1,6 +1,7 @@
 //! tern: a fast, low-memory SSH terminal.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+mod alloc;
 mod chrome;
 mod connections;
 #[cfg(debug_assertions)]
@@ -65,6 +66,7 @@ fn parse_cli(arg: Option<String>) -> Cli {
 
 #[allow(clippy::print_stdout, clippy::print_stderr)]
 fn main() {
+    alloc::init();
     let target = match parse_cli(std::env::args().nth(1)) {
         Cli::Open(target) => target,
         Cli::Print(text) => {

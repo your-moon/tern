@@ -29,7 +29,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 
 # Craft gates. Every crate opts in with `[lints] workspace = true`.
 [workspace.lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny"
 missing_debug_implementations = "warn"
 
 [workspace.lints.clippy]
