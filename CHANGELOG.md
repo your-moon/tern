@@ -12,6 +12,7 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 ### Changed
 
 - Scrollback rows keep only the cells they use, so a full history of short lines takes about a sixth of the memory (#89).
+- Starting with a wallpaper already rendered no longer decodes the picture, which took about 35 MB of memory at launch; the colours are cached beside it (#33).
 
 ### Fixed
 

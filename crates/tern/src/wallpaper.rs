@@ -25,8 +25,11 @@ const BACKDROP_EDGE: u32 = 48;
 pub const HISTORY_LIMIT: usize = 8;
 /// Longest edge of the rendered artwork; larger sources are scaled down to it.
 const MAX_EDGE: u32 = 1600;
-/// Rendered files kept in the cache; the rest are removed, oldest first.
-const CACHE_KEEP: usize = 12;
+/// Rendered pictures kept in the cache, each with its frosted copy and colours; the rest are
+/// removed, oldest first.
+const CACHE_KEEP: usize = 6;
+/// Bumped when the colours stored next to a picture change shape or meaning.
+const META_VERSION: u32 = 1;
 /// Bumped when an effect's output changes, so stale cache files are not reused.
 const CACHE_VERSION: u32 = 1;
 const MAX_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
@@ -157,18 +160,75 @@ fn cache_name(source: &Path, len: u64, effect: Effect, light: bool) -> String {
     format!("{:016x}.png", hasher.finish())
 }
 
-/// Decodes `source`, applies `effect`, and caches the result. Heavy: call off the UI thread.
+/// What a cache hit returns without decoding anything: the two values that need pixels.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Meta {
+    version: u32,
+    accent: Option<[u8; 3]>,
+    backdrop: Vec<[u8; 3]>,
+}
+
+const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+/// The empty IEND chunk that ends every complete PNG.
+const PNG_IEND: [u8; 12] = [0, 0, 0, 0, b'I', b'E', b'N', b'D', 0xae, 0x42, 0x60, 0x82];
+
+/// True when `path` starts with the PNG signature and ends with IEND, so a truncated write is
+/// caught without decoding it.
+fn png_complete(path: &Path) -> bool {
+    use std::io::{Read, Seek, SeekFrom};
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let Ok(len) = file.metadata().map(|m| m.len()) else {
+        return false;
+    };
+    if len < (PNG_SIGNATURE.len() + PNG_IEND.len()) as u64 {
+        return false;
+    }
+    let mut head = [0; 8];
+    let mut tail = [0; 12];
+    file.read_exact(&mut head).is_ok()
+        && head == PNG_SIGNATURE
+        && file.seek(SeekFrom::End(-(PNG_IEND.len() as i64))).is_ok()
+        && file.read_exact(&mut tail).is_ok()
+        && tail == PNG_IEND
+}
+
+fn read_meta(path: &Path) -> Option<Meta> {
+    let meta: Meta = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+    (meta.version == META_VERSION).then_some(meta)
+}
+
+/// Decodes `source`, applies `effect`, and caches the result. Heavy on a miss, so call off the
+/// UI thread; a hit reads no pixels.
 pub fn prepare(
     source: &Path,
     effect: Effect,
     light: bool,
     config: &Path,
 ) -> Result<Prepared, String> {
+    let len = std::fs::metadata(source)
+        .map_err(|e| format!("Cannot read the wallpaper: {e}"))?
+        .len();
+    let dir = cache(config);
+    let path = dir.join(cache_name(source, len, effect, light));
+    let blurred = path.with_extension("blur.png");
+    let meta_path = path.with_extension("meta.json");
+    if png_complete(&path)
+        && png_complete(&blurred)
+        && let Some(meta) = read_meta(&meta_path)
+    {
+        trim_cache(&dir, &[&path, &blurred, &meta_path]);
+        return Ok(Prepared {
+            image: path,
+            blurred,
+            accent: meta.accent,
+            backdrop: meta.backdrop,
+        });
+    }
     let bytes = std::fs::read(source).map_err(|e| format!("Cannot read the wallpaper: {e}"))?;
     let decoded =
         image::load_from_memory(&bytes).map_err(|e| format!("Cannot decode the wallpaper: {e}"))?;
-    // Only the length is still needed, for the cache name; the encoded file can be tens of MB.
-    let len = bytes.len() as u64;
     drop(bytes);
     let decoded = if decoded.width() > MAX_EDGE || decoded.height() > MAX_EDGE {
         decoded.thumbnail(MAX_EDGE, MAX_EDGE)
@@ -176,8 +236,6 @@ pub fn prepare(
         decoded
     };
     let accent = wallpaper_fx::extract(decoded.thumbnail(64, 64).to_rgba8().pixels().map(|p| p.0));
-    let dir = cache(config);
-    let path = dir.join(cache_name(source, len, effect, light));
     // The picture just rendered, kept so the frosted copy is made from memory, not by decoding
     // the PNG that was just written.
     let mut fresh = None;
@@ -193,7 +251,6 @@ pub fn prepare(
     } else {
         drop(decoded);
     }
-    let blurred = path.with_extension("blur.png");
     let frost = match image::open(&blurred) {
         Ok(cached) => cached.to_rgba8(),
         Err(_) => {
@@ -217,28 +274,57 @@ pub fn prepare(
             .to_rgba8()
             .as_raw(),
     );
-    trim_cache(&dir, &[&path, &blurred]);
+    let meta = Meta {
+        version: META_VERSION,
+        accent,
+        backdrop,
+    };
+    let json = serde_json::to_vec(&meta).map_err(|e| format!("Cannot cache the colours: {e}"))?;
+    std::fs::write(&meta_path, json).map_err(|e| format!("Cannot cache the colours: {e}"))?;
+    trim_cache(&dir, &[&path, &blurred, &meta_path]);
     Ok(Prepared {
         image: path,
         blurred,
         accent,
-        backdrop,
+        backdrop: meta.backdrop,
     })
 }
 
-/// Keeps the newest [`CACHE_KEEP`] files, and never removes the `current` pair.
+/// The cache name up to its first dot: the picture, its frosted copy and its colours share it.
+fn cache_group(path: &Path) -> Option<String> {
+    let name = path.file_name()?.to_str()?;
+    Some(name.split('.').next()?.to_owned())
+}
+
+/// Keeps the newest [`CACHE_KEEP`] rendered pictures with their frosted copy and colours, and
+/// never removes the `current` files.
 fn trim_cache(dir: &Path, current: &[&Path]) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
-    let mut files: Vec<(SystemTime, PathBuf)> = entries
-        .flatten()
-        .filter_map(|e| Some((e.metadata().ok()?.modified().ok()?, e.path())))
-        .collect();
-    files.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
-    for (_, path) in files.into_iter().skip(CACHE_KEEP) {
-        if !current.contains(&path.as_path()) {
-            let _ = std::fs::remove_file(path);
+    let mut groups: std::collections::HashMap<String, (SystemTime, Vec<PathBuf>)> =
+        std::collections::HashMap::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let (Some(group), Some(modified)) = (
+            cache_group(&path),
+            entry.metadata().ok().and_then(|m| m.modified().ok()),
+        ) else {
+            continue;
+        };
+        let slot = groups
+            .entry(group)
+            .or_insert_with(|| (SystemTime::UNIX_EPOCH, Vec::new()));
+        slot.0 = slot.0.max(modified);
+        slot.1.push(path);
+    }
+    let mut groups: Vec<_> = groups.into_values().collect();
+    groups.sort_by_key(|(modified, _)| std::cmp::Reverse(*modified));
+    for (_, files) in groups.into_iter().skip(CACHE_KEEP) {
+        for path in files {
+            if !current.contains(&path.as_path()) {
+                let _ = std::fs::remove_file(path);
+            }
         }
     }
 }
@@ -434,7 +520,7 @@ mod tests {
                 // Date each file by when it was made, oldest first, a day apart.
                 let when = std::time::UNIX_EPOCH
                     + std::time::Duration::from_secs(86_400 * (made.len() as u64 + 1));
-                for file in [&p.image, &p.blurred] {
+                for file in [&p.image, &p.blurred, &p.image.with_extension("meta.json")] {
                     std::fs::File::options()
                         .write(true)
                         .open(file)
@@ -448,8 +534,17 @@ mod tests {
         let kept = std::fs::read_dir(dir.join("wallpapers/cache"))
             .unwrap()
             .count();
-        assert_eq!(kept, CACHE_KEEP);
+        assert_eq!(
+            kept,
+            CACHE_KEEP * 3,
+            "a picture, its frosted copy and its colours"
+        );
         assert!(!made[0].exists(), "the oldest was removed");
+        assert!(
+            !made[0].with_extension("meta.json").exists(),
+            "its colours went with it"
+        );
+        assert!(made[made.len() - 1].with_extension("meta.json").exists());
         assert!(made[made.len() - 1].exists(), "the newest was kept");
     }
 
@@ -550,5 +645,156 @@ mod tests {
         assert!((90..170).contains(&mid), "{mid}");
         // The panels are sized from the frosted copy: no white squares left in the sample.
         assert!(p.backdrop.iter().all(|c| c[0] < 230), "{:?}", p.backdrop);
+    }
+
+    fn assert_same(a: &Prepared, b: &Prepared) {
+        assert_eq!(a.image, b.image);
+        assert_eq!(a.blurred, b.blurred);
+        assert_eq!(a.accent, b.accent);
+        assert_eq!(a.backdrop, b.backdrop);
+    }
+
+    fn meta_of(p: &Prepared) -> PathBuf {
+        p.image.with_extension("meta.json")
+    }
+
+    #[test]
+    fn the_cache_name_uses_the_file_length_the_bytes_would_have() {
+        let dir = temp("name");
+        let src = dir.join("w.png");
+        write_png(&src, 33, 17);
+        let len = std::fs::read(&src).unwrap().len() as u64;
+        assert_eq!(len, std::fs::metadata(&src).unwrap().len());
+        let p = prepare(&src, Effect::Dither, true, &dir).unwrap();
+        assert_eq!(
+            p.image.file_name().unwrap().to_str().unwrap(),
+            cache_name(&src, len, Effect::Dither, true)
+        );
+    }
+
+    #[test]
+    fn a_hit_returns_what_the_slow_path_returned() {
+        for (i, effect) in [
+            Effect::None,
+            Effect::Scanlines,
+            Effect::Ascii,
+            Effect::Dither,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let dir = temp(&format!("hit-{i}"));
+            let src = dir.join("w.png");
+            if i % 2 == 0 {
+                checkerboard(90 + i as u32, 50, 7).save(&src).unwrap();
+            } else {
+                write_png(&src, 60, 40 + i as u32);
+            }
+            let slow = prepare(&src, effect, i == 1, &dir).unwrap();
+            assert!(meta_of(&slow).is_file());
+            let hit = prepare(&src, effect, i == 1, &dir).unwrap();
+            assert_same(&slow, &hit);
+            std::fs::remove_file(meta_of(&slow)).unwrap();
+            let again = prepare(&src, effect, i == 1, &dir).unwrap();
+            assert_same(&slow, &again);
+        }
+    }
+
+    #[test]
+    fn a_hit_decodes_nothing() {
+        let dir = temp("nodecode");
+        let src = dir.join("w.png");
+        write_png(&src, 40, 30);
+        let first = prepare(&src, Effect::Scanlines, false, &dir).unwrap();
+        let len = std::fs::metadata(&src).unwrap().len() as usize;
+        std::fs::write(&src, vec![0x5a; len]).unwrap();
+        let stub: Vec<u8> = PNG_SIGNATURE.iter().chain(&PNG_IEND).copied().collect();
+        std::fs::write(&first.image, &stub).unwrap();
+        std::fs::write(&first.blurred, &stub).unwrap();
+        assert!(image::open(&first.image).is_err());
+        let hit = prepare(&src, Effect::Scanlines, false, &dir).unwrap();
+        assert_same(&first, &hit);
+        std::fs::remove_file(meta_of(&first)).unwrap();
+        assert!(
+            prepare(&src, Effect::Scanlines, false, &dir).is_err(),
+            "without the colours the slow path runs, and cannot decode the garbage"
+        );
+    }
+
+    #[test]
+    fn a_truncated_cached_picture_is_rendered_again() {
+        for victim in ["image", "blurred"] {
+            let dir = temp(&format!("trunc-{victim}"));
+            let src = dir.join("w.png");
+            write_png(&src, 40, 30);
+            let first = prepare(&src, Effect::Scanlines, false, &dir).unwrap();
+            let file = if victim == "image" {
+                &first.image
+            } else {
+                &first.blurred
+            };
+            let bytes = std::fs::read(file).unwrap();
+            std::fs::write(file, &bytes[..bytes.len() - 12]).unwrap();
+            assert!(png_complete(&first.image) != (victim == "image"));
+            let again = prepare(&src, Effect::Scanlines, false, &dir).unwrap();
+            assert_same(&first, &again);
+            assert_eq!(std::fs::read(file).unwrap(), bytes, "regenerated whole");
+            assert!(png_complete(&again.image) && png_complete(&again.blurred));
+        }
+    }
+
+    #[test]
+    fn a_missing_sidecar_is_made_again() {
+        let dir = temp("nometa");
+        let src = dir.join("w.png");
+        write_png(&src, 40, 30);
+        let first = prepare(&src, Effect::Ascii, false, &dir).unwrap();
+        std::fs::remove_file(meta_of(&first)).unwrap();
+        let again = prepare(&src, Effect::Ascii, false, &dir).unwrap();
+        assert!(meta_of(&again).is_file());
+        assert_same(&first, &again);
+    }
+
+    #[test]
+    fn a_corrupt_or_old_sidecar_is_ignored_and_replaced() {
+        let dir = temp("badmeta");
+        let src = dir.join("w.png");
+        write_png(&src, 40, 30);
+        let first = prepare(&src, Effect::Ascii, false, &dir).unwrap();
+        let good = std::fs::read_to_string(meta_of(&first)).unwrap();
+        let old = good.replace(
+            &format!("\"version\":{META_VERSION}"),
+            &format!("\"version\":{}", META_VERSION + 1),
+        );
+        assert_ne!(old, good, "the version is in the file");
+        for bad in [old.as_str(), "{\"version\":", "", "[]"] {
+            std::fs::write(meta_of(&first), bad).unwrap();
+            let again = prepare(&src, Effect::Ascii, false, &dir).unwrap();
+            assert_same(&first, &again);
+            assert_eq!(std::fs::read_to_string(meta_of(&first)).unwrap(), good);
+        }
+    }
+
+    #[test]
+    fn trimming_keeps_a_current_sidecar_and_drops_a_stray_one() {
+        let dir = temp("stray");
+        let src = dir.join("w.png");
+        write_png(&src, 16, 16);
+        let cache = dir.join("wallpapers/cache");
+        let first = prepare(&src, Effect::None, false, &dir).unwrap();
+        std::fs::write(cache.join("0000000000000000.meta.json"), "{}").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(cache.join("0000000000000000.meta.json"))
+            .unwrap()
+            .set_modified(std::time::UNIX_EPOCH)
+            .unwrap();
+        for i in 0..CACHE_KEEP {
+            std::fs::write(cache.join(format!("{:016x}.png", i + 1)), "x").unwrap();
+        }
+        let again = prepare(&src, Effect::None, false, &dir).unwrap();
+        assert_same(&first, &again);
+        assert!(meta_of(&again).is_file());
+        assert!(!cache.join("0000000000000000.meta.json").exists());
     }
 }

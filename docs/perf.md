@@ -116,3 +116,15 @@ separate "AutoFill (tern)" helper process; that is unconfirmed here: on 2026-10-
 could be tied to tern appeared with or without the key (the system's SafariPlatformSupport
 helpers outlive the app). No memory change is claimed; record before/after numbers from
 `scripts/measure-rss.sh` here if it is ever measured.
+
+## 2026-10-14 — wallpaper cache hit decodes nothing (#33)
+
+Before: every launch with a wallpaper read and fully decoded the source, thumbnailed it, and
+opened the cached 1600 px PNG only to test that it opened. The lead measured about 35 MB of extra
+peak RSS at launch for a 1920x1038 source (131-139 MB with the wallpaper, 100-103 MB without).
+
+Now: the cache name comes from the source's file length, and the accent and backdrop colours are
+stored in `<hash>.meta.json` next to the picture. A hit checks the PNG signature and IEND trailer
+of both PNGs and parses the sidecar; no pixel is decoded. A miss, a truncated file or an old
+sidecar takes the previous path, which also writes the sidecar. The after-figure is measured by the
+lead, not recorded here.
