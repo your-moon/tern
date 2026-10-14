@@ -21,9 +21,11 @@
 </head>
 <body>
 <div class="nav-bar"><header class="nav">
-  <a class="brand" href="#top"><img src="assets/icon.svg" alt="" width="26" height="26"><span>tern</span></a>
-  <nav class="nav-r">
+  <a class="brand" href="#top"><img src="assets/icon.svg" alt="" width="22" height="22"><span>tern</span><span class="brand-sub">SSH client</span></a>
+  <nav class="nav-r" aria-label="Main">
+    <a href="https://github.com/your-moon/tern#readme">Docs</a>
     <a href="#download">Download</a>
+    <span class="nav-div" aria-hidden="true"></span>
     <a class="gh" href="https://github.com/your-moon/tern" aria-label="tern on GitHub"><svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.5 7.5 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg><span class="stars" hidden><b class="star-n"></b></span></a>
   </nav>
 </header></div>
@@ -41,53 +43,64 @@
     <p class="fine"><span id="dl-fine">For Apple silicon Macs, signed and notarised. Open source.</span> <span id="ver">v0.1.3</span> · <a href="https://github.com/your-moon/tern#install">How to install ›</a><br><span id="dl-other">Windows and Linux (preview): <a data-asset="windows-x86_64.zip" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-windows-x86_64.zip">.zip</a> · <a data-asset="linux-x86_64.tar.gz" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-linux-x86_64.tar.gz">.tar.gz</a>, x86-64.</span></p>
   </div>
 </section>
-
-<section class="shot-wrap">
-  <figure class="frame"><img src="assets/terminal.jpg" width="1600" height="1000" alt="tern connected to web-01 and running htop, status line showing Connected, 1 ms and session time"></figure>
-</section>
-
-<section class="row wrap">
-  <div class="txt">
-    <h2>Passwords that stay out of the way</h2>
-    <p>Logins come from your SSH key, your password manager (any command, like <code>op read …</code> or <code>pass show …</code>), or tern's encrypted vault.</p>
-    <p>At a sudo prompt, press <kbd>⌘\</kbd> (<kbd>Ctrl+Shift+\</kbd> on Windows and Linux) and tern types it. Never on its own.</p>
+<section class="sec">
+  <div class="sec-head">
+    <div><p class="label">Connect</p><h2 class="two">One shortcut.<br>Any server.</h2></div>
+    <div class="sec-p"><p>Press <kbd>⌘K</kbd> and type a few letters: tern finds the host, ordered by what you used last, and connects. Groups, tags, ProxyJump and port forwards are set once per host, and a dropped network reconnects on its own.</p></div>
   </div>
-  <figure class="vis"><img src="assets/sudo.jpg" width="800" height="350" loading="lazy" alt="sudo docker ps at a [sudo] password for deploy prompt, then the container list"></figure>
+  <div class="tabbar"><div class="tabs" role="tablist" aria-label="connect"><button type="button" role="tab" aria-selected="true" aria-controls="connect-0" id="connect-t0">Host picker</button><button type="button" role="tab" aria-selected="false" aria-controls="connect-1" id="connect-t1">Session</button></div></div>
+  <figure class="stage"><div class="pane" role="tabpanel" id="connect-0" aria-labelledby="connect-t0"><img src="assets/picker.jpg" width="1600" height="1000" loading="lazy" alt="The ⌘K host picker filtering saved hosts"></div><div class="pane" role="tabpanel" id="connect-1" aria-labelledby="connect-t1" hidden><img src="assets/terminal.jpg" width="1600" height="1000" loading="lazy" alt="tern connected to web-01 and running htop"></div></figure>
 </section>
 
-<section class="row rev wrap" id="memory">
-  <div class="vis chart" role="img" aria-label="Memory when connected: tern 76 MB, Tabby 580 MB, Termius 583 MB idle">
+<section class="sec">
+  <div class="sec-head">
+    <div><p class="label">Passwords</p><h2 class="two">Passwords stay<br>where they are.</h2></div>
+    <div class="sec-p"><p>Logins come from your SSH key, your password manager (any command, like <code>op read …</code> or <code>pass show …</code>), or tern's encrypted vault. At a sudo prompt, press <kbd>⌘\</kbd> (<kbd>Ctrl+Shift+\</kbd> on Windows and Linux) and tern types it. Never on its own.</p></div>
+  </div>
+  <figure class="stage"><img src="assets/docker.jpg" width="1600" height="1000" loading="lazy" alt="sudo docker ps with the sudo password filled by ⌘\"></figure>
+</section>
+
+<section class="sec">
+  <div class="sec-head">
+    <div><p class="label">Real work</p><h2 class="two">Everything a<br>long session needs.</h2></div>
+    <div class="sec-p"><p>Split panes and find in scrollback, an SFTP panel to browse and drop files, snippets for the commands you run every day, broadcast input to chosen tabs, and session logs.</p></div>
+  </div>
+  <div class="tabbar"><div class="tabs" role="tablist" aria-label="work"><button type="button" role="tab" aria-selected="true" aria-controls="work-0" id="work-t0">Splits and find</button><button type="button" role="tab" aria-selected="false" aria-controls="work-1" id="work-t1">Files</button><button type="button" role="tab" aria-selected="false" aria-controls="work-2" id="work-t2">Snippets</button></div></div>
+  <figure class="stage"><div class="pane" role="tabpanel" id="work-0" aria-labelledby="work-t0"><img src="assets/split.jpg" width="1600" height="1000" loading="lazy" alt="Two panes side by side with find in scrollback"></div><div class="pane" role="tabpanel" id="work-1" aria-labelledby="work-t1" hidden><img src="assets/sftp.jpg" width="1600" height="1000" loading="lazy" alt="The SFTP side panel listing a remote home folder"></div><div class="pane" role="tabpanel" id="work-2" aria-labelledby="work-t2" hidden><img src="assets/snippets.jpg" width="1600" height="1000" loading="lazy" alt="The snippets picker filtering docker commands"></div></figure>
+</section>
+
+<section class="sec">
+  <div class="sec-head">
+    <div><p class="label">Memory</p><h2 class="two">76 MB.<br>Not 580.</h2></div>
+    <div class="sec-p"><p>One native process, no browser engine. Connected to the same server, tern settles at 76 MB where Tabby takes 580. Measured with macOS <code>footprint</code>; the <a href="https://github.com/your-moon/tern/blob/main/docs/perf.md">method and raw samples</a> are in the repo.</p></div>
+  </div>
+  <div class="stage chart" role="img" aria-label="Memory when connected: tern 76 MB, Tabby 580 MB, Termius 583 MB idle">
     <div class="bar"><span class="lbl">tern</span><span class="track"><i class="fill accent" style="width:12.67%"></i></span><span class="val">76 MB</span></div>
     <div class="bar"><span class="lbl">Tabby</span><span class="track"><i class="fill" style="width:96.67%"></i></span><span class="val">580 MB</span></div>
-    <div class="bar"><span class="lbl">Termius</span><span class="track"><i class="fill dim" style="width:97.17%"></i></span><span class="val">583 MB<small>idle, connected not measured</small></span></div>
+    <div class="bar"><span class="lbl">Termius</span><span class="track"><i class="fill dim" style="width:97.17%"></i></span><span class="val">583 MB<small>idle; connected not measured</small></span></div>
     <p class="cap">Connected, settled at two minutes</p>
   </div>
-  <div class="txt">
-    <h2>Light on memory</h2>
-    <p>One native process, no browser engine. Measured with macOS <code>footprint</code>, <a href="https://github.com/your-moon/tern/blob/main/docs/perf.md">method in docs/perf.md</a>.</p>
-  </div>
 </section>
 
-<section class="wrap work">
-  <h2>Built for real work</h2>
-  <p class="sub">Split panes, find in scrollback, SFTP, port forwards, ProxyJump, broadcast input, session logs, automatic reconnect.</p>
-  <div class="three">
-    <figure><img src="assets/split.jpg" width="1800" height="1125" loading="lazy" alt="Split panes with find in scrollback"><figcaption>splits and find</figcaption></figure>
-    <figure><img src="assets/sftp.jpg" width="1800" height="1125" loading="lazy" alt="SFTP side panel"><figcaption>sftp side panel</figcaption></figure>
-    <figure><img src="assets/snippets.jpg" width="1800" height="1125" loading="lazy" alt="Snippets palette"><figcaption>snippets ⇧⌘S</figcaption></figure>
+<section class="sec">
+  <div class="sec-head">
+    <div><p class="label">Sync</p><h2 class="two">Your setup,<br>in your own repo.</h2></div>
+    <div class="sec-p"><p>Hosts, snippets and settings sync to a private Git repository you own, encrypted with your vault passphrase before they leave your computer. No account, no subscription.</p></div>
   </div>
-</section>
-
-<section class="row wrap">
-  <div class="txt">
-    <h2>Your setup, backed up</h2>
-    <p>Hosts, snippets and settings sync to a Git repo you own, encrypted with your vault passphrase before they leave your computer.</p>
-  </div>
-  <div class="vis flow" role="img" aria-label="Your computer, age-encrypted, to your private Git repo">
+  <div class="stage flow" role="img" aria-label="Your computer, age-encrypted, to your private Git repo">
     <div class="node"><img src="assets/icon.svg" alt="" width="40" height="40"><b>Your computer</b></div>
     <div class="edge"><span>age-encrypted</span></div>
     <div class="node"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="9" r="2.2"/><path d="M6 8.2v7.6M18 11.2c0 4-6 2.5-11 5.5"/></svg><b>Your private Git repo</b></div>
   </div>
+</section>
+
+<section class="sec">
+  <div class="sec-head">
+    <div><p class="label">Make it yours</p><h2 class="two">Your wallpaper.<br>Your colours.</h2></div>
+    <div class="sec-p"><p>Seven public-domain artworks built in, or any image. The window takes its colours from it and keeps every line readable, in light, dark or following your system. Any monospace font, any of 725 terminal themes.</p></div>
+  </div>
+  <div class="tabbar"><div class="tabs" role="tablist" aria-label="look"><button type="button" role="tab" aria-selected="true" aria-controls="look-0" id="look-t0">Wallpaper</button><button type="button" role="tab" aria-selected="false" aria-controls="look-1" id="look-t1">Light</button><button type="button" role="tab" aria-selected="false" aria-controls="look-2" id="look-t2">Settings</button></div></div>
+  <figure class="stage"><div class="pane" role="tabpanel" id="look-0" aria-labelledby="look-t0"><img src="assets/wallpaper.jpg" width="1600" height="1000" loading="lazy" alt="Hosts in a frosted sidebar over Hokusai's Great Wave"></div><div class="pane" role="tabpanel" id="look-1" aria-labelledby="look-t1" hidden><img src="assets/light.jpg" width="1600" height="1000" loading="lazy" alt="tern in light appearance over Van Gogh's Wheat Field"></div><div class="pane" role="tabpanel" id="look-2" aria-labelledby="look-t2" hidden><img src="assets/settings.jpg" width="1600" height="1000" loading="lazy" alt="Settings, Appearance, with the wallpaper gallery"></div></figure>
 </section>
 
 <section class="wrap dl" id="download">
@@ -157,6 +170,16 @@
     document.querySelectorAll('.star-n').forEach(function(b){b.textContent=txt});
     document.querySelectorAll('.stars').forEach(function(s){s.hidden=false});
   }).catch(function(){});
+  // Tabs over a framed screenshot: one pane visible, arrow keys move between tabs.
+  document.querySelectorAll('.tabs').forEach(function(list){
+    var tabs=[].slice.call(list.querySelectorAll('[role=tab]'));
+    function show(t){tabs.forEach(function(x){var on=x===t;x.setAttribute('aria-selected',on);x.tabIndex=on?0:-1;document.getElementById(x.getAttribute('aria-controls')).hidden=!on});}
+    tabs.forEach(function(t,i){
+      t.tabIndex=i?-1:0;
+      t.addEventListener('click',function(){show(t)});
+      t.addEventListener('keydown',function(e){var d=e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0;if(!d)return;var n=tabs[(i+d+tabs.length)%tabs.length];show(n);n.focus();e.preventDefault();});
+    });
+  });
 })();
 </script>
 </body>
