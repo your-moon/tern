@@ -8,6 +8,10 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 
 - README keyboard table lists Windows and Linux shortcuts alongside macOS (#41).
 
+### Changed
+
+- Scrollback rows keep only the cells they use, so a full history of short lines takes about a sixth of the memory (#89).
+
 ### Fixed
 
 - Clicking a session tab while Settings is open now closes Settings and shows the session, with typing going to its terminal (#63).
