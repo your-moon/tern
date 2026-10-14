@@ -14,7 +14,9 @@ use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
 use tern_ssh::HostEntry;
 
+use crate::empty_state::{self, Listing};
 use crate::shell::Shell;
+use crate::shell::connections_ui::button;
 use crate::sidebar;
 use crate::theme::Theme;
 
@@ -315,15 +317,23 @@ pub fn render(
                 .gap(px(2.))
                 .children(rows)
                 .when(matches.is_empty(), |el| {
-                    let text: SharedString = if picker.query.trim().is_empty() {
-                        "No hosts yet. Add one with the + in the sidebar.".into()
-                    } else {
-                        format!(
-                            "No hosts match. Enter connects to \"{}\".",
-                            picker.query.trim()
-                        )
-                        .into()
-                    };
+                    // A typed target still connects with no hosts, so only a blank query is "empty".
+                    let blank = picker.query.trim().is_empty();
+                    if blank && empty_state::listing(hosts.len(), matches.len()) == Listing::Empty {
+                        return el.child(
+                            div().py(px(24.)).child(
+                                empty_state::view(t, empty_state::HOSTS, "No hosts yet.")
+                                    .gap(px(12.))
+                                    .child(
+                                        button("picker-empty-new", "New connection", true, t)
+                                            .on_click(cx.listener(|s, _, w, cx| {
+                                                s.close_picker(w, cx);
+                                                s.open_form(None, None, w, cx);
+                                            })),
+                                    ),
+                            ),
+                        );
+                    }
                     el.child(
                         div()
                             .py(px(24.))
@@ -331,7 +341,10 @@ pub fn render(
                             .justify_center()
                             .text_sm()
                             .text_color(t.muted)
-                            .child(text),
+                            .child(SharedString::from(format!(
+                                "No hosts match. Enter connects to \"{}\".",
+                                picker.query.trim()
+                            ))),
                     )
                 }),
         )

@@ -188,12 +188,11 @@ fn empty_state(t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
         .flex()
         .flex_col()
         .gap(px(8.))
-        .child(
-            div()
-                .text_size(px(12.))
-                .text_color(t.muted)
-                .child("No hosts yet."),
-        )
+        .child(crate::empty_state::view(
+            t,
+            crate::empty_state::HOSTS,
+            "No hosts yet.",
+        ))
         .child(
             div()
                 .id("empty-new")
