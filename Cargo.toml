@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+# The vendored crate is a path dependency, not a workspace member: our lints and `--workspace` runs skip it.
+exclude = ["vendor"]
 
 [workspace.package]
 version = "0.1.3"
@@ -45,6 +47,10 @@ needless_pass_by_value = "warn"
 # Rust API Guidelines C-FAILURE: every public fallible fn documents its errors.
 missing_errors_doc = "warn"
 disallowed_methods = "deny"
+
+# Scrollback rows keep only the cells they use. See vendor/alacritty_terminal/TERN-PATCH.md.
+[patch.crates-io]
+alacritty_terminal = { path = "vendor/alacritty_terminal" }
 
 # Small, fast release binary. Measured, not assumed: see docs/perf.md.
 [profile.release]
