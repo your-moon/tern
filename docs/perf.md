@@ -106,3 +106,13 @@ Notes:
 - Termius has no connected figure: its quick-connect could not be driven by script.
 - The lead is over Electron apps, not over native ones: OxideTerm, another GPUI SSH client,
   reports 81 MB idle for itself (not measured here).
+
+## 2026-10-14 — AutoFill helper opt-out (unmeasured)
+
+`Info.plist` sets `NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac`, the documented opt-out
+from one-time-code AutoFill that AppKit attaches to every text input from macOS 26. tern never
+needs it (2FA goes through the SSH keyboard-interactive prompt). #82 reports that this starts a
+separate "AutoFill (tern)" helper process; that is unconfirmed here: on 2026-10-14 no helper that
+could be tied to tern appeared with or without the key (the system's SafariPlatformSupport
+helpers outlive the app). No memory change is claimed; record before/after numbers from
+`scripts/measure-rss.sh` here if it is ever measured.

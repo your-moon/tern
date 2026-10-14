@@ -48,12 +48,15 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>${version}</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
   <key>LSMinimumSystemVersion</key><string>${minos}</string>
+  <key>NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
 </dict>
 </plist>
 PLIST
 plutil -lint "$app/Contents/Info.plist"
+[ "$(plutil -extract NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac raw "$app/Contents/Info.plist")" = true ] \
+  || { echo "Info.plist lost the AutoFill opt-out key" >&2; exit 1; }
 
 if [ -n "${TERN_SIGN_ID:-}" ]; then
   codesign --force --deep --options runtime --timestamp -s "$TERN_SIGN_ID" "$app"
