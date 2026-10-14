@@ -10,6 +10,7 @@ mod forward_spec;
 mod hover;
 mod icons;
 mod keeper;
+mod keeper_gate;
 mod keymap;
 mod login;
 mod password_command;
