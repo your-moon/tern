@@ -11,6 +11,7 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 
 ### Changed
 
+- Empty states show an icon, one line and a primary button: no hosts (sidebar and ⌘K picker), no snippets (Settings page and the snippet picker, which now opens empty instead of showing a toast) and an empty folder in the file browser (#32).
 - Scrollback rows keep only the cells they use, so a full history of short lines takes about a sixth of the memory (#89).
 - Starting with a wallpaper already rendered no longer decodes the picture, which took about 35 MB of memory at launch; the colours are cached beside it (#33).
 

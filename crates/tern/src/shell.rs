@@ -86,7 +86,7 @@ mod themes_ui;
 pub(crate) use themes_ui::ThemeTarget;
 
 #[path = "shell_connections.rs"]
-mod connections_ui;
+pub(crate) mod connections_ui;
 #[path = "shell_hostlist.rs"]
 mod hostlist;
 #[path = "shell_import.rs"]

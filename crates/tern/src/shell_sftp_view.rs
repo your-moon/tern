@@ -13,6 +13,7 @@ use gpui::{
 };
 
 use super::State;
+use crate::empty_state::{self, Listing};
 use crate::icons::{self, icon};
 use crate::sftp_paths;
 use crate::shell::Shell;
@@ -147,91 +148,109 @@ impl Shell {
             .child(div().w(px(58.)).flex().justify_end().child("Size"))
             .child(div().w(px(88.)).child("Modified"));
         let now = SystemTime::now();
-        let body =
-            match &panel.state {
-                State::Opening | State::Loading if panel.entries.is_empty() => {
-                    note_row(&t, "Loading…").into_any_element()
-                }
-                State::Failed(why) => div()
-                    .p(px(12.))
-                    .text_size(px(12.))
-                    .text_color(t.danger)
-                    .child(SharedString::from(why.clone()))
-                    .into_any_element(),
-                _ if panel.entries.is_empty() => note_row(&t, "Empty folder").into_any_element(),
-                _ => {
+        let body = match &panel.state {
+            State::Opening | State::Loading if panel.entries.is_empty() => {
+                note_row(&t, "Loading…").into_any_element()
+            }
+            State::Failed(why) => div()
+                .p(px(12.))
+                .text_size(px(12.))
+                .text_color(t.danger)
+                .child(SharedString::from(why.clone()))
+                .into_any_element(),
+            _ if empty_state::listing(panel.entries.len(), panel.entries.len())
+                == Listing::Empty =>
+            {
+                div()
+                    .flex_1()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(
+                        empty_state::view(&t, empty_state::FOLDER, "This folder is empty.")
+                            .gap(px(12.))
+                            .child(
+                                button("sftp-empty-upload", "Upload files", true, &t)
+                                    .on_click(cx.listener(|s, _, _, cx| s.sftp_pick_upload(cx))),
+                            ),
+                    )
+                    .into_any_element()
+            }
+            _ => div()
+                .id("sftp-rows")
+                .flex_1()
+                .min_h_0()
+                .overflow_y_scroll()
+                .children(panel.entries.iter().enumerate().map(|(ix, e)| {
+                    let selected = panel.selected == Some(ix);
+                    let modified = e
+                        .modified
+                        .map(|m| sftp_paths::modified(m, now))
+                        .unwrap_or_default();
                     div()
-                        .id("sftp-rows")
-                        .flex_1()
-                        .min_h_0()
-                        .overflow_y_scroll()
-                        .children(panel.entries.iter().enumerate().map(|(ix, e)| {
-                            let selected = panel.selected == Some(ix);
-                            let modified = e
-                                .modified
-                                .map(|m| sftp_paths::modified(m, now))
-                                .unwrap_or_default();
-                            div()
-                                .id(("sftp-row", ix))
-                                .h(px(ROW_HEIGHT))
-                                .flex_none()
-                                .px(px(12.))
-                                .flex()
-                                .items_center()
-                                .gap(px(8.))
-                                .cursor_pointer()
-                                .text_size(px(12.))
-                                .when(selected, |el| el.bg(t.row_active))
-                                .when(!selected, |el| el.hover(|s| s.bg(t.row_hover)))
-                                .on_click(cx.listener(move |s, ev: &ClickEvent, _, cx| {
-                                    if ev.click_count() >= 2 {
-                                        s.sftp_open_entry(ix, cx);
-                                    } else {
-                                        s.sftp_select(ix, cx);
-                                    }
-                                }))
-                                .child(
-                                    icon(if e.is_dir {
-                                        icons::FOLDER
-                                    } else {
-                                        icons::DOCUMENT
-                                    })
-                                    .size(px(15.))
-                                    .flex_none()
-                                    .text_color(if e.is_dir { t.accent } else { t.muted }),
-                                )
-                                .child(
-                                    div()
-                                        .flex_1()
-                                        .min_w_0()
-                                        .truncate()
-                                        .child(SharedString::from(e.name.clone())),
-                                )
-                                .child(
-                                    div()
-                                        .w(px(58.))
-                                        .flex_none()
-                                        .flex()
-                                        .justify_end()
-                                        .text_color(t.muted)
-                                        .child(SharedString::from(if e.is_dir {
-                                            String::new()
-                                        } else {
-                                            sftp_paths::human_size(e.size)
-                                        })),
-                                )
-                                .child(
-                                    div()
-                                        .w(px(88.))
-                                        .flex_none()
-                                        .truncate()
-                                        .text_color(t.muted)
-                                        .child(SharedString::from(modified)),
-                                )
+                        .id(("sftp-row", ix))
+                        .h(px(ROW_HEIGHT))
+                        .flex_none()
+                        .px(px(12.))
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .cursor_pointer()
+                        .text_size(px(12.))
+                        .when(selected, |el| el.bg(t.row_active))
+                        .when(!selected, |el| el.hover(|s| s.bg(t.row_hover)))
+                        .on_click(cx.listener(move |s, ev: &ClickEvent, _, cx| {
+                            if ev.click_count() >= 2 {
+                                s.sftp_open_entry(ix, cx);
+                            } else {
+                                s.sftp_select(ix, cx);
+                            }
                         }))
-                        .into_any_element()
-                }
-            };
+                        .child(
+                            icon(if e.is_dir {
+                                icons::FOLDER
+                            } else {
+                                icons::DOCUMENT
+                            })
+                            .size(px(15.))
+                            .flex_none()
+                            .text_color(if e.is_dir {
+                                t.accent
+                            } else {
+                                t.muted
+                            }),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .child(SharedString::from(e.name.clone())),
+                        )
+                        .child(
+                            div()
+                                .w(px(58.))
+                                .flex_none()
+                                .flex()
+                                .justify_end()
+                                .text_color(t.muted)
+                                .child(SharedString::from(if e.is_dir {
+                                    String::new()
+                                } else {
+                                    sftp_paths::human_size(e.size)
+                                })),
+                        )
+                        .child(
+                            div()
+                                .w(px(88.))
+                                .flex_none()
+                                .truncate()
+                                .text_color(t.muted)
+                                .child(SharedString::from(modified)),
+                        )
+                }))
+                .into_any_element(),
+        };
         let can_download = panel
             .selected
             .and_then(|ix| panel.entries.get(ix))

@@ -708,7 +708,7 @@ pub(super) fn note(text: &'static str, t: &Theme) -> impl IntoElement + use<> {
     div().text_xs().text_color(t.muted).child(text)
 }
 
-pub(super) fn button(
+pub(crate) fn button(
     id: &'static str,
     label: impl Into<SharedString>,
     primary: bool,

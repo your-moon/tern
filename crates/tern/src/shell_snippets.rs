@@ -13,7 +13,9 @@ use gpui::{
 };
 
 use super::connections_ui::{button, note, row};
+use super::settings_ui::Section;
 use super::{Shell, ToastKind};
+use crate::empty_state::{self, Listing};
 use crate::picker::{self, Key};
 use crate::settings_widgets as w;
 use crate::snippets::{self, Snippet};
@@ -77,13 +79,6 @@ impl Shell {
         let active_session = self.tabs.get(self.active).is_some() && self.settings_page.is_none();
         if !active_session {
             return self.notify_toast(ToastKind::Default, "Open a session to use a snippet", cx);
-        }
-        if self.snippets.items.is_empty() {
-            return self.notify_toast(
-                ToastKind::Default,
-                "No snippets yet. Add some in Settings → Snippets",
-                cx,
-            );
         }
         self.picker = None;
         let focus = cx.focus_handle();
@@ -287,6 +282,32 @@ impl Shell {
                     .gap(px(2.))
                     .children(rows)
                     .when(matches.is_empty(), |el| {
+                        if empty_state::listing(self.snippets.items.len(), matches.len())
+                            == Listing::Empty
+                        {
+                            return el.child(
+                                div().py(px(24.)).child(
+                                    empty_state::view(t, empty_state::SNIPPETS, "No snippets yet.")
+                                        .gap(px(12.))
+                                        .child(
+                                            button(
+                                                "snippet-empty-open",
+                                                "Add in Settings",
+                                                true,
+                                                t,
+                                            )
+                                            .on_click(
+                                                cx.listener(|s, _, w, cx| {
+                                                    s.close_snippet_picker(w, cx);
+                                                    s.settings_page = Some(Section::Snippets);
+                                                    w.focus(&s.focus, cx);
+                                                    cx.notify();
+                                                }),
+                                            ),
+                                        ),
+                                ),
+                            );
+                        }
                         el.child(
                             div()
                                 .py(px(24.))
@@ -320,15 +341,8 @@ impl Shell {
     pub(super) fn snippets_page(&self, cx: &mut Context<Self>) -> gpui::Div {
         let t = self.theme;
         let mut list = w::card(&t);
-        if self.snippets.items.is_empty() {
-            list = list.child(w::row(
-                &t,
-                true,
-                "No snippets yet",
-                Some("Save a command you type often, then insert it with a shortcut".into()),
-                div(),
-            ));
-        }
+        let empty = empty_state::listing(self.snippets.items.len(), self.snippets.items.len())
+            == Listing::Empty;
         for (ix, s) in self.snippets.items.iter().enumerate() {
             let confirming = self.snippets.confirm_delete == Some(ix);
             let actions = div()
@@ -376,7 +390,28 @@ impl Shell {
             .when_some(self.snippets.store_error.clone(), |el, e| {
                 el.child(w::page_subtitle(&t, e).text_color(t.danger))
             })
-            .child(w::section(&t, "Saved snippets", list))
+            .child(if empty {
+                div()
+                    .py(px(48.))
+                    .child(
+                        empty_state::view(
+                            &t,
+                            empty_state::SNIPPETS,
+                            "No snippets yet. Save a command you type often.",
+                        )
+                        .gap(px(12.))
+                        .child(
+                            button("snippet-empty-new", "New snippet", true, &t).on_click(
+                                cx.listener(|s, _, window, cx| {
+                                    s.open_snippet_form(None, window, cx)
+                                }),
+                            ),
+                        ),
+                    )
+                    .into_any_element()
+            } else {
+                w::section(&t, "Saved snippets", list).into_any_element()
+            })
     }
 
     fn open_snippet_form(
