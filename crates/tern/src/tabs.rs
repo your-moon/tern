@@ -13,7 +13,7 @@ use gpui::{
     pulsating_between, px,
 };
 
-use crate::session::Status;
+use crate::indicator::Dot;
 use crate::shell::Shell;
 use crate::text_input::TextInput;
 use crate::theme::{CONTROL_RADIUS, Theme};
@@ -60,7 +60,7 @@ pub struct TabInfo {
     pub logging: bool,
     /// Typing here, or receiving what is typed in another tab.
     pub broadcast: bool,
-    pub status: Status,
+    pub dot: Dot,
     /// The field that is editing this tab's title right now.
     pub rename: Option<Entity<TextInput>>,
 }
@@ -187,7 +187,7 @@ fn tab_pill(
             MouseButton::Middle,
             cx.listener(move |shell, _, window, cx| shell.close_tab_at(ix, window, cx)),
         )
-        .child(status_dot(("tab-dot", ix), &tab.status, t))
+        .child(status_dot(("tab-dot", ix), tab.dot, t))
         .child(match renaming {
             Some(input) => div()
                 .flex_1()
@@ -262,26 +262,26 @@ fn tab_pill(
 const PULSE: Duration = Duration::from_millis(2400);
 
 /// A connecting dot breathes; gpui holds it still when `App::reduce_motion` is set. Synced, so
-/// a host's tab dot and sidebar dot pulse together.
-pub fn status_dot(id: impl Into<ElementId>, status: &Status, t: &Theme) -> AnyElement {
-    let color = match status {
-        Status::Idle => t.faint,
-        Status::Connected => t.success,
-        Status::Connecting => t.accent,
-        Status::Closed => t.danger,
+/// a host's tab dot and sidebar dot pulse together. A dot waiting for an answer is a still ring.
+pub fn status_dot(id: impl Into<ElementId>, dot: Dot, t: &Theme) -> AnyElement {
+    let color = dot.color(t);
+    let disc = div().flex_none().size(px(6.)).rounded_full();
+    let disc = if dot.hollow() {
+        disc.border_1().border_color(color)
+    } else {
+        disc.bg(color)
     };
-    let dot = div().flex_none().size(px(6.)).rounded_full().bg(color);
-    if *status == Status::Connecting {
-        dot.with_animation(
+    if dot.pulses() {
+        disc.with_animation(
             id,
             Animation::new(PULSE)
                 .repeat_synced()
                 .with_easing(pulsating_between(0.08, 1.0)),
-            |dot, alpha| dot.opacity(alpha),
+            |disc, alpha| disc.opacity(alpha),
         )
         .into_any_element()
     } else {
-        dot.into_any_element()
+        disc.into_any_element()
     }
 }
 

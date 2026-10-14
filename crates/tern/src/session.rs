@@ -265,6 +265,11 @@ impl Session {
         }
     }
 
+    /// A login question is open and waiting for an answer.
+    pub fn is_asking(&self) -> bool {
+        self.login.is_some()
+    }
+
     /// Connected, with no login question waiting for an answer.
     fn accepts_input(&self) -> bool {
         self.status == Status::Connected && self.login.is_none()

@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use gpui::{Div, Hsla, IntoElement, ParentElement, Styled, div, px};
 
-use crate::session::Status;
+use crate::indicator::Dot;
 use crate::theme::Theme;
 
 /// zeron `SESSION_FOOTER_HEIGHT`.
@@ -60,29 +60,20 @@ pub fn format_latency(rtt: Duration) -> String {
     }
 }
 
-fn state_label(status: &Status) -> &'static str {
-    match status {
-        Status::Connecting => "Connecting…",
-        Status::Connected => "Connected",
-        Status::Closed => "Disconnected",
-        Status::Idle => "Not connected · Enter connects",
-    }
-}
-
 /// The strip for one tab; `elapsed` is `None` until the session has connected.
 pub fn render(
     t: &Theme,
     label: &str,
-    status: &Status,
+    dot: Dot,
     latency: Option<Duration>,
     elapsed: Option<Duration>,
     bg: Hsla,
 ) -> impl IntoElement + use<> {
-    let dot = match status {
-        Status::Connected => t.success,
-        Status::Connecting => t.accent,
-        Status::Closed => t.danger,
-        Status::Idle => t.muted,
+    let disc = div().size(px(6.)).rounded_full();
+    let marker = if dot.hollow() {
+        disc.border_1().border_color(dot.color(t))
+    } else {
+        disc.bg(dot.color(t))
     };
     let part = |text: String| div().flex_none().child(text);
     let mut row: Div = div()
@@ -111,8 +102,8 @@ pub fn render(
                 .flex()
                 .items_center()
                 .gap(px(6.))
-                .child(div().size(px(6.)).rounded_full().bg(dot))
-                .child(state_label(status)),
+                .child(marker)
+                .child(dot.label()),
         );
     if let Some(rtt) = latency {
         let colour = match lag(rtt) {
@@ -169,12 +160,5 @@ mod tests {
     fn the_host_label_is_user_at_host_and_port() {
         assert_eq!(host_label("root", "10.0.0.5", 2222), "root@10.0.0.5:2222");
         assert_eq!(host_label("me", "example.org", 22), "me@example.org:22");
-    }
-
-    #[test]
-    fn each_state_has_its_own_words() {
-        assert_eq!(state_label(&Status::Connecting), "Connecting…");
-        assert_eq!(state_label(&Status::Connected), "Connected");
-        assert_eq!(state_label(&Status::Closed), "Disconnected");
     }
 }

@@ -91,7 +91,7 @@ zeron, and checking the code. ✓ marks what is done; each open line names how i
 | # | Gap | Impact |
 | --- | --- | --- |
 | ✓ D1 | Soft text and icons on 1080p monitors | Whole-pixel sizes, 1 px icon strokes, opaque fill and stronger muted text at 1× (Settings → Appearance → Sharper text) |
-| D2 | Waiting-for-input state | A session at a password prompt shows the connecting dot |
+| ✓ D2 | Waiting-for-input state | A session at a password prompt shows the connecting dot |
 
 ## 7. Shipping
 

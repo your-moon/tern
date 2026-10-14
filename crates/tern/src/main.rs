@@ -9,6 +9,7 @@ mod devkeys;
 mod forward_spec;
 mod hover;
 mod icons;
+mod indicator;
 mod keeper;
 mod keymap;
 mod login;

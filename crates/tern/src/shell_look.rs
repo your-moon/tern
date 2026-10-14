@@ -15,6 +15,7 @@
 //! The sharp picture is only the empty view's hero, laid out inside the main tile. Sidebar width
 //! is held in whole device pixels so no edge lands between two.
 
+use crate::indicator::Dot;
 use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, App, Context, Hsla, IntoElement, ParentElement, Styled, Window,
@@ -122,7 +123,7 @@ impl Shell {
         Some(statusline::render(
             &self.theme,
             &session.label(),
-            &session.status,
+            Dot::of(&session.status, session.is_asking()),
             session.latency(),
             session.elapsed(),
             bg,
