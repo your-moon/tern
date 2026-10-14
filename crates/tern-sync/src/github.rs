@@ -126,6 +126,25 @@ pub(crate) enum Method {
     Patch,
 }
 
+/// The request `send` makes: the verb, the GitHub headers and the JSON body. Built apart from
+/// the agent so a test can read it. `send_json` set the Content-Type itself; this must too.
+fn write_request(
+    token: &str,
+    method: Method,
+    url: &str,
+    body: &Value,
+) -> Result<ureq::http::Request<ureq::SendBody<'static>>, GithubError> {
+    ureq::http::Request::builder()
+        .method(verb(method))
+        .uri(url)
+        .header("Authorization", format!("Bearer {token}"))
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "tern")
+        .header("Content-Type", "application/json; charset=utf-8")
+        .body(ureq::SendBody::from_json(body)?)
+        .map_err(|e| GithubError::Http(e.to_string()))
+}
+
 /// The HTTP verb for a [`Method`]; ureq 3 has no string-verb request, so `send` feeds this to `http::Request`.
 fn verb(method: Method) -> &'static str {
     match method {
@@ -197,14 +216,7 @@ impl GithubHttp for UreqHttp {
         path: &str,
         body: Value,
     ) -> Result<(), GithubError> {
-        let request = ureq::http::Request::builder()
-            .method(verb(method))
-            .uri(format!("{API}{path}"))
-            .header("Authorization", format!("Bearer {token}"))
-            .header("Accept", "application/vnd.github+json")
-            .header("User-Agent", "tern")
-            .body(ureq::SendBody::from_json(&body)?)
-            .map_err(|e| GithubError::Http(e.to_string()))?;
+        let request = write_request(token, method, &format!("{API}{path}"), &body)?;
         self.agent.run(request)?;
         Ok(())
     }

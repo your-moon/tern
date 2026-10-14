@@ -506,3 +506,18 @@ fn every_method_maps_to_its_http_verb() {
     assert_eq!(verb(Method::Post), "POST");
     assert_eq!(verb(Method::Patch), "PATCH");
 }
+
+/// `send_json` put a JSON Content-Type on the request; the hand-built one must keep doing so.
+#[test]
+fn a_write_request_carries_the_verb_the_token_and_a_json_content_type() {
+    let body = serde_json::json!({"files": {}});
+    for (method, verb) in [(Method::Post, "POST"), (Method::Patch, "PATCH")] {
+        let r = write_request("tok", method, "https://api.github.com/gists", &body).unwrap();
+        assert_eq!(r.method().as_str(), verb);
+        let h = |name: &str| r.headers().get(name).and_then(|v| v.to_str().ok());
+        assert_eq!(h("authorization"), Some("Bearer tok"));
+        assert_eq!(h("accept"), Some("application/vnd.github+json"));
+        assert_eq!(h("user-agent"), Some("tern"));
+        assert_eq!(h("content-type"), Some("application/json; charset=utf-8"));
+    }
+}
