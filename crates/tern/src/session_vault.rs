@@ -5,9 +5,11 @@
 //! The password-command side of logging in: when a server asks for a password, run the
 //! connection's command before the vault, and ask first if this Mac never approved it.
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use gpui::{AppContext, Context};
+use gpui::{App, AppContext, Context};
 use tern_ssh::{ExposeSecret, Prompt, SecretString};
 use tern_vault::{Key, Vault, VaultError};
 
@@ -101,25 +103,57 @@ impl Session {
     /// Opens the vault: the Keychain first, once per run, then the PIN when one is set, else the
     /// passphrase. A Keychain that cannot open it falls through without a word.
     pub(super) fn ask_unlock(&mut self, after: After, cx: &mut Context<Self>) {
-        if let Some(work) = Keeper::try_keychain(cx) {
-            cx.spawn(async move |this, cx| {
-                let vault = work.await;
-                let _ = this.update(cx, |s, cx| match vault {
-                    Some(vault) => {
-                        Keeper::keychain_opened(cx);
-                        s.unlocked(Outcome::Opened(vault), after, cx);
-                    }
-                    // Already tried this run, so this asks the person.
-                    None => s.ask_unlock(after, cx),
-                });
-            })
-            .detach();
-        } else if Keeper::pin_set(cx) {
+        let slot = Rc::new(RefCell::new(Some(after)));
+        let wake = {
+            let (slot, this) = (slot.clone(), cx.weak_entity());
+            move |cx: &mut App| {
+                let Some(after) = slot.borrow_mut().take() else {
+                    return;
+                };
+                let _ = this.update(cx, |s, cx| s.keychain_resolved(after, cx));
+            }
+        };
+        if Keeper::keychain_then(cx, wake) {
+            self.note("Asking the Keychain…", cx);
+            return;
+        }
+        let after = slot.borrow_mut().take().unwrap_or_default();
+        if Keeper::pin_set(cx) {
             let text = format!("{}Vault PIN (Enter to use the passphrase): ", lead(&after));
             self.ask_local(&text, false, Flow::Pin(after), cx);
         } else {
             self.ask_passphrase(after, cx);
         }
+    }
+
+    /// The Keychain attempt is over. The vault is open if it worked, or if the person opened it
+    /// another way meanwhile; otherwise the usual question.
+    fn keychain_resolved(
+        &mut self,
+        After {
+            prompt,
+            entry,
+            fill,
+        }: After,
+        cx: &mut Context<Self>,
+    ) {
+        if Keeper::locked(cx) {
+            return self.ask_unlock(
+                After {
+                    prompt,
+                    entry,
+                    fill,
+                },
+                cx,
+            );
+        }
+        if let Some((key, secret)) = entry
+            && let Some(mut vault) = Keeper::take(cx)
+        {
+            vault.set(key, secret);
+            self.save(vault, cx);
+        }
+        self.resume(prompt, fill, true, cx);
     }
 
     fn ask_passphrase(&mut self, after: After, cx: &mut Context<Self>) {
@@ -337,8 +371,18 @@ impl Session {
                 None => Keeper::put(vault, cx),
             }
         }
-        // The connection was waiting for the vault: dial now, with the keys if the vault
-        // opened and without them if it did not.
+        self.resume(prompt, fill, unlocked, cx);
+    }
+
+    /// What waited for the vault goes on. The connection dials, with the keys if the vault
+    /// opened and without them if it did not, and exactly once.
+    fn resume(
+        &mut self,
+        prompt: Option<Prompt>,
+        fill: Option<u64>,
+        unlocked: bool,
+        cx: &mut Context<Self>,
+    ) {
         if std::mem::take(&mut self.connect_after_unlock) {
             self.dial(cx);
         }
