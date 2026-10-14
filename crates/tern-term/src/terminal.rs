@@ -713,3 +713,7 @@ impl Terminal {
 #[cfg(test)]
 #[path = "terminal_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "history_trim_tests.rs"]
+mod history_trim_tests;

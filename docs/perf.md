@@ -5,9 +5,10 @@
 | Item | Cost | Source |
 | --- | --- | --- |
 | One terminal cell | 24 bytes | `alacritty_terminal` 0.26 `term/cell.rs:303` |
-| One scrollback row | columns × 24 B, allocated full-width even when empty | `grid/storage.rs:133` |
+| One scrollback row | the cells it uses + 1 (vendored `alacritty_terminal`, #89); upstream allocates columns × 24 B even when empty | `vendor/alacritty_terminal/TERN-PATCH.md` |
 | Scrollback growth | lazy, in chunks of ≥1,000 rows; freed when shrunk >1,000 below capacity | `grid/storage.rs:111,133` |
-| Full scrollback, 200 cols | 10,000 lines = 48 MB/tab · 5,000 lines = 24 MB/tab | arithmetic |
+| Full scrollback, 200 cols | 10,000 lines of ~25 characters: 46.3 MiB upstream, 7.8 MiB trimmed. Full-width lines still cost columns × 24 B | counting allocator, release build, 2026-10-14, #89 |
+| Scrolling cost of trimming | 300k lines fed: 135 ms upstream, 273 ms trimmed (+0.5 µs a line); 20 resizes of a full history: 55 ms, 3 ms | same run |
 
 ## SSH session buffers (tern-ssh)
 
