@@ -145,6 +145,15 @@ impl Shell {
         });
     }
 
+    /// The first need for the vault outside a session (the connection form, the Vault page): the
+    /// Keychain's one try this run. The fields show as before when it cannot open the vault.
+    pub(super) fn unlock_from_keychain(&mut self, cx: &mut Context<Self>) {
+        let this = cx.weak_entity();
+        Keeper::keychain_then(cx, move |cx| {
+            let _ = this.update(cx, |_, cx| cx.notify());
+        });
+    }
+
     fn vault_message(&mut self, ok: bool, text: impl Into<String>, cx: &mut Context<Self>) {
         if let Some(ui) = self.vault_ui.as_mut() {
             ui.message = Some((ok, text.into()));
@@ -641,7 +650,7 @@ impl Shell {
                 self.notify_toast(
                     ToastKind::Default,
                     if on {
-                        "The vault will open at launch"
+                        "The vault will open the first time tern needs it"
                     } else {
                         "Removed from the Keychain"
                     },

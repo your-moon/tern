@@ -188,11 +188,17 @@ impl Shell {
             _repaint: Vec::new(),
         };
         // Typing changes which vault fields show, so the shell re-renders on every edit.
-        let repaint = form
+        let mut repaint: Vec<_> = form
             .fields()
             .into_iter()
             .map(|f| cx.observe(f, |_, _, cx| cx.notify()))
             .collect();
+        // The vault is first needed when a password is typed; the Keychain gets its one try then.
+        repaint.push(cx.observe(&form.password, |shell, password, cx| {
+            if wants_keychain(password.read(cx).text()) {
+                shell.unlock_from_keychain(cx);
+            }
+        }));
         let first = form.name.focus_handle(cx);
         self.form = Some(ConnectionForm {
             _repaint: repaint,
@@ -723,4 +729,20 @@ pub(super) fn button(
                 .text_color(t.text)
         })
         .child(label.into())
+}
+
+/// A typed password is what makes the form need the vault; an empty field never asks the Keychain.
+fn wants_keychain(password: &str) -> bool {
+    !password.is_empty()
+}
+
+#[cfg(test)]
+mod keychain_tests {
+    use super::wants_keychain;
+
+    #[test]
+    fn only_a_typed_password_makes_the_form_ask_the_keychain() {
+        assert!(!wants_keychain(""));
+        assert!(wants_keychain("x"));
+    }
 }

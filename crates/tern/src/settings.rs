@@ -109,7 +109,7 @@ pub struct Settings {
     pub sync_auto: bool,
     /// Minutes without key or mouse input before the open vault is locked; 0 is never.
     pub vault_lock_minutes: u32,
-    /// The vault passphrase is kept in the macOS login Keychain and the vault opens at launch.
+    /// The vault passphrase is kept in the macOS login Keychain and the vault opens the first time tern needs it.
     pub vault_keychain: bool,
 }
 

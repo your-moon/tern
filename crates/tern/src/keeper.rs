@@ -9,6 +9,7 @@ use gpui::{App, AppContext, Global, Task};
 use tern_ssh::{ExposeSecret, Prompt, SecretString};
 use tern_vault::{Key, Vault, VaultError};
 
+use crate::keeper_gate::{Gate, Need, Read, Waiter, adopt, open_with, store_due};
 use crate::vault_pin;
 
 pub struct Keeper {
@@ -16,6 +17,8 @@ pub struct Keeper {
     open: Option<Vault>,
     /// The Keychain opt-in (Settings -> Vault) is on.
     keychain: bool,
+    /// The run's one Keychain attempt: whether it ran, is running, and who waits for it.
+    gate: Gate<Waiter>,
     /// The Keychain item already holds the current passphrase, so `put` need not write it.
     keychain_current: bool,
     /// Numbers each write in the order it was asked for.
@@ -47,6 +50,7 @@ impl Keeper {
             path,
             open: None,
             keychain,
+            gate: Gate::default(),
             keychain_current: false,
             ticket: 0,
             // From the local mark, not the Keychain item: reading that asks macOS first.
@@ -54,30 +58,42 @@ impl Keeper {
         });
     }
 
-    /// Opens the vault at launch with the passphrase from the Keychain, when that is on. A
-    /// missing item, a refusal or a passphrase changed elsewhere leaves it locked and says
-    /// nothing: the first lookup then asks as usual.
-    pub fn unlock_from_keychain(cx: &mut App) {
-        let k = cx.global::<Self>();
-        let (true, Some(path)) = (k.keychain, k.path.clone()) else {
-            return;
+    /// The first need for a locked vault in this run: with the Keychain opt-in on, reads the
+    /// passphrase and opens the vault off the UI thread, then runs `then`. Returns `true` when
+    /// `then` will run once the attempt resolves, whether this call started it or joined one in
+    /// flight; the vault is in the keeper by then if it opened. Returns `false` when the Keychain
+    /// is not to be asked (off, already asked this run, nothing to open) and `then` is dropped:
+    /// the caller prompts as usual. A missing item, a refusal or a stale passphrase say nothing.
+    pub fn keychain_then(cx: &mut App, then: impl FnOnce(&mut App) + 'static) -> bool {
+        let locked = Self::locked(cx);
+        let k = cx.global_mut::<Self>();
+        let Some(path) = k.path.clone() else {
+            return false;
         };
-        if !path.exists() {
-            return;
-        }
-        let work = cx.background_spawn(async move {
-            let passphrase = keychain::load()?;
-            Vault::unlock(&path, passphrase).ok()
-        });
-        cx.spawn(async move |cx| {
-            if let Some(vault) = work.await {
-                cx.update(|cx| {
-                    cx.global_mut::<Self>().keychain_current = true;
-                    Self::put(vault, cx);
-                });
+        match k.gate.need(k.keychain, locked, Box::new(then)) {
+            Need::Skip => false,
+            Need::Wait => true,
+            Need::Start => {
+                let work =
+                    cx.background_spawn(async move { open_with(&keychain::Passphrase, &path) });
+                cx.spawn(async move |cx| {
+                    let read = work.await;
+                    cx.update(|cx| Self::keychain_done(read, cx));
+                })
+                .detach();
+                true
             }
-        })
-        .detach();
+        }
+    }
+
+    fn keychain_done(read: Read, cx: &mut App) {
+        let k = cx.global_mut::<Self>();
+        if adopt(&mut k.open, read.vault) {
+            k.keychain_current = true;
+        }
+        for waiter in k.gate.finish(read.refused) {
+            waiter(cx);
+        }
     }
 
     pub fn path(cx: &App) -> Option<PathBuf> {
@@ -126,7 +142,12 @@ impl Keeper {
     /// the first time (and again after it changes).
     pub fn put(vault: Vault, cx: &mut App) {
         let k = cx.global_mut::<Self>();
-        if k.keychain && !k.keychain_current {
+        if store_due(
+            k.keychain,
+            k.keychain_current,
+            k.gate.refused,
+            k.gate.busy(),
+        ) {
             match keychain::store(vault.passphrase()) {
                 Ok(()) => k.keychain_current = true,
                 Err(e) => tracing::warn!(error = %e, "vault_keychain_store_failed"),
@@ -153,6 +174,8 @@ impl Keeper {
             keychain::store(vault.passphrase())?;
             k.keychain = true;
             k.keychain_current = true;
+            // The person just wrote the item themselves: an earlier refusal no longer holds.
+            k.gate.refused = false;
         } else {
             keychain::delete()?;
             k.keychain = false;
@@ -329,7 +352,7 @@ pub fn describe(key: &Key) -> String {
 }
 
 pub(crate) mod keychain {
-    //! The vault passphrase in the platform credential store, for the opt-in "unlock at launch"
+    //! The vault passphrase in the platform credential store, for the opt-in Keychain unlock
     //! setting: the login Keychain on macOS, Credential Manager on Windows, the Secret Service
     //! (GNOME Keyring, KWallet) on Linux.
     //!
@@ -337,9 +360,13 @@ pub(crate) mod keychain {
     //! development run never touches the real item). The passphrase goes nowhere else and is never
     //! logged: errors carry the store's status text only.
 
+    use crate::keeper_gate::Load;
     use tern_vault::{ExposeSecret, SecretString};
 
     const ACCOUNT: &str = "passphrase";
+
+    /// The vault passphrase item, as a source for `crate::keeper_gate::Passphrases`.
+    pub struct Passphrase;
 
     /// The native store, behind three calls. `None` from `get` means "no such item".
     #[cfg(target_os = "macos")]
@@ -442,11 +469,18 @@ pub(crate) mod keychain {
         set(service(), passphrase.expose_secret().as_bytes())
     }
 
-    /// The stored passphrase; `None` when there is none or the store refuses.
-    pub fn load() -> Option<SecretString> {
-        get(service(), "vault_keychain_read_failed")
-            .and_then(|bytes| String::from_utf8(bytes).ok())
-            .map(SecretString::from)
+    /// The stored passphrase, told apart from an item that is not there and a store that refuses.
+    pub(crate) fn read() -> Load {
+        match backend::get(service(), ACCOUNT) {
+            Ok(Some(bytes)) => String::from_utf8(bytes)
+                .map(|p| Load::Found(SecretString::from(p)))
+                .unwrap_or(Load::Missing),
+            Ok(None) => Load::Missing,
+            Err(e) => {
+                tracing::warn!(error = %e, event = "vault_keychain_read_failed");
+                Load::Refused
+            }
+        }
     }
 
     /// Removes the item; an item that is already gone counts as removed.

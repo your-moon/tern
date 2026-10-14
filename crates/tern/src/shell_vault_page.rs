@@ -349,7 +349,7 @@ impl Shell {
                 false,
                 format!("Unlock with the {}", crate::keeper::keychain::STORE_NAME),
                 Some(
-                    "Stores the vault passphrase in your login Keychain and opens the vault at launch"
+                    "Stores the vault passphrase in your login Keychain and opens the vault the first time tern needs it"
                         .into(),
                 ),
                 div()
