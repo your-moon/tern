@@ -37,6 +37,8 @@ const CONTEXT: &str = "TextInput";
 pub fn bindings() -> Vec<KeyBinding> {
     vec![
         KeyBinding::new("backspace", Backspace, Some(CONTEXT)),
+        // gpui matches modifiers exactly; Shift is often still held after a capital letter.
+        KeyBinding::new("shift-backspace", Backspace, Some(CONTEXT)),
         KeyBinding::new("delete", Delete, Some(CONTEXT)),
         KeyBinding::new("left", Left, Some(CONTEXT)),
         KeyBinding::new("right", Right, Some(CONTEXT)),
@@ -740,5 +742,26 @@ impl Render for TextInput {
 impl Focusable for TextInput {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+    use gpui::{KeyContext, Keystroke};
+
+    fn resolves_to<A: gpui::Action>(keys: &str) -> bool {
+        let keymap = gpui::Keymap::new(bindings());
+        let stroke = Keystroke::parse(keys).expect("valid keystroke");
+        let ctx = KeyContext::parse(CONTEXT).expect("valid context");
+        let (found, _) = keymap.bindings_for_input(&[stroke], &[ctx]);
+        found.iter().any(|b| b.action().as_any().is::<A>())
+    }
+
+    #[test]
+    fn shift_backspace_edits_like_the_plain_key() {
+        assert!(resolves_to::<Backspace>("backspace"));
+        assert!(resolves_to::<Backspace>("shift-backspace"));
     }
 }
