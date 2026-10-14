@@ -109,8 +109,10 @@ Notes:
 
 ## 2026-10-14 — AutoFill helper opt-out (unmeasured)
 
-`Info.plist` sets `NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac`. From macOS 26, AppKit
-starts a separate AutoFill helper process (own memory and threads) once a text field is used;
-the key stops it, since tern never needs one-time-code AutoFill (2FA goes through the SSH
-keyboard-interactive prompt). Unmeasured until before/after numbers from `scripts/measure-rss.sh`
-are recorded here (#82).
+`Info.plist` sets `NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac`, the documented opt-out
+from one-time-code AutoFill that AppKit attaches to every text input from macOS 26. tern never
+needs it (2FA goes through the SSH keyboard-interactive prompt). #82 reports that this starts a
+separate "AutoFill (tern)" helper process; that is unconfirmed here: on 2026-10-14 no helper that
+could be tied to tern appeared with or without the key (the system's SafariPlatformSupport
+helpers outlive the app). No memory change is claimed; record before/after numbers from
+`scripts/measure-rss.sh` here if it is ever measured.
