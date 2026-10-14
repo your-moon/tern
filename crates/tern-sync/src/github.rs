@@ -1,5 +1,7 @@
 //! The gist side: find or create the private `tern-sync` gist, read and write its files.
 //! Blocking HTTP (ureq with the system TLS); callers run it off the UI thread.
+// Test builds swap in fakes at `current_*`, so the real adapters are never built there.
+#![cfg_attr(test, allow(dead_code))]
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
@@ -342,36 +344,39 @@ thread_local! {
     static TEST_HTTP: std::cell::RefCell<Option<Box<dyn GithubHttp>>> = const { std::cell::RefCell::new(None) };
 }
 
+#[cfg(test)]
 pub(crate) fn current_keychain() -> Box<dyn Keychain> {
-    #[cfg(test)]
-    if let Some(kc) = TEST_KEYCHAIN.with(|k| k.borrow().as_ref().map(|b| b.clone_box())) {
-        return kc;
-    } else {
-        return Box::new(UnsetKeychain);
-    }
-    #[allow(unreachable_code)]
+    TEST_KEYCHAIN
+        .with(|slot| slot.borrow().as_ref().map(|b| b.clone_box()))
+        .unwrap_or_else(|| Box::new(UnsetKeychain))
+}
+
+#[cfg(not(test))]
+pub(crate) fn current_keychain() -> Box<dyn Keychain> {
     Box::new(OsKeychain)
 }
 
+#[cfg(test)]
 pub(crate) fn current_gh() -> Box<dyn GhCli> {
-    #[cfg(test)]
-    if let Some(gh) = TEST_GH.with(|g| g.borrow().as_ref().map(|b| b.clone_box())) {
-        return gh;
-    } else {
-        return Box::new(UnsetGh);
-    }
-    #[allow(unreachable_code)]
+    TEST_GH
+        .with(|slot| slot.borrow().as_ref().map(|b| b.clone_box()))
+        .unwrap_or_else(|| Box::new(UnsetGh))
+}
+
+#[cfg(not(test))]
+pub(crate) fn current_gh() -> Box<dyn GhCli> {
     Box::new(SystemGh)
 }
 
+#[cfg(test)]
 pub(crate) fn current_http() -> Box<dyn GithubHttp> {
-    #[cfg(test)]
-    if let Some(h) = TEST_HTTP.with(|h| h.borrow().as_ref().map(|b| b.clone_box())) {
-        return h;
-    } else {
-        return Box::new(UnsetHttp);
-    }
-    #[allow(unreachable_code)]
+    TEST_HTTP
+        .with(|slot| slot.borrow().as_ref().map(|b| b.clone_box()))
+        .unwrap_or_else(|| Box::new(UnsetHttp))
+}
+
+#[cfg(not(test))]
+pub(crate) fn current_http() -> Box<dyn GithubHttp> {
     Box::new(UreqHttp::new())
 }
 
