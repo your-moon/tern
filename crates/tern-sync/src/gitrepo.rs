@@ -16,6 +16,8 @@ const BRANCH: &str = "main";
 /// The most a synced `vault.age` or `data.age` may hold; a real vault is kilobytes, so a bigger
 /// file is a broken or hostile remote, and reading it whole would balloon memory.
 const MAX_FILE: u64 = 16 * 1024 * 1024;
+/// `tern-meta.json` is a hash, a time and a device name.
+const MAX_META: u64 = 64 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Meta {
@@ -155,11 +157,13 @@ impl GitRepo {
     /// wrong format.
     pub fn fetch(&self) -> Result<Option<RemoteBundle>, GithubError> {
         self.refresh()?;
-        let Ok(meta) = std::fs::read_to_string(self.dir.join(META)) else {
+        let meta_path = self.dir.join(META);
+        if std::fs::metadata(&meta_path).is_err() {
             return Ok(None);
-        };
+        }
+        let meta = read_capped(&meta_path, META, MAX_META)?;
         let meta: Meta =
-            serde_json::from_str(&meta).map_err(|e| GithubError::Format(e.to_string()))?;
+            serde_json::from_slice(&meta).map_err(|e| GithubError::Format(e.to_string()))?;
         let read = |name: &str| read_capped(&self.dir.join(name), name, MAX_FILE);
         Ok(Some(RemoteBundle {
             hash: meta.hash,
@@ -335,6 +339,30 @@ mod tests {
         // A second push from b is seen by a on its next fetch.
         b.push("h2", "mac-b", b"v2", b"s2").unwrap();
         assert_eq!(a.fetch().unwrap().unwrap().hash, "h2");
+    }
+
+    /// The metadata file comes from the remote, so a huge one is refused like the other files.
+    #[test]
+    fn an_oversized_metadata_file_is_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bare = tmp.path().join("remote.git");
+        let status = std::process::Command::new("git")
+            .args(["init", "--quiet", "--bare", "-b", "main"])
+            .arg(&bare)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let url = bare.to_string_lossy().into_owned();
+
+        let big_device = "d".repeat(128 * 1024);
+        GitRepo::new(url.clone(), tmp.path().join("a"))
+            .push("h1", &big_device, b"v", b"s")
+            .unwrap();
+        let err = GitRepo::new(url, tmp.path().join("b"))
+            .fetch()
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("tern-meta.json"), "{err}");
     }
 
     #[test]

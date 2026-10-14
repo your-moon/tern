@@ -32,11 +32,11 @@ use crate::search::{Search, SearchMark, mark_at};
 pub use alacritty_terminal::index::Side;
 pub use alacritty_terminal::selection::SelectionType;
 
-/// Scrollback history kept client-side (lines).
 /// The most text one OSC 52 request may put on the clipboard. The program on the other end of
 /// the connection chooses the payload, so a larger one is dropped rather than copied.
 const MAX_CLIPBOARD_BYTES: usize = 1024 * 1024;
 
+/// Scrollback history kept client-side (lines).
 pub const SCROLLBACK_LINES: usize = 10_000;
 
 /// Emitted by [`Terminal`] (it is an `EventEmitter`).
