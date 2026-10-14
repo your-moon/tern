@@ -38,7 +38,7 @@ pub fn wrap(passphrase: &SecretString, pin: &str) -> Result<Vec<u8>, VaultError>
 fn wrap_with(passphrase: &SecretString, pin: &str, work_factor: u8) -> Result<Vec<u8>, VaultError> {
     let mut recipient = age::scrypt::Recipient::new(SecretString::from(pin.to_owned()));
     recipient.set_work_factor(work_factor);
-    age::encrypt(&recipient, passphrase.expose_secret().as_bytes())
+    crate::gate::one_at_a_time(|| age::encrypt(&recipient, passphrase.expose_secret().as_bytes()))
         .map_err(|e| VaultError::Corrupt(e.to_string()))
 }
 
@@ -48,8 +48,10 @@ fn wrap_with(passphrase: &SecretString, pin: &str, work_factor: u8) -> Result<Ve
 /// [`VaultError::WrongPassphrase`] for a wrong PIN or an altered blob.
 pub fn unwrap(blob: &[u8], pin: &str) -> Result<SecretString, VaultError> {
     let identity = age::scrypt::Identity::new(SecretString::from(pin.to_owned()));
-    let plain =
-        Zeroizing::new(age::decrypt(&identity, blob).map_err(|_| VaultError::WrongPassphrase)?);
+    let plain = Zeroizing::new(
+        crate::gate::one_at_a_time(|| age::decrypt(&identity, blob))
+            .map_err(|_| VaultError::WrongPassphrase)?,
+    );
     String::from_utf8(plain.to_vec())
         .map(SecretString::from)
         .map_err(|_| VaultError::Corrupt("the sealed passphrase is not text".into()))
