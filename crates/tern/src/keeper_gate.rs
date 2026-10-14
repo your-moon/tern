@@ -1,5 +1,5 @@
 //! The run's one Keychain attempt for the vault passphrase: who may start it, who waits for it,
-//! and what happens to the vault it opens. No gpui here, so the rules are tested with a fake
+//! and what happens to the vault it opens. No gpui logic here (only the `Waiter` type), so the rules are tested with a fake
 //! store that counts reads; the real Keychain is never reached from a test.
 
 use std::path::Path;
@@ -68,9 +68,9 @@ pub(crate) fn adopt(open: &mut Option<Vault>, found: Option<Vault>) -> bool {
 }
 
 /// Whether `put` writes the passphrase to the Keychain: not over an item the store just refused,
-/// which would raise a second dialog.
-pub(crate) fn store_due(keychain: bool, current: bool, refused: bool) -> bool {
-    keychain && !current && !refused
+/// and not while a read is still in flight, either of which would raise a second dialog.
+pub(crate) fn store_due(keychain: bool, current: bool, refused: bool, in_flight: bool) -> bool {
+    keychain && !current && !refused && !in_flight
 }
 
 pub(crate) type Waiter = Box<dyn FnOnce(&mut App)>;
@@ -107,6 +107,11 @@ impl<W> Default for Gate<W> {
 
 impl<W> Gate<W> {
     /// A need for the locked vault arrives; `waiter` is kept unless the answer is `Skip`.
+    /// A Keychain read is running now.
+    pub(crate) fn busy(&self) -> bool {
+        self.in_flight
+    }
+
     pub(crate) fn need(&mut self, enabled: bool, locked: bool, waiter: W) -> Need {
         if self.in_flight {
             self.waiting.push(waiter);
@@ -286,20 +291,26 @@ mod tests {
     #[test]
     fn a_refused_keychain_is_not_written_over_for_the_rest_of_the_run() {
         let mut gate: Gate<u32> = Gate::default();
-        assert!(store_due(true, false, gate.refused));
+        assert!(store_due(true, false, gate.refused, false));
         gate.need(true, true, 1);
         gate.finish(false);
         assert!(
-            store_due(true, false, gate.refused),
+            store_due(true, false, gate.refused, false),
             "no item: store as before"
         );
         let mut gate: Gate<u32> = Gate::default();
         gate.need(true, true, 1);
         gate.finish(true);
-        assert!(!store_due(true, false, gate.refused));
-        assert!(!store_due(false, false, false));
-        assert!(!store_due(true, true, false));
+        assert!(!store_due(true, false, gate.refused, false));
+        assert!(!store_due(false, false, false, false));
+        assert!(!store_due(true, true, false, false));
         let (_dir, path) = vault_file("right");
         assert!(open_with(&Counting::new(refused), &path).refused);
+    }
+
+    #[test]
+    fn nothing_is_stored_while_a_read_is_in_flight() {
+        assert!(!store_due(true, false, false, true));
+        assert!(store_due(true, false, false, false));
     }
 }

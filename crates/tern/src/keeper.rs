@@ -142,7 +142,12 @@ impl Keeper {
     /// the first time (and again after it changes).
     pub fn put(vault: Vault, cx: &mut App) {
         let k = cx.global_mut::<Self>();
-        if store_due(k.keychain, k.keychain_current, k.gate.refused) {
+        if store_due(
+            k.keychain,
+            k.keychain_current,
+            k.gate.refused,
+            k.gate.busy(),
+        ) {
             match keychain::store(vault.passphrase()) {
                 Ok(()) => k.keychain_current = true,
                 Err(e) => tracing::warn!(error = %e, "vault_keychain_store_failed"),
@@ -169,6 +174,8 @@ impl Keeper {
             keychain::store(vault.passphrase())?;
             k.keychain = true;
             k.keychain_current = true;
+            // The person just wrote the item themselves: an earlier refusal no longer holds.
+            k.gate.refused = false;
         } else {
             keychain::delete()?;
             k.keychain = false;
