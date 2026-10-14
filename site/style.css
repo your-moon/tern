@@ -1,113 +1,622 @@
-:root{--bg:#fff;--fg:#1d1b22;--mut:#55525e;--dim:#77737f;--line:rgba(29,27,34,.1);--soft:#f6f5f8;--accent:#6d4fe0;color-scheme:light}
-*{box-sizing:border-box;margin:0}
-html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--fg);font:16px/1.6 Geist,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
-a{color:inherit;text-decoration:none}
-img{display:block;max-width:100%;height:auto}
-code,kbd{font-family:"Geist Mono",ui-monospace,monospace;font-size:.88em;background:var(--soft);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+/* tern landing page. Sections follow the page from top to bottom. */
 
-/* Nav: a white bar with a hairline, above the picture. */
-.nav-bar{border-bottom:1px solid var(--line);background:var(--bg)}
-.nav{padding:0 24px;height:56px;display:flex;justify-content:space-between;align-items:center}
-.brand{display:flex;align-items:center;gap:8px;font-size:17px;font-weight:600;letter-spacing:-.02em}
-.brand-sub{font-weight:500;color:#a3a0ab}
-.brand img{border-radius:6px}
-.nav-r{display:flex;align-items:center;gap:4px}
-.nav-r a{font-size:14px;color:var(--fg);padding:6px 10px;border-radius:7px}
-.nav-div{width:1px;height:18px;background:var(--line);margin:0 8px}
-.gh{color:var(--mut)!important}
-.gh .stars b{color:var(--mut);font-weight:400}
-.nav-r a:hover{color:var(--fg);background:var(--soft)}
-.gh{display:inline-flex;align-items:center;gap:6px}
-.stars{display:inline-flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums}
-.stars b{font-weight:500;color:var(--fg)}
+/* ---------- Tokens ---------- */
 
-/* Hero: the dithered picture full width, the pitch over its fade. */
-.hero{position:relative;padding:0 20px 72px;text-align:center}
-.art{height:clamp(260px,33vw,500px);margin:0 -20px;background:#cfe0ea url(assets/hero.png) center bottom/1920px auto no-repeat;image-rendering:pixelated}
-@media (min-width:1921px){.art{background-size:2880px auto}}
-.hero-in{position:relative;max-width:760px;margin:clamp(-185px,-11.5vw,-80px) auto 0}
-h1{font-size:clamp(34px,4.6vw,52px);line-height:1.08;font-weight:600;letter-spacing:-.035em;text-wrap:balance}
-.lede{max-width:470px;margin:14px auto 0;font-size:16px;line-height:1.55;color:var(--mut);text-wrap:pretty}
-.cta{display:flex;gap:8px;justify-content:center;align-items:center;margin-top:26px;flex-wrap:wrap}
-.btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 15px;border-radius:9px;background:var(--fg);color:#fff;font-size:14px;font-weight:500;border:1px solid var(--fg)}
-.btn:hover{background:#000}
-.btn.ghost{background:#fff;color:var(--fg);border-color:rgba(29,27,34,.18)}
-.btn.ghost:hover{background:var(--soft)}
-.btn .stars{margin-left:2px;padding-left:9px;border-left:1px solid var(--line);color:var(--mut)}
-.fine{margin-top:18px;font-size:12.5px;color:var(--dim);line-height:1.7}
-.fine a,.sub a,.sec-p a{color:var(--fg);border-bottom:1px solid rgba(29,27,34,.25)}
-.fine a:hover,.sub a:hover,.sec-p a:hover{border-bottom-color:var(--fg)}
-.brew{display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:4px 4px 4px 10px;border:1px solid var(--line);border-radius:9px;background:var(--soft)}
-.brew code{background:none;border:0;padding:0;color:var(--mut);font-size:12.5px}
-.brew button{font:500 11.5px Geist,system-ui,sans-serif;color:var(--fg);background:#fff;border:1px solid var(--line);border-radius:6px;padding:3px 9px;cursor:pointer}
-.brew button:hover{background:var(--soft)}
-.badge{display:inline-flex;gap:6px;align-items:center;font-size:12px;padding:4px 11px;border-radius:15px;background:rgba(255,255,255,.85);border:1px solid var(--line);margin-bottom:16px;color:var(--mut)}
-.badge:hover{color:var(--fg)}
+:root {
+  --page: #fff;
+  --text: #1d1b22;
+  --text-muted: #55525e;
+  --text-faint: #77737f;
+  --line: rgba(29, 27, 34, 0.1);
+  --surface: #f6f5f8;
+  --accent: #6d4fe0;
+  --radius: 14px;
+  --content-width: 1080px;
+  color-scheme: light;
+}
 
-/* Sections: shipyard's rhythm. */
-.sec{max-width:1080px;margin:150px auto 0;padding:0 20px}
-.sec-head{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:end;margin-bottom:40px}
-.label{display:flex;align-items:center;gap:10px;font:12.5px "Geist Mono",ui-monospace,monospace;color:var(--dim);margin-bottom:18px}
-.label::before{content:"";width:22px;height:1px;background:currentColor}
-h2.two{font-size:clamp(32px,4.2vw,46px);line-height:1.04;letter-spacing:-.04em}
-.sec-p p{color:var(--mut);font-size:16px;line-height:1.6;max-width:460px}
-.sec-p kbd,.sec-p code{color:var(--fg)}
-.tabbar{display:flex;justify-content:center;margin-bottom:14px}
-.tabs{display:inline-flex;gap:2px;padding:3px;background:var(--soft);border:1px solid var(--line);border-radius:10px}
-.tabs button{font:500 13px Geist,system-ui,sans-serif;color:var(--mut);background:none;border:0;border-radius:7px;padding:6px 13px;cursor:pointer}
-.tabs button:hover{color:var(--fg)}
-.tabs button[aria-selected=true]{background:#fff;color:var(--fg);box-shadow:0 1px 2px rgba(29,27,34,.12),0 0 0 1px rgba(29,27,34,.06)}
-.stage{border-radius:14px;border:1px solid var(--line);overflow:hidden;background:#141218;box-shadow:0 1px 2px rgba(29,27,34,.05),0 30px 70px -30px rgba(29,27,34,.35)}
-.stage img{display:block;width:100%}
-.stage.chart,.stage.flow{box-shadow:none}
-.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
-h2{font-size:28px;line-height:1.2;font-weight:600;letter-spacing:-.03em}
-h2.big{font-size:36px}
-.sub{color:var(--mut);margin:12px auto 0;max-width:620px}
-.chart{display:flex;flex-direction:column;gap:22px;padding:44px 48px;background:var(--soft)}
-.bar{display:grid;grid-template-columns:62px 1fr 92px;gap:14px;align-items:center;font-size:14px}
-.lbl{color:var(--mut)}
-.track{height:14px;border-radius:7px;background:rgba(29,27,34,.06);overflow:hidden}
-.fill{display:block;height:100%;border-radius:7px;background:#a29fad}
-.fill.accent{background:var(--accent)}
-.fill.dim{background:repeating-linear-gradient(135deg,#bdbac6 0 6px,#d3d1da 6px 12px)}
-.val{font-family:"Geist Mono",monospace;font-size:13px;line-height:1.3}
-.val small{display:block;font-family:Geist,sans-serif;font-size:11px;color:var(--dim)}
-.cap{font-size:12px;color:var(--dim);font-family:"Geist Mono",monospace}
-.flow{display:flex;align-items:center;justify-content:center;padding:64px 20px;background:var(--soft)}
-.node{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;font-size:13px;font-weight:500;padding:18px 16px;border:1px solid var(--line);border-radius:12px;background:#fff;width:140px;color:var(--mut)}
-.node b{font-weight:500;color:var(--fg)}
-.node img{border-radius:9px}
-.edge{flex:1;min-width:70px;position:relative;height:1px;background:linear-gradient(90deg,var(--line),var(--accent),var(--line))}
-.edge span{position:absolute;left:50%;top:-11px;transform:translateX(-50%);font:11px "Geist Mono",monospace;color:var(--accent);background:var(--soft);padding:0 8px;white-space:nowrap}
-.dl{text-align:center}
-.rows{list-style:none;padding:0;max-width:640px;margin:50px auto 0;text-align:left}
-.rows li{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid var(--line);font-size:15px}
-.rows em{font:12px "Geist Mono",monospace;color:var(--dim);margin-left:10px}
-.mini{font-size:12px;padding:5px 14px;border-radius:7px;border:1px solid rgba(29,27,34,.18);color:var(--fg)}
-.mini:hover{background:var(--soft)}
-.wrap.dl{margin-top:150px}
-.wrap.cta-end{max-width:640px;margin-top:110px}
-.cta.left{justify-content:flex-start}
-.link{color:var(--mut);font-size:14px}
-.link:hover{color:var(--fg)}
-.foot{max-width:1080px;margin:150px auto 0;padding:24px 20px 36px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--dim)}
-.foot a:hover{color:var(--fg)}
-@media (max-width:800px){
- .art{height:240px;background-size:1200px auto;background-position:62% bottom}
- .hero-in{margin-top:-64px}
- .nav{padding:0 16px}
- .brand-sub,.nav-div{display:none}
- .sec{margin-top:96px}
- .wrap.dl{margin-top:96px}
- .wrap.cta-end{margin-top:80px}
- .sec-head{grid-template-columns:1fr;gap:16px;margin-bottom:24px}
- .chart{padding:24px}
- h2.big{font-size:28px}
- .bar{grid-template-columns:54px 1fr 80px;gap:10px}
- .node{width:104px;padding:14px 8px;font-size:12px}
- .edge{min-width:44px}
- .brew code{font-size:11px}
+/* ---------- Base ---------- */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* `hidden` always wins, even over components that set their own display. */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  background: var(--page);
+  color: var(--text);
+  font: 16px/1.6 Geist, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+code,
+kbd {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 0.88em;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 1px 6px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Inline icons from assets/icons.svg; they take the text colour. */
+.icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.icon-large {
+  width: 34px;
+  height: 34px;
+}
+
+/* Links inside running text. */
+.hero-note a,
+.feature-head p a,
+.downloads-intro a {
+  color: var(--text);
+  border-bottom: 1px solid rgba(29, 27, 34, 0.25);
+}
+
+.hero-note a:hover,
+.feature-head p a:hover,
+.downloads-intro a:hover {
+  border-bottom-color: var(--text);
+}
+
+/* ---------- Buttons ---------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 15px;
+  border: 1px solid var(--text);
+  border-radius: 9px;
+  background: var(--text);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.button:hover {
+  background: #000;
+}
+
+.button-outline {
+  background: #fff;
+  color: var(--text);
+  border-color: rgba(29, 27, 34, 0.18);
+}
+
+.button-outline:hover {
+  background: var(--surface);
+}
+
+.button-outline .star-count {
+  margin-left: 2px;
+  padding-left: 9px;
+  border-left: 1px solid var(--line);
+  color: var(--text-muted);
+}
+
+.button-small {
+  font-size: 12px;
+  padding: 5px 14px;
+  border: 1px solid rgba(29, 27, 34, 0.18);
+  border-radius: 7px;
+}
+
+.button-small:hover {
+  background: var(--surface);
+}
+
+/* ---------- Header ---------- */
+
+.site-header {
+  height: 56px;
+  padding: 0 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.brand img {
+  border-radius: 6px;
+}
+
+.brand-sub {
+  font-weight: 500;
+  color: #a3a0ab;
+}
+
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.site-nav a {
+  font-size: 14px;
+  padding: 6px 10px;
+  border-radius: 7px;
+}
+
+.site-nav a:hover {
+  background: var(--surface);
+}
+
+.site-nav-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 8px;
+  background: var(--line);
+}
+
+.github-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.github-link .icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* ---------- Hero ---------- */
+
+.hero {
+  padding: 0 20px 72px;
+  text-align: center;
+}
+
+/*
+ * The picture is stored at "art pixel" size (960x280) and drawn at exactly twice
+ * that, with pixelated scaling, so every dot is the same size. Its bottom edge has
+ * already faded to the page colour.
+ */
+.hero-art {
+  height: clamp(260px, 33vw, 500px);
+  margin: 0 -20px;
+  background: #cfe0ea url(assets/hero.png) center bottom / 1920px auto no-repeat;
+  image-rendering: pixelated;
+}
+
+/* The text overlaps the faded lower part of the picture. */
+.hero-text {
+  position: relative;
+  max-width: 760px;
+  margin: clamp(-185px, -11.5vw, -80px) auto 0;
+}
+
+.hero h1 {
+  font-size: clamp(34px, 4.6vw, 52px);
+  line-height: 1.08;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.hero-lede {
+  max-width: 470px;
+  margin: 14px auto 0;
+  color: var(--text-muted);
+  text-wrap: pretty;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 26px;
+}
+
+.hero-note {
+  margin-top: 18px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text-faint);
+}
+
+/* ---------- Features ---------- */
+
+.feature {
+  max-width: var(--content-width);
+  margin: 150px auto 0;
+  padding: 0 20px;
+}
+
+.feature-head {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 56px;
+  align-items: end;
+  margin-bottom: 40px;
+}
+
+.feature-head h2 {
+  font-size: clamp(32px, 4.2vw, 46px);
+  line-height: 1.04;
+  letter-spacing: -0.04em;
+}
+
+.feature-head > p {
+  max-width: 460px;
+  color: var(--text-muted);
+}
+
+.feature-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  font: 12.5px "Geist Mono", ui-monospace, monospace;
+  color: var(--text-faint);
+}
+
+.feature-label::before {
+  content: "";
+  width: 22px;
+  height: 1px;
+  background: currentColor;
+}
+
+/* The large framed view under each feature. */
+.feature-frame {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #141218;
+  box-shadow: 0 1px 2px rgba(29, 27, 34, 0.05), 0 30px 70px -30px rgba(29, 27, 34, 0.35);
+}
+
+.feature-frame img {
+  width: 100%;
+}
+
+/* ---------- Tabs ---------- */
+
+.tabs {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  width: fit-content;
+  margin: 0 auto 14px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.tabs button {
+  padding: 6px 13px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-muted);
+  font: 500 13px Geist, system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.tabs button:hover {
+  color: var(--text);
+}
+
+.tabs button[aria-selected="true"] {
+  background: #fff;
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(29, 27, 34, 0.12), 0 0 0 1px rgba(29, 27, 34, 0.06);
+}
+
+/* ---------- Memory chart ---------- */
+
+.memory-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 44px 48px;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.memory-row {
+  display: grid;
+  grid-template-columns: 62px 1fr 92px;
+  gap: 14px;
+  align-items: center;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.memory-track {
+  height: 14px;
+  border-radius: 7px;
+  background: rgba(29, 27, 34, 0.06);
+  overflow: hidden;
+}
+
+.memory-bar {
+  display: block;
+  height: 100%;
+  border-radius: 7px;
+  background: #a29fad;
+}
+
+.memory-bar.is-tern {
+  background: var(--accent);
+}
+
+/* Termius has no connected figure, so its bar is hatched. */
+.memory-bar.is-estimate {
+  background: repeating-linear-gradient(135deg, #bdbac6 0 6px, #d3d1da 6px 12px);
+}
+
+.memory-value {
+  font: 13px/1.3 "Geist Mono", monospace;
+  color: var(--text);
+}
+
+.memory-value small {
+  display: block;
+  font: 11px Geist, sans-serif;
+  color: var(--text-faint);
+}
+
+.memory-caption {
+  font: 12px "Geist Mono", monospace;
+  color: var(--text-faint);
+}
+
+/* ---------- Sync diagram ---------- */
+
+.sync-diagram {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 20px;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.sync-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 140px;
+  padding: 18px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.sync-node b {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.sync-node img {
+  border-radius: 9px;
+}
+
+.sync-edge {
+  position: relative;
+  flex: 1;
+  min-width: 70px;
+  max-width: 360px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--line), var(--accent), var(--line));
+}
+
+.sync-edge span {
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 8px;
+  background: var(--surface);
+  font: 11px "Geist Mono", monospace;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* ---------- Downloads ---------- */
+
+.downloads {
+  max-width: var(--content-width);
+  margin: 150px auto 0;
+  padding: 0 20px;
+  text-align: center;
+}
+
+.downloads h2,
+.closing h2 {
+  font-size: 36px;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+}
+
+.downloads-intro {
+  max-width: 620px;
+  margin: 12px auto 0;
+  color: var(--text-muted);
+}
+
+.download-list {
+  max-width: 640px;
+  margin: 50px auto 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.download-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 15px;
+}
+
+.download-list em {
+  margin-left: 10px;
+  font: 12px "Geist Mono", monospace;
+  color: var(--text-faint);
+}
+
+/* ---------- Closing call to action ---------- */
+
+.closing {
+  max-width: 640px;
+  margin: 110px auto 0;
+  padding: 0 20px;
+}
+
+.closing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+/* ---------- Footer ---------- */
+
+.site-footer {
+  max-width: var(--content-width);
+  margin: 150px auto 0;
+  padding: 24px 20px 36px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.site-footer a:hover {
+  color: var(--text);
+}
+
+/* ---------- Wide and narrow screens ---------- */
+
+/* Past 1920px wide, draw the picture at three times its stored size. */
+@media (min-width: 1921px) {
+  .hero-art {
+    background-size: 2880px auto;
+  }
+}
+
+@media (max-width: 800px) {
+  .site-header {
+    padding: 0 16px;
+  }
+
+  .brand-sub,
+  .site-nav-divider {
+    display: none;
+  }
+
+  .hero-art {
+    height: 240px;
+    background-size: 960px auto;
+    background-position: 62% bottom;
+  }
+
+  .hero-text {
+    margin-top: -64px;
+  }
+
+  .feature,
+  .downloads {
+    margin-top: 96px;
+  }
+
+  .feature-head {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .memory-chart {
+    padding: 24px;
+  }
+
+  .memory-row {
+    grid-template-columns: 54px 1fr 80px;
+    gap: 10px;
+  }
+
+  .sync-node {
+    width: 104px;
+    padding: 14px 8px;
+    font-size: 12px;
+  }
+
+  .sync-edge {
+    min-width: 44px;
+  }
+
+  .downloads h2,
+  .closing h2 {
+    font-size: 28px;
+  }
+
+  .closing {
+    margin-top: 80px;
+  }
+
+  .download-list em {
+    display: block;
+    margin: 2px 0 0;
+  }
 }

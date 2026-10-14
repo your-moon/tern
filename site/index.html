@@ -1,186 +1,231 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>tern: a fast, native SSH client</title>
-<meta name="description" content="tern is a fast, native SSH client written in Rust, for macOS with Windows and Linux in preview. Your servers one click away, sudo passwords filled with ⌘\, and your setup synced, encrypted, to your own Git repo.">
-<meta name="color-scheme" content="light">
-<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-<meta property="og:type" content="website">
-<meta property="og:title" content="tern: a fast, native SSH client">
-<meta property="og:description" content="Your servers one click away, sudo passwords filled with ⌘\, and your setup synced, encrypted, to your own Git repo.">
-<meta property="og:url" content="https://tern.carrot-soft.tech/">
-<meta property="og:image" content="https://tern.carrot-soft.tech/assets/terminal.jpg">
-<meta name="twitter:card" content="summary_large_image">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
-<link rel="preload" as="image" href="assets/hero.png">
-<link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>tern: a fast, native SSH client</title>
+  <meta name="description" content="tern is a fast, native SSH client written in Rust, for macOS with Windows and Linux in preview. Saved hosts, SFTP, splits and snippets, sudo passwords filled when you ask, and your setup synced, encrypted, to your own Git repo.">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="tern: a fast, native SSH client">
+  <meta property="og:description" content="Your servers one click away, sudo passwords filled when you ask, and your setup synced, encrypted, to your own Git repo.">
+  <meta property="og:url" content="https://tern.carrot-soft.tech/">
+  <meta property="og:image" content="https://tern.carrot-soft.tech/assets/terminal.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="preload" as="image" href="assets/hero.png">
+  <link rel="stylesheet" href="style.css">
+  <script src="main.js" defer></script>
 </head>
 <body>
-<div class="nav-bar"><header class="nav">
-  <a class="brand" href="#top"><img src="assets/icon.svg" alt="" width="22" height="22"><span>tern</span><span class="brand-sub">SSH client</span></a>
-  <nav class="nav-r" aria-label="Main">
+
+<header class="site-header">
+  <a class="brand" href="#top">
+    <img src="assets/icon.svg" alt="" width="22" height="22">
+    <span>tern</span>
+    <span class="brand-sub">SSH client</span>
+  </a>
+  <nav class="site-nav" aria-label="Main">
     <a href="https://github.com/your-moon/tern#readme">Docs</a>
     <a href="#download">Download</a>
-    <span class="nav-div" aria-hidden="true"></span>
-    <a class="gh" href="https://github.com/your-moon/tern" aria-label="tern on GitHub"><svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.5 7.5 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg><span class="stars" hidden><b class="star-n"></b></span></a>
+    <span class="site-nav-divider" aria-hidden="true"></span>
+    <a class="github-link" href="https://github.com/your-moon/tern" aria-label="tern on GitHub">
+      <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#github"/></svg>
+      <span class="star-count" hidden></span>
+    </a>
   </nav>
-</header></div>
+</header>
 
 <main id="top">
-<section class="hero">
-  <div class="art" role="img" aria-label="Hokusai's Red Fuji, drawn in dots that dissolve into the page"></div>
-  <div class="hero-in">
-    <h1>Your servers,<br>one click away.</h1>
-    <p class="lede">A fast, native SSH client. Saved hosts, SFTP, splits and snippets, sudo passwords filled when you ask, and your setup synced, encrypted, to a Git repo you own.</p>
-    <div class="cta">
-      <a class="btn" id="dl-main" data-asset="macos-arm64.dmg" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-macos-arm64.dmg"><svg class="os os-mac" width="14" height="14" viewBox="0 0 384 512" fill="currentColor" aria-hidden="true"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.200 4 184.800 4 273.500q0 39.300 14.400 81.200c12.800 36.700 59 126.700 107.200 125.200 25.200-.6 43-17.900 75.800-17.900 31.800 0 48.300 17.900 76.400 17.900 48.600-.7 90.400-82.500 102.600-119.300-65.200-30.700-61.700-90-61.700-91.900zm-56.600-164.200c27.300-32.400 24.800-61.900 24-72.500-24.100 1.400-52 16.400-67.900 34.900-17.500 19.800-27.800 44.300-25.600 71.900 26.100 2 49.900-11.400 69.500-34.300z"/></svg><span id="dl-label">Download for macOS</span></a>
-      <a class="btn ghost" href="https://github.com/your-moon/tern">Star on GitHub<span class="stars" hidden>★ <b class="star-n"></b></span></a>
+
+  <!-- Hero: the dithered painting, the pitch over its fade (picture: site/tools/make_hero.py). -->
+  <section class="hero">
+    <div class="hero-art" role="img" aria-label="Hokusai's Red Fuji, drawn in dots that dissolve into the page"></div>
+    <div class="hero-text">
+      <h1>Your servers,<br>one click away.</h1>
+      <p class="hero-lede">A fast, native SSH client. Saved hosts, SFTP, splits and snippets, sudo passwords filled when you ask, and your setup synced, encrypted, to a Git repo you own.</p>
+
+      <!--
+        One block per platform; main.js shows the one that matches the visitor
+        (macOS when JavaScript is off). Download links use data-asset so main.js
+        can point them at the latest release.
+      -->
+      <div class="hero-actions">
+        <a class="button" data-platform="mac" data-asset="macos-arm64.dmg" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-macos-arm64.dmg">
+          <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#apple"/></svg>Download for macOS
+        </a>
+        <a class="button" data-platform="windows" data-asset="windows-x86_64.zip" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-windows-x86_64.zip" hidden>
+          <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#windows"/></svg>Download for Windows
+        </a>
+        <a class="button" data-platform="linux" data-asset="linux-x86_64.tar.gz" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-linux-x86_64.tar.gz" hidden>
+          <svg class="icon" aria-hidden="true"><use href="assets/icons.svg#linux"/></svg>Download for Linux
+        </a>
+        <a class="button" data-platform="other" href="#download" hidden>All downloads</a>
+
+        <a class="button button-outline" href="https://github.com/your-moon/tern">
+          Star on GitHub<span class="star-count" hidden></span>
+        </a>
+      </div>
+
+      <p class="hero-note" data-platform="mac">
+        For Apple silicon Macs, signed and notarised. Open source. <span class="release-version">v0.1.3</span> · <a href="https://github.com/your-moon/tern#install">How to install ›</a><br>
+        Windows and Linux (preview):
+        <a data-asset="windows-x86_64.zip" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-windows-x86_64.zip">.zip</a> ·
+        <a data-asset="linux-x86_64.tar.gz" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-linux-x86_64.tar.gz">.tar.gz</a>, x86-64.
+      </p>
+      <p class="hero-note" data-platform="windows" hidden>
+        Windows x86-64 preview build: it passes CI, and reports are welcome. Open source. <span class="release-version">v0.1.3</span><br>
+        Also for <a href="#download">macOS and Linux</a>.
+      </p>
+      <p class="hero-note" data-platform="linux" hidden>
+        Linux x86-64 preview build: it passes CI, and reports are welcome. Open source. <span class="release-version">v0.1.3</span><br>
+        Also for <a href="#download">macOS, Windows and Linux arm64</a>.
+      </p>
+      <p class="hero-note" data-platform="other" hidden>
+        For macOS, with Windows and Linux in preview. Open source. <span class="release-version">v0.1.3</span>
+      </p>
     </div>
-    <p class="fine"><span id="dl-fine">For Apple silicon Macs, signed and notarised. Open source.</span> <span id="ver">v0.1.3</span> · <a href="https://github.com/your-moon/tern#install">How to install ›</a><br><span id="dl-other">Windows and Linux (preview): <a data-asset="windows-x86_64.zip" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-windows-x86_64.zip">.zip</a> · <a data-asset="linux-x86_64.tar.gz" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-linux-x86_64.tar.gz">.tar.gz</a>, x86-64.</span></p>
-  </div>
-</section>
-<section class="sec">
-  <div class="sec-head">
-    <div><p class="label">Connect</p><h2 class="two">One shortcut.<br>Any server.</h2></div>
-    <div class="sec-p"><p>Press <kbd>⌘K</kbd> and type a few letters: tern finds the host, ordered by what you used last, and connects. Groups, tags, ProxyJump and port forwards are set once per host, and a dropped network reconnects on its own.</p></div>
-  </div>
-  <div class="tabbar"><div class="tabs" role="tablist" aria-label="connect"><button type="button" role="tab" aria-selected="true" aria-controls="connect-0" id="connect-t0">Host picker</button><button type="button" role="tab" aria-selected="false" aria-controls="connect-1" id="connect-t1">Session</button></div></div>
-  <figure class="stage"><div class="pane" role="tabpanel" id="connect-0" aria-labelledby="connect-t0"><img src="assets/picker.jpg" width="1600" height="1000" loading="lazy" alt="The ⌘K host picker filtering saved hosts"></div><div class="pane" role="tabpanel" id="connect-1" aria-labelledby="connect-t1" hidden><img src="assets/terminal.jpg" width="1600" height="1000" loading="lazy" alt="tern connected to web-01 and running htop"></div></figure>
-</section>
+  </section>
 
-<section class="sec">
-  <div class="sec-head">
-    <div><p class="label">Passwords</p><h2 class="two">Passwords stay<br>where they are.</h2></div>
-    <div class="sec-p"><p>Logins come from your SSH key, your password manager (any command, like <code>op read …</code> or <code>pass show …</code>), or tern's encrypted vault. At a sudo prompt, press <kbd>⌘\</kbd> (<kbd>Ctrl+Shift+\</kbd> on Windows and Linux) and tern types it. Never on its own.</p></div>
-  </div>
-  <figure class="stage"><img src="assets/docker.jpg" width="1600" height="1000" loading="lazy" alt="sudo docker ps with the sudo password filled by ⌘\"></figure>
-</section>
+  <!-- Showcase: label, two-line headline beside a paragraph, then one large framed view. -->
 
-<section class="sec">
-  <div class="sec-head">
-    <div><p class="label">Real work</p><h2 class="two">Everything a<br>long session needs.</h2></div>
-    <div class="sec-p"><p>Split panes and find in scrollback, an SFTP panel to browse and drop files, snippets for the commands you run every day, broadcast input to chosen tabs, and session logs.</p></div>
-  </div>
-  <div class="tabbar"><div class="tabs" role="tablist" aria-label="work"><button type="button" role="tab" aria-selected="true" aria-controls="work-0" id="work-t0">Splits and find</button><button type="button" role="tab" aria-selected="false" aria-controls="work-1" id="work-t1">Files</button><button type="button" role="tab" aria-selected="false" aria-controls="work-2" id="work-t2">Snippets</button></div></div>
-  <figure class="stage"><div class="pane" role="tabpanel" id="work-0" aria-labelledby="work-t0"><img src="assets/split.jpg" width="1600" height="1000" loading="lazy" alt="Two panes side by side with find in scrollback"></div><div class="pane" role="tabpanel" id="work-1" aria-labelledby="work-t1" hidden><img src="assets/sftp.jpg" width="1600" height="1000" loading="lazy" alt="The SFTP side panel listing a remote home folder"></div><div class="pane" role="tabpanel" id="work-2" aria-labelledby="work-t2" hidden><img src="assets/snippets.jpg" width="1600" height="1000" loading="lazy" alt="The snippets picker filtering docker commands"></div></figure>
-</section>
+  <section class="feature">
+    <div class="feature-head">
+      <div>
+        <p class="feature-label">Connect</p>
+        <h2>One shortcut.<br>Any server.</h2>
+      </div>
+      <p>Press <kbd>⌘K</kbd> and type a few letters: tern finds the host, ordered by what you used last, and connects. Groups, tags, ProxyJump and port forwards are set once per host, and a dropped network reconnects on its own.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Connect">
+      <button type="button" role="tab" aria-controls="connect-picker" aria-selected="true">Host picker</button>
+      <button type="button" role="tab" aria-controls="connect-session" aria-selected="false">Session</button>
+    </div>
+    <figure class="feature-frame">
+      <div class="tab-panel" role="tabpanel" id="connect-picker"><img src="assets/picker.jpg" width="1600" height="1000" loading="lazy" alt="The ⌘K host picker filtering saved hosts"></div>
+      <div class="tab-panel" role="tabpanel" id="connect-session" hidden><img src="assets/terminal.jpg" width="1600" height="1000" loading="lazy" alt="tern connected to web-01 and running htop"></div>
+    </figure>
+  </section>
 
-<section class="sec">
-  <div class="sec-head">
-    <div><p class="label">Memory</p><h2 class="two">76 MB.<br>Not 580.</h2></div>
-    <div class="sec-p"><p>One native process, no browser engine. Connected to the same server, tern settles at 76 MB where Tabby takes 580. Measured with macOS <code>footprint</code>; the <a href="https://github.com/your-moon/tern/blob/main/docs/perf.md">method and raw samples</a> are in the repo.</p></div>
-  </div>
-  <div class="stage chart" role="img" aria-label="Memory when connected: tern 76 MB, Tabby 580 MB, Termius 583 MB idle">
-    <div class="bar"><span class="lbl">tern</span><span class="track"><i class="fill accent" style="width:12.67%"></i></span><span class="val">76 MB</span></div>
-    <div class="bar"><span class="lbl">Tabby</span><span class="track"><i class="fill" style="width:96.67%"></i></span><span class="val">580 MB</span></div>
-    <div class="bar"><span class="lbl">Termius</span><span class="track"><i class="fill dim" style="width:97.17%"></i></span><span class="val">583 MB<small>idle; connected not measured</small></span></div>
-    <p class="cap">Connected, settled at two minutes</p>
-  </div>
-</section>
+  <section class="feature">
+    <div class="feature-head">
+      <div>
+        <p class="feature-label">Passwords</p>
+        <h2>Passwords stay<br>where they are.</h2>
+      </div>
+      <p>Logins come from your SSH key, your password manager (any command, like <code>op read …</code> or <code>pass show …</code>), or tern's encrypted vault. At a sudo prompt, press <kbd>⌘\</kbd> (<kbd>Ctrl+Shift+\</kbd> on Windows and Linux) and tern types it. Never on its own.</p>
+    </div>
+    <figure class="feature-frame">
+      <img src="assets/docker.jpg" width="1600" height="1000" loading="lazy" alt="sudo docker ps, with the sudo password filled by ⌘\">
+    </figure>
+  </section>
 
-<section class="sec">
-  <div class="sec-head">
-    <div><p class="label">Sync</p><h2 class="two">Your setup,<br>in your own repo.</h2></div>
-    <div class="sec-p"><p>Hosts, snippets and settings sync to a private Git repository you own, encrypted with your vault passphrase before they leave your computer. No account, no subscription.</p></div>
-  </div>
-  <div class="stage flow" role="img" aria-label="Your computer, age-encrypted, to your private Git repo">
-    <div class="node"><img src="assets/icon.svg" alt="" width="40" height="40"><b>Your computer</b></div>
-    <div class="edge"><span>age-encrypted</span></div>
-    <div class="node"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="9" r="2.2"/><path d="M6 8.2v7.6M18 11.2c0 4-6 2.5-11 5.5"/></svg><b>Your private Git repo</b></div>
-  </div>
-</section>
+  <section class="feature">
+    <div class="feature-head">
+      <div>
+        <p class="feature-label">Real work</p>
+        <h2>Everything a<br>long session needs.</h2>
+      </div>
+      <p>Split panes and find in scrollback, an SFTP panel to browse and drop files, snippets for the commands you run every day, broadcast input to chosen tabs, and session logs.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Real work">
+      <button type="button" role="tab" aria-controls="work-split" aria-selected="true">Splits and find</button>
+      <button type="button" role="tab" aria-controls="work-files" aria-selected="false">Files</button>
+      <button type="button" role="tab" aria-controls="work-snippets" aria-selected="false">Snippets</button>
+    </div>
+    <figure class="feature-frame">
+      <div class="tab-panel" role="tabpanel" id="work-split"><img src="assets/split.jpg" width="1600" height="1000" loading="lazy" alt="Two panes side by side, with find in scrollback"></div>
+      <div class="tab-panel" role="tabpanel" id="work-files" hidden><img src="assets/sftp.jpg" width="1600" height="1000" loading="lazy" alt="The SFTP side panel listing a remote home folder"></div>
+      <div class="tab-panel" role="tabpanel" id="work-snippets" hidden><img src="assets/snippets.jpg" width="1600" height="1000" loading="lazy" alt="The snippets picker filtering docker commands"></div>
+    </figure>
+  </section>
 
-<section class="sec">
-  <div class="sec-head">
-    <div><p class="label">Make it yours</p><h2 class="two">Your wallpaper.<br>Your colours.</h2></div>
-    <div class="sec-p"><p>Seven public-domain artworks built in, or any image. The window takes its colours from it and keeps every line readable, in light, dark or following your system. Any monospace font, any of 725 terminal themes.</p></div>
-  </div>
-  <div class="tabbar"><div class="tabs" role="tablist" aria-label="look"><button type="button" role="tab" aria-selected="true" aria-controls="look-0" id="look-t0">Wallpaper</button><button type="button" role="tab" aria-selected="false" aria-controls="look-1" id="look-t1">Light</button><button type="button" role="tab" aria-selected="false" aria-controls="look-2" id="look-t2">Settings</button></div></div>
-  <figure class="stage"><div class="pane" role="tabpanel" id="look-0" aria-labelledby="look-t0"><img src="assets/wallpaper.jpg" width="1600" height="1000" loading="lazy" alt="Hosts in a frosted sidebar over Hokusai's Great Wave"></div><div class="pane" role="tabpanel" id="look-1" aria-labelledby="look-t1" hidden><img src="assets/light.jpg" width="1600" height="1000" loading="lazy" alt="tern in light appearance over Van Gogh's Wheat Field"></div><div class="pane" role="tabpanel" id="look-2" aria-labelledby="look-t2" hidden><img src="assets/settings.jpg" width="1600" height="1000" loading="lazy" alt="Settings, Appearance, with the wallpaper gallery"></div></figure>
-</section>
+  <section class="feature">
+    <div class="feature-head">
+      <div>
+        <p class="feature-label">Memory</p>
+        <h2>76 MB.<br>Not 580.</h2>
+      </div>
+      <p>One native process, no browser engine. Connected to the same server, tern settles at 76 MB where Tabby takes 580. Measured with macOS <code>footprint</code>; the <a href="https://github.com/your-moon/tern/blob/main/docs/perf.md">method and raw samples</a> are in the repo.</p>
+    </div>
+    <!-- Bar widths are each value as a share of 600 MB. -->
+    <div class="feature-frame memory-chart" role="img" aria-label="Memory when connected: tern 76 MB, Tabby 580 MB, Termius 583 MB idle">
+      <div class="memory-row"><span>tern</span><span class="memory-track"><i class="memory-bar is-tern" style="width: 12.7%"></i></span><span class="memory-value">76 MB</span></div>
+      <div class="memory-row"><span>Tabby</span><span class="memory-track"><i class="memory-bar" style="width: 96.7%"></i></span><span class="memory-value">580 MB</span></div>
+      <div class="memory-row"><span>Termius</span><span class="memory-track"><i class="memory-bar is-estimate" style="width: 97.2%"></i></span><span class="memory-value">583 MB<small>idle; connected not measured</small></span></div>
+      <p class="memory-caption">Connected, settled at two minutes</p>
+    </div>
+  </section>
 
-<section class="wrap dl" id="download">
-  <h2 class="big">Download tern.</h2>
-  <p class="sub">macOS builds are signed with a Developer ID and notarised by Apple. Windows and Linux builds are previews: they pass CI on every change but haven't been run on a real desktop yet, so <a href="https://github.com/your-moon/tern/issues">reports are welcome</a>.</p>
-  <ul class="rows">
-    <li><span>macOS <em>Apple silicon · .dmg</em></span><a class="mini" data-asset="macos-arm64.dmg" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-macos-arm64.dmg">Download</a></li>
-    <li><span>macOS <em>Apple silicon · .zip</em></span><a class="mini" data-asset="macos-arm64.zip" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-macos-arm64.zip">Download</a></li>
-    <li><span>Windows <em>x86_64 · .zip · preview</em></span><a class="mini" data-asset="windows-x86_64.zip" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-windows-x86_64.zip">Download</a></li>
-    <li><span>Linux <em>x86_64 · .tar.gz · preview</em></span><a class="mini" data-asset="linux-x86_64.tar.gz" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-linux-x86_64.tar.gz">Download</a></li>
-    <li><span>Linux <em>arm64 · .tar.gz · preview</em></span><a class="mini" data-asset="linux-aarch64.tar.gz" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-linux-aarch64.tar.gz">Download</a></li>
-    <li><span>Source <em>Rust</em></span><a class="mini" href="https://github.com/your-moon/tern">GitHub</a></li>
-  </ul>
-</section>
+  <section class="feature">
+    <div class="feature-head">
+      <div>
+        <p class="feature-label">Sync</p>
+        <h2>Your setup,<br>in your own repo.</h2>
+      </div>
+      <p>Hosts, snippets and settings sync to a private Git repository you own, encrypted with your vault passphrase before they leave your computer. No account, no subscription.</p>
+    </div>
+    <div class="feature-frame sync-diagram" role="img" aria-label="Your computer, age-encrypted, to your private Git repo">
+      <div class="sync-node"><img src="assets/icon.svg" alt="" width="40" height="40"><b>Your computer</b></div>
+      <div class="sync-edge"><span>age-encrypted</span></div>
+      <div class="sync-node"><svg class="icon icon-large" aria-hidden="true"><use href="assets/icons.svg#git-branch"/></svg><b>Your private Git repo</b></div>
+    </div>
+  </section>
 
-<section class="wrap cta-end">
-  <h2 class="big">Your servers, one click away.</h2>
-  <div class="cta left">
-    <a class="btn" data-asset="macos-arm64.dmg" id="dl-end" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-macos-arm64.dmg">Download for macOS</a>
-    <a class="link" href="https://github.com/your-moon/tern">View on GitHub ↗</a>
-  </div>
-</section>
+  <section class="feature">
+    <div class="feature-head">
+      <div>
+        <p class="feature-label">Make it yours</p>
+        <h2>Your wallpaper.<br>Your colours.</h2>
+      </div>
+      <p>Seven public-domain artworks built in, or any image. The window takes its colours from it and keeps every line readable, in light, dark or following your system. Any monospace font, any of 725 terminal themes.</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Make it yours">
+      <button type="button" role="tab" aria-controls="look-wallpaper" aria-selected="true">Wallpaper</button>
+      <button type="button" role="tab" aria-controls="look-light" aria-selected="false">Light</button>
+      <button type="button" role="tab" aria-controls="look-settings" aria-selected="false">Settings</button>
+    </div>
+    <figure class="feature-frame">
+      <div class="tab-panel" role="tabpanel" id="look-wallpaper"><img src="assets/wallpaper.jpg" width="1600" height="1000" loading="lazy" alt="Hosts in a frosted sidebar over Hokusai's Great Wave"></div>
+      <div class="tab-panel" role="tabpanel" id="look-light" hidden><img src="assets/light.jpg" width="1600" height="1000" loading="lazy" alt="tern in light appearance over Van Gogh's Wheat Field"></div>
+      <div class="tab-panel" role="tabpanel" id="look-settings" hidden><img src="assets/settings.jpg" width="1600" height="1000" loading="lazy" alt="Settings, Appearance, with the wallpaper gallery"></div>
+    </figure>
+  </section>
+
+  <!-- Every download, for anyone who wants a different platform or format. -->
+  <section class="downloads" id="download">
+    <h2>Download tern.</h2>
+    <p class="downloads-intro">macOS builds are signed with a Developer ID and notarised by Apple. Windows and Linux builds are previews: they pass CI on every change but haven't been run on a real desktop yet, so <a href="https://github.com/your-moon/tern/issues">reports are welcome</a>.</p>
+    <ul class="download-list">
+      <li><span>macOS <em>Apple silicon · .dmg</em></span><a class="button-small" data-asset="macos-arm64.dmg" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-macos-arm64.dmg">Download</a></li>
+      <li><span>macOS <em>Apple silicon · .zip</em></span><a class="button-small" data-asset="macos-arm64.zip" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-macos-arm64.zip">Download</a></li>
+      <li><span>Homebrew <em>brew install --cask your-moon/tern/tern</em></span><a class="button-small" href="https://github.com/your-moon/homebrew-tern">Tap</a></li>
+      <li><span>Windows <em>x86-64 · .zip · preview</em></span><a class="button-small" data-asset="windows-x86_64.zip" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-windows-x86_64.zip">Download</a></li>
+      <li><span>Linux <em>x86-64 · .tar.gz · preview</em></span><a class="button-small" data-asset="linux-x86_64.tar.gz" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-linux-x86_64.tar.gz">Download</a></li>
+      <li><span>Linux <em>arm64 · .tar.gz · preview</em></span><a class="button-small" data-asset="linux-aarch64.tar.gz" href="https://github.com/your-moon/tern/releases/latest/download/tern-0.1.3-linux-aarch64.tar.gz">Download</a></li>
+      <li><span>Source <em>Rust</em></span><a class="button-small" href="https://github.com/your-moon/tern">GitHub</a></li>
+    </ul>
+  </section>
+
+  <section class="closing">
+    <h2>Your servers, one click away.</h2>
+    <div class="closing-actions">
+      <a class="button" href="#download">Download tern</a>
+      <a class="button button-outline" href="https://github.com/your-moon/tern">View on GitHub</a>
+    </div>
+  </section>
+
 </main>
 
-<footer class="foot">
+<footer class="site-footer">
   <span>tern · GPL-3.0 · UI adapted from zeron (MIT) · wallpapers from The Met Open Access (CC0)</span>
   <a href="https://github.com/your-moon/tern">GitHub</a>
 </footer>
 
-<script>
-(function(){
-  // Offer the download that matches the visitor's system; Windows and Linux are labelled as previews.
-  var ua=(navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||navigator.userAgent||'';
-  var forced=new URLSearchParams(location.search).get('os');
-  var os=/^(mac|win|linux|other)$/.test(forced)?forced:/win/i.test(ua)?'win':/linux|x11/i.test(ua)&&!/android/i.test(navigator.userAgent)?'linux':/mac/i.test(ua)&&!/iphone|ipad/i.test(navigator.userAgent)?'mac':'other';
-  var pick={
-    win:{asset:'windows-x86_64.zip',label:'Download for Windows',fine:'Windows x86-64 preview build: it passes CI, reports welcome. Open source.',other:'Also for <a href="#download">macOS and Linux</a>.'},
-    linux:{asset:'linux-x86_64.tar.gz',label:'Download for Linux',fine:'Linux x86-64 preview build: it passes CI, reports welcome. Open source.',other:'Also for <a href="#download">macOS, Windows and Linux arm64</a>.'},
-    other:{asset:null,label:'All downloads',fine:'For macOS, with Windows and Linux in preview. Open source.',other:''}
-  }[os];
-  var main=document.getElementById('dl-main'),end=document.getElementById('dl-end');
-  if(pick){
-    document.getElementById('dl-label').textContent=pick.label;
-    document.getElementById('dl-fine').innerHTML=pick.fine;
-    document.getElementById('dl-other').innerHTML=pick.other;
-    main.querySelector('.os-mac').style.display='none';
-    [main,end].forEach(function(a){
-      if(!a)return;
-      if(pick.asset){a.dataset.asset=pick.asset;a.href=a.href.replace(/tern-[^/]+$/,'tern-0.1.3-'+pick.asset);}
-      else{delete a.dataset.asset;a.href='#download';}
-    });
-    if(end)end.textContent=pick.label;
-  }
-  // Follow the latest release, so the version and file names never go stale.
-  fetch('https://api.github.com/repos/your-moon/tern/releases/latest').then(function(r){return r.ok?r.json():null}).then(function(rel){
-    if(!rel||!/^v\d+\.\d+\.\d+$/.test(rel.tag_name))return;
-    var v=rel.tag_name.slice(1);
-    document.getElementById('ver').textContent=rel.tag_name;
-    document.querySelectorAll('a[data-asset]').forEach(function(a){
-      a.href='https://github.com/your-moon/tern/releases/latest/download/tern-'+v+'-'+a.dataset.asset;
-    });
-  }).catch(function(){});
-  // The live star count, on the nav and hero GitHub buttons; hidden if GitHub doesn't answer.
-  fetch('https://api.github.com/repos/your-moon/tern').then(function(r){return r.ok?r.json():null}).then(function(repo){
-    if(!repo||typeof repo.stargazers_count!=='number')return;
-    var n=repo.stargazers_count,txt=n>=1000?(n/1000).toFixed(n>=10000?0:1).replace(/\.0$/,'')+'k':String(n);
-    document.querySelectorAll('.star-n').forEach(function(b){b.textContent=txt});
-    document.querySelectorAll('.stars').forEach(function(s){s.hidden=false});
-  }).catch(function(){});
-  // Tabs over a framed screenshot: one pane visible, arrow keys move between tabs.
-  document.querySelectorAll('.tabs').forEach(function(list){
-    var tabs=[].slice.call(list.querySelectorAll('[role=tab]'));
-    function show(t){tabs.forEach(function(x){var on=x===t;x.setAttribute('aria-selected',on);x.tabIndex=on?0:-1;document.getElementById(x.getAttribute('aria-controls')).hidden=!on});}
-    tabs.forEach(function(t,i){
-      t.tabIndex=i?-1:0;
-      t.addEventListener('click',function(){show(t)});
-      t.addEventListener('keydown',function(e){var d=e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0;if(!d)return;var n=tabs[(i+d+tabs.length)%tabs.length];show(n);n.focus();e.preventDefault();});
-    });
-  });
-})();
-</script>
 </body>
 </html>

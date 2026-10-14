@@ -3,4 +3,4 @@
 # behind Traefik at https://tern.carrot-soft.tech. Live immediately.
 set -e
 cd "$(dirname "$0")"
-rsync -az --delete --exclude deploy.sh --exclude README.md ./ grape-2:/opt/carrot-soft/tern/
+rsync -az --delete --exclude deploy.sh --exclude README.md --exclude tools ./ grape-2:/opt/carrot-soft/tern/
