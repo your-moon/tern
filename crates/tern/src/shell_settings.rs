@@ -110,6 +110,7 @@ impl Shell {
         }
         if section == Section::Vault {
             self.ensure_vault_ui(cx);
+            self.unlock_from_keychain(cx);
         }
         cx.notify();
     }

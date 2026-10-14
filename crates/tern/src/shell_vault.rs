@@ -145,6 +145,26 @@ impl Shell {
         });
     }
 
+    /// The first need for the vault outside a session (the connection form, the Vault page): the
+    /// Keychain's one try this run. The fields show as before when it cannot open the vault.
+    pub(super) fn unlock_from_keychain(&mut self, cx: &mut Context<Self>) {
+        let Some(work) = Keeper::try_keychain(cx) else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let vault = work.await;
+            let _ = this.update(cx, |_, cx| {
+                // Something else may have opened it meanwhile; keep that one.
+                if let (Some(vault), true) = (vault, Keeper::locked(cx)) {
+                    Keeper::keychain_opened(cx);
+                    Keeper::put(vault, cx);
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
     fn vault_message(&mut self, ok: bool, text: impl Into<String>, cx: &mut Context<Self>) {
         if let Some(ui) = self.vault_ui.as_mut() {
             ui.message = Some((ok, text.into()));
