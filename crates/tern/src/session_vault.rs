@@ -98,9 +98,23 @@ impl Session {
         self.ask_unlock(After::default(), cx);
     }
 
-    /// Asks to open the vault: the PIN when one is set, else the passphrase.
+    /// Opens the vault: the Keychain first, once per run, then the PIN when one is set, else the
+    /// passphrase. A Keychain that cannot open it falls through without a word.
     pub(super) fn ask_unlock(&mut self, after: After, cx: &mut Context<Self>) {
-        if Keeper::pin_set(cx) {
+        if let Some(work) = Keeper::try_keychain(cx) {
+            cx.spawn(async move |this, cx| {
+                let vault = work.await;
+                let _ = this.update(cx, |s, cx| match vault {
+                    Some(vault) => {
+                        Keeper::keychain_opened(cx);
+                        s.unlocked(Outcome::Opened(vault), after, cx);
+                    }
+                    // Already tried this run, so this asks the person.
+                    None => s.ask_unlock(after, cx),
+                });
+            })
+            .detach();
+        } else if Keeper::pin_set(cx) {
             let text = format!("{}Vault PIN (Enter to use the passphrase): ", lead(&after));
             self.ask_local(&text, false, Flow::Pin(after), cx);
         } else {

@@ -100,7 +100,6 @@ fn main() {
                 .map(|d| settings::Settings::load(&d).vault_keychain)
                 .unwrap_or(false);
             keeper::Keeper::install(keychain, cx);
-            keeper::Keeper::unlock_from_keychain(cx);
             let keymap = settings::dir()
                 .map(|d| keymap::Keymap::load(&d))
                 .unwrap_or_default();

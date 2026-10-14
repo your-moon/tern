@@ -1,7 +1,7 @@
 //! The app's one vault: where it lives and, once unlocked, the open [`Vault`] every tab reads.
 //! Unlocking and saving run scrypt (about a second), so both happen off the UI thread.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -16,6 +16,9 @@ pub struct Keeper {
     open: Option<Vault>,
     /// The Keychain opt-in (Settings -> Vault) is on.
     keychain: bool,
+    /// The Keychain was asked for the passphrase in this run (whatever it answered), so it is
+    /// never asked again: a refusal must not bring the dialog back on every prompt.
+    keychain_tried: bool,
     /// The Keychain item already holds the current passphrase, so `put` need not write it.
     keychain_current: bool,
     /// Numbers each write in the order it was asked for.
@@ -47,6 +50,7 @@ impl Keeper {
             path,
             open: None,
             keychain,
+            keychain_tried: false,
             keychain_current: false,
             ticket: 0,
             // From the local mark, not the Keychain item: reading that asks macOS first.
@@ -54,30 +58,24 @@ impl Keeper {
         });
     }
 
-    /// Opens the vault at launch with the passphrase from the Keychain, when that is on. A
-    /// missing item, a refusal or a passphrase changed elsewhere leaves it locked and says
-    /// nothing: the first lookup then asks as usual.
-    pub fn unlock_from_keychain(cx: &mut App) {
-        let k = cx.global::<Self>();
-        let (true, Some(path)) = (k.keychain, k.path.clone()) else {
-            return;
-        };
-        if !path.exists() {
-            return;
+    /// The first need for a locked vault in this run: with the Keychain opt-in on, reads the
+    /// passphrase and opens the vault off the UI thread. `None` when the Keychain is not to be
+    /// asked (off, already asked this run, nothing to open); the task yields `None` for a missing
+    /// item, a refusal or a passphrase changed elsewhere, and says nothing: the caller then
+    /// prompts as usual. Pass an opened vault to [`Keeper::keychain_opened`].
+    pub fn try_keychain(cx: &mut App) -> Option<Task<Option<Vault>>> {
+        let locked = Self::locked(cx);
+        let k = cx.global_mut::<Self>();
+        if !begin_keychain(k.keychain, &mut k.keychain_tried, locked) {
+            return None;
         }
-        let work = cx.background_spawn(async move {
-            let passphrase = keychain::load()?;
-            Vault::unlock(&path, passphrase).ok()
-        });
-        cx.spawn(async move |cx| {
-            if let Some(vault) = work.await {
-                cx.update(|cx| {
-                    cx.global_mut::<Self>().keychain_current = true;
-                    Self::put(vault, cx);
-                });
-            }
-        })
-        .detach();
+        let path = k.path.clone()?;
+        Some(cx.background_spawn(async move { open_with(&keychain::Passphrase, &path) }))
+    }
+
+    /// The vault opened from the Keychain item: it already holds the passphrase.
+    pub fn keychain_opened(cx: &mut App) {
+        cx.global_mut::<Self>().keychain_current = true;
     }
 
     pub fn path(cx: &App) -> Option<PathBuf> {
@@ -273,6 +271,31 @@ impl Keeper {
     }
 }
 
+/// Where the Keychain passphrase comes from: the platform store, or a fake in tests.
+trait Passphrases {
+    fn load(&self) -> Option<SecretString>;
+}
+
+impl Passphrases for keychain::Passphrase {
+    fn load(&self) -> Option<SecretString> {
+        keychain::load()
+    }
+}
+
+/// Whether this need for the vault should ask the Keychain, and if so records that it did. Once
+/// per run: a refused or failed attempt must not be repeated.
+fn begin_keychain(enabled: bool, tried: &mut bool, locked: bool) -> bool {
+    let ask = enabled && !*tried && locked;
+    *tried |= ask;
+    ask
+}
+
+/// Opens the vault at `path` with the stored passphrase; scrypt runs, so call it off the UI
+/// thread. `None` for no item, a refusal or a wrong passphrase.
+fn open_with(store: &impl Passphrases, path: &Path) -> Option<Vault> {
+    Vault::unlock(path, store.load()?).ok()
+}
+
 /// Whether a vault idle for `idle` should lock; `minutes` is the setting, 0 meaning never.
 pub fn idle_expired(idle: Duration, minutes: u32) -> bool {
     minutes > 0 && idle >= Duration::from_secs(u64::from(minutes) * 60)
@@ -329,7 +352,7 @@ pub fn describe(key: &Key) -> String {
 }
 
 pub(crate) mod keychain {
-    //! The vault passphrase in the platform credential store, for the opt-in "unlock at launch"
+    //! The vault passphrase in the platform credential store, for the opt-in Keychain unlock
     //! setting: the login Keychain on macOS, Credential Manager on Windows, the Secret Service
     //! (GNOME Keyring, KWallet) on Linux.
     //!
@@ -340,6 +363,9 @@ pub(crate) mod keychain {
     use tern_vault::{ExposeSecret, SecretString};
 
     const ACCOUNT: &str = "passphrase";
+
+    /// The vault passphrase item, as a source for `Passphrases`.
+    pub struct Passphrase;
 
     /// The native store, behind three calls. `None` from `get` means "no such item".
     #[cfg(target_os = "macos")]
@@ -573,5 +599,99 @@ mod tests {
         assert!(!is_yes(Some(&s("no"))));
         assert!(!is_yes(Some(&s(""))));
         assert!(!is_yes(None));
+    }
+
+    /// Counts reads; a fake for the Keychain so no test reaches the real one.
+    struct Counting {
+        pass: Option<&'static str>,
+        loads: std::cell::Cell<u32>,
+    }
+
+    impl Counting {
+        fn new(pass: Option<&'static str>) -> Self {
+            Self {
+                pass,
+                loads: std::cell::Cell::new(0),
+            }
+        }
+    }
+
+    impl Passphrases for Counting {
+        fn load(&self) -> Option<SecretString> {
+            self.loads.set(self.loads.get() + 1);
+            self.pass.map(|p| SecretString::from(p.to_owned()))
+        }
+    }
+
+    /// One "need" as `Keeper::try_keychain` makes it, with the fake in the Keychain's place.
+    fn need(tried: &mut bool, store: &Counting, path: &Path) -> Option<Option<Vault>> {
+        begin_keychain(true, tried, true).then(|| open_with(store, path))
+    }
+
+    fn vault_file(pass: &str) -> (tempfile::TempDir, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("vault.age");
+        Vault::new(SecretString::from(pass.to_owned()))
+            .save(&path)
+            .unwrap();
+        (dir, path)
+    }
+
+    #[test]
+    fn the_first_need_reads_once_and_a_failed_attempt_is_not_repeated() {
+        let (_dir, path) = vault_file("right");
+        let store = Counting::new(Some("wrong"));
+        let mut tried = false;
+        assert!(matches!(need(&mut tried, &store, &path), Some(None)));
+        assert_eq!(store.loads.get(), 1);
+        for _ in 0..3 {
+            assert!(need(&mut tried, &store, &path).is_none());
+        }
+        assert_eq!(store.loads.get(), 1, "no second dialog this run");
+    }
+
+    #[test]
+    fn a_refusal_or_missing_item_counts_as_the_attempt() {
+        let (_dir, path) = vault_file("right");
+        let store = Counting::new(None);
+        let mut tried = false;
+        assert!(matches!(need(&mut tried, &store, &path), Some(None)));
+        assert!(need(&mut tried, &store, &path).is_none());
+        assert_eq!(store.loads.get(), 1);
+    }
+
+    #[test]
+    fn the_keychain_is_not_asked_when_off_or_when_the_vault_is_already_open() {
+        let mut tried = false;
+        assert!(!begin_keychain(false, &mut tried, true));
+        assert!(!begin_keychain(true, &mut tried, false));
+        assert!(
+            !tried,
+            "a need that did not ask does not use up the run's one try"
+        );
+    }
+
+    #[test]
+    fn the_stored_passphrase_opens_the_vault_without_a_prompt() {
+        let (_dir, path) = vault_file("right");
+        let store = Counting::new(Some("right"));
+        let mut tried = false;
+        let opened = need(&mut tried, &store, &path).flatten();
+        assert!(opened.is_some());
+        assert!(tried, "a success also uses up the run's one try");
+        assert!(need(&mut tried, &store, &path).is_none());
+    }
+
+    #[test]
+    fn a_stale_passphrase_leaves_the_vault_locked() {
+        let (_dir, path) = vault_file("right");
+        assert!(open_with(&Counting::new(Some("changed elsewhere")), &path).is_none());
+        assert!(
+            open_with(
+                &Counting::new(Some("right")),
+                &path.with_file_name("none.age")
+            )
+            .is_none()
+        );
     }
 }
