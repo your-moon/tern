@@ -54,6 +54,19 @@ macOS 26.6.2, with the screen locked, so no frames were being composited. A conn
 costs about 5 MB over an empty window. phys_footprint_peak reached 153 MB during start-up
 and connection; that transient is not explained yet (likely shader and font atlas set-up).
 
+## 2026-11-18 — 0.1.4 release gate
+
+Release builds measured back to back on an M4 Pro: one tab connected to the local demo
+`password_server`, Aizen Dark, full-window wallpaper, window visible (screen unlocked), idle.
+`scripts/measure-rss.sh` over 30 s after an 8 s settle, then `footprint -p`.
+
+| Build | RSS final (peak) | phys_footprint |
+| --- | --- | --- |
+| 0.1.3 (`/Applications/tern.app`) | 81.2 MB (98.2) | 109 MB |
+| 0.1.4 (`target/release/tern`) | 81.0 MB (98.3) | 116 MB |
+
+RSS is flat; footprint is +6%, inside the 10% gate.
+
 ## 2026-10-06 — 0.1.0 release build, wallpaper on
 
 | Build | Scene | Result |
