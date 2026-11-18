@@ -212,7 +212,7 @@ impl Theme {
                 t.background = hex(s.background);
                 t.foreground = hex(s.foreground);
                 t.cursor = hex(s.cursor);
-                t.selection = hex(s.selection).opacity(0.6);
+                t.selection = hex(s.selection);
                 s.ansi
             }
             None if self.light => ANSI_LIGHT,
@@ -224,6 +224,7 @@ impl Theme {
         if let Some(tint) = self.tint {
             crate::theme_tint::tint_terminal(&mut t, tint, self.light);
         }
+        t.selection = crate::theme_tint::visible_selection(t.selection, t.background, t.foreground);
         t
     }
 
