@@ -4,6 +4,12 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-11-18
+
+### Security
+
+- russh 0.64.1 → 0.65.1 (RUSTSEC-2026-0495, in russh's SSH agent server, which tern does not use). chrono's unmaintained notice (RUSTSEC-2026-0543) is accepted until gpui-pre drops it (#112).
+
 ### Added
 
 - A session stopped at a password, passphrase or host-key question shows an amber ring instead of the pulsing connecting dot, and the status line says "Waiting for your answer" (#31).
@@ -130,7 +136,8 @@ The first release: a daily-driver SSH client for macOS.
 - Secrets are held as zeroizing `SecretString`s and never logged; session output is redacted from `Debug`.
 - RUSTSEC-2023-0071 in `rsa` (via russh) is accepted for now; see [SECURITY.md](SECURITY.md) and #16.
 
-[Unreleased]: https://github.com/your-moon/tern/compare/v0.1.3...main
+[Unreleased]: https://github.com/your-moon/tern/compare/v0.1.4...main
+[0.1.4]: https://github.com/your-moon/tern/releases/tag/v0.1.4
 [0.1.3]: https://github.com/your-moon/tern/releases/tag/v0.1.3
 [0.1.2]: https://github.com/your-moon/tern/releases/tag/v0.1.2
 [0.1.1]: https://github.com/your-moon/tern/releases/tag/v0.1.1
