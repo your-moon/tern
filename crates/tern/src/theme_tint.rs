@@ -89,6 +89,25 @@ pub fn harden(
     best
 }
 
+/// What the selection wash keeps against the terminal background. Many schemes ship a
+/// selection one shade off their background (Aizen Dark: #333333 on #1a1a1a, 1.4:1), which
+/// vanishes once the panel is see-through over a wallpaper.
+pub const SELECTION_CONTRAST: f32 = 2.0;
+
+/// The selection as an opaque colour over `background`, pushed toward the text colour until
+/// it keeps `SELECTION_CONTRAST`. Opaque, so a translucent panel over a wallpaper cannot
+/// wash it out.
+pub fn visible_selection(selection: Hsla, background: Hsla, foreground: Hsla) -> Hsla {
+    let bg = rgb_of(background);
+    let flat = mix(bg, rgb_of(selection), selection.a);
+    from_rgb(harden(
+        flat,
+        &[bg],
+        SELECTION_CONTRAST,
+        Some(rgb_of(foreground)),
+    ))
+}
+
 /// A terminal scheme leaning toward the tint, its text kept readable on the new background.
 pub fn tint_terminal(theme: &mut TerminalTheme, color: [u8; 3], light: bool) {
     let background = mix(
@@ -146,6 +165,33 @@ mod tests {
 
     fn palettes() -> [Theme; 2] {
         [Theme::zeron_dark(), Theme::zeron_light()]
+    }
+
+    /// Aizen Dark ships #333333 on #1a1a1a; every bundled scheme, plain or tinted, must
+    /// paint an opaque selection that stands off its background.
+    #[test]
+    fn every_scheme_paints_a_visible_opaque_selection() {
+        let schemes = crate::theme::themes::all();
+        let aizen = crate::theme::themes::find("Aizen Dark").unwrap();
+        assert!(contrast_ratio(aizen.selection, aizen.background) < 1.5);
+        for base in palettes() {
+            let tints = std::iter::once(None).chain(WALLPAPERS.map(Some));
+            for tint in tints {
+                let theme = tint.map_or(base, |c| base.tinted(c));
+                let looks = std::iter::once(None).chain(schemes.iter().map(Some));
+                for scheme in looks {
+                    let t = theme.terminal(13.0, scheme);
+                    let ratio =
+                        contrast_ratio(pack(rgb_of(t.selection)), pack(rgb_of(t.background)));
+                    let name = scheme.map_or("zeron", |s| s.name.as_str());
+                    assert!(t.selection.a == 1.0, "{name}: selection not opaque");
+                    assert!(
+                        ratio >= SELECTION_CONTRAST - 0.01,
+                        "{name} {tint:?}: {ratio}"
+                    );
+                }
+            }
+        }
     }
 
     /// zeron `wallpaper_colours_keep_text_readable_in_light_and_dark_modes`.
