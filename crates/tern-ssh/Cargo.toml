@@ -9,7 +9,7 @@ rust-version.workspace = true
 [dependencies]
 async-channel = "2"
 futures = { version = "0.3", default-features = false, features = ["std"] }
-russh = "0.64"
+russh = "0.65"
 russh-sftp = { workspace = true }
 secrecy = "0.10"
 ssh2-config = "0.8"
