@@ -1,6 +1,10 @@
 // Adapted from zeron apps/zgx/src/fonts.rs (MIT), at b289003b.
 //! Installed families with Latin letters and their measured suitability for a terminal grid.
 
+use skrifa::{
+    FontRef, MetadataProvider,
+    instance::{LocationRef, Size},
+};
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
@@ -24,9 +28,9 @@ fn installed() -> Vec<(String, bool)> {
     let mut families: BTreeMap<String, bool> = BTreeMap::new();
     for face in database.faces() {
         let Some(Some(fixed)) = database.with_face_data(face.id, |data, index| {
-            ttf_parser::Face::parse(data, index)
+            FontRef::from_index(data, index)
                 .ok()
-                .filter(|font| font.glyph_index('m').is_some())
+                .filter(|font| font.charmap().map('m').is_some())
                 .map(|font| is_fixed_width(&font))
         }) else {
             continue;
@@ -61,20 +65,19 @@ const FIXED_WIDTH_TOLERANCE: f32 = 0.01;
 /// Whether every Latin cell of `font` is the same width, measured (a font's
 /// own "monospaced" flag is metadata it can get wrong), as the shipping
 /// app's `face_is_fixed_width`.
-fn is_fixed_width(font: &ttf_parser::Face) -> bool {
-    let Some(advances) = ['i', 'm', 'W', '0']
-        .iter()
-        .map(|ch| {
-            font.glyph_index(*ch)
-                .and_then(|id| font.glyph_hor_advance(id))
-        })
-        .collect::<Option<Vec<_>>>()
-    else {
-        return false;
-    };
-    let min = advances.iter().copied().min().unwrap_or(0);
-    let max = advances.iter().copied().max().unwrap_or(0);
-    min > 0 && f32::from(max - min) <= FIXED_WIDTH_TOLERANCE * f32::from(min)
+fn is_fixed_width(font: &FontRef<'_>) -> bool {
+    let charmap = font.charmap();
+    let metrics = font.glyph_metrics(Size::unscaled(), LocationRef::default());
+    let mut min = f32::INFINITY;
+    let mut max = 0.0_f32;
+    for ch in ['i', 'm', 'W', '0'] {
+        let Some(width) = charmap.map(ch).and_then(|id| metrics.advance_width(id)) else {
+            return false;
+        };
+        min = min.min(width);
+        max = max.max(width);
+    }
+    min > 0. && max - min <= FIXED_WIDTH_TOLERANCE * min
 }
 
 #[cfg(test)]
@@ -82,8 +85,8 @@ fn is_fixed_width(font: &ttf_parser::Face) -> bool {
 mod tests {
     use super::*;
 
-    fn face(bytes: &[u8]) -> ttf_parser::Face<'_> {
-        ttf_parser::Face::parse(bytes, 0).unwrap()
+    fn face(bytes: &[u8]) -> FontRef<'_> {
+        FontRef::from_index(bytes, 0).unwrap()
     }
 
     #[test]
