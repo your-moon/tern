@@ -58,6 +58,8 @@ mod look;
 mod menu;
 #[path = "shell_navigation.rs"]
 mod navigation;
+#[path = "shell_connections_overview.rs"]
+mod overview;
 #[path = "shell_workspaces.rs"]
 mod workspaces;
 use navigation::Destination;
@@ -478,6 +480,11 @@ impl Shell {
         }
         if self.workspaces.empty.is_some() {
             return self.empty_workspace(cx);
+        }
+        if self.error.is_none()
+            && (self.intro_entered || !self.hosts.is_empty() || !self.tabs.is_empty())
+        {
+            return self.connections_overview(cx);
         }
         let t = self.theme;
         if self.hosts.is_empty() && self.error.is_none() && self.settings.wallpaper.is_none() {

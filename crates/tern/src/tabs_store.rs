@@ -34,6 +34,12 @@ pub struct SavedTabs {
     pub active: usize,
     #[serde(
         default,
+        rename = "connectionsOverview",
+        skip_serializing_if = "std::ops::Not::not"
+    )]
+    pub connections_overview: bool,
+    #[serde(
+        default,
         rename = "emptyConnection",
         skip_serializing_if = "Option::is_none"
     )]

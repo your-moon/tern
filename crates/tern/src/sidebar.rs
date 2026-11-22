@@ -290,10 +290,14 @@ fn header(t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
         .justify_between()
         .child(
             div()
+                .id("connections-overview")
+                .cursor_pointer()
+                .on_click(cx.listener(|s, _, w, cx| s.show_connections(w, cx)))
+                .hover(|el| el.text_color(t.text))
                 .text_size(px(13.))
                 .font_weight(gpui::FontWeight::MEDIUM)
                 .text_color(t.text.opacity(crate::theme::by_dpi(0.8, 0.9)))
-                .child("Hosts"),
+                .child("Connections"),
         )
         .child(
             icon_button("new-connection", icons::PLUS, 24., 16., t)

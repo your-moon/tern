@@ -189,6 +189,7 @@ impl Shell {
                 })
                 .collect(),
             active: self.active.min(self.tabs.len().saturating_sub(1)),
+            connections_overview: self.workspace_alias().is_none() && self.intro_entered,
             empty_connection: self.workspaces.empty.clone(),
             connection_sessions: self
                 .workspaces
@@ -236,7 +237,9 @@ impl Shell {
                 self.workspaces.last_session.insert(alias.clone(), tab.id);
             }
         }
-        if let Some(alias) = saved
+        if saved.connections_overview {
+            self.show_connections(window, cx);
+        } else if let Some(alias) = saved
             .empty_connection
             .as_ref()
             .filter(|alias| self.hosts.iter().any(|h| &h.alias == *alias))

@@ -26,7 +26,7 @@ impl Shell {
         self.nav_tab_count = self.tabs.len();
         let live = |entry: &Destination| match entry {
             Destination::Workspace(Some(id)) => self.tabs.iter().any(|tab| tab.id == *id),
-            Destination::Workspace(None) => self.tabs.is_empty(),
+            Destination::Workspace(None) => true,
             Destination::Settings(_) => true,
             Destination::Connection(alias) => self.hosts.iter().any(|host| &host.alias == alias),
         };
@@ -81,11 +81,7 @@ impl Shell {
                     self.show_tab(index, window, cx);
                 }
             }
-            Destination::Workspace(None) => {
-                self.workspaces.empty = None;
-                self.leave_settings(window, cx);
-                self.restore_focus(window, cx);
-            }
+            Destination::Workspace(None) => self.show_connections(window, cx),
         }
     }
 
