@@ -111,22 +111,21 @@ impl Shell {
     }
 
     /// The strip under the active tab's terminal, when the setting is on.
-    pub(super) fn render_status_line(
-        &self,
-        bg: gpui::Hsla,
-        cx: &App,
-    ) -> Option<impl IntoElement + use<>> {
+    pub(super) fn render_status_line(&self, cx: &App) -> Option<impl IntoElement + use<>> {
         if !self.settings.show_status_line {
             return None;
         }
-        let session = self.tabs.get(self.active)?.session().read(cx);
+        let tab = self.tabs.get(self.active)?;
+        let session = tab.session().read(cx);
+        let palette = self.terminal_theme(&tab.alias);
         Some(statusline::render(
             &self.theme,
             &session.label(),
             Dot::of(&session.status, session.is_asking()),
             session.latency(),
             session.elapsed(),
-            bg,
+            self.veil(palette.background),
+            palette.foreground,
         ))
     }
 

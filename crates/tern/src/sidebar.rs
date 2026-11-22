@@ -17,7 +17,7 @@ use crate::connections::Connection;
 use crate::icons::{self, icon};
 use crate::indicator::Dot;
 use crate::shell::Shell;
-use crate::tabs::{self, TabInfo};
+use crate::tabs::TabInfo;
 use crate::text_input::TextInput;
 use crate::theme::Theme;
 
@@ -213,7 +213,7 @@ pub fn render(
         .min_h_0()
         .flex()
         .flex_col()
-        .child(header(t, cx))
+        .child(header(s.active_alias.is_none(), t, cx))
         .child(search_field(s.search, t, cx))
         .child(list)
         .child(footer(t, cx))
@@ -279,24 +279,32 @@ fn search_field(
 }
 
 /// zeron's project-header row: the title and a 24 pt + button.
-fn header(t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
+fn header(selected: bool, t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
     div()
-        .px(px(16.))
-        .pt(px(8.))
-        .pb(px(4.))
-        .h(px(37.))
+        .px(px(8.))
+        .py(px(6.))
         .flex()
         .items_center()
-        .justify_between()
+        .gap(px(4.))
         .child(
             div()
                 .id("connections-overview")
+                .flex_1()
+                .min_w_0()
+                .h(px(32.))
+                .px(px(8.))
+                .rounded(px(8.))
+                .flex()
+                .items_center()
+                .gap(px(8.))
                 .cursor_pointer()
+                .when(selected, |el| el.bg(t.row_active))
+                .hover(|el| el.bg(t.row_hover))
                 .on_click(cx.listener(|s, _, w, cx| s.show_connections(w, cx)))
-                .hover(|el| el.text_color(t.text))
                 .text_size(px(13.))
                 .font_weight(gpui::FontWeight::MEDIUM)
-                .text_color(t.text.opacity(crate::theme::by_dpi(0.8, 0.9)))
+                .text_color(t.text)
+                .child(icon(icons::HOME).size(px(16.)).text_color(t.muted))
                 .child("Connections"),
         )
         .child(
@@ -398,7 +406,7 @@ fn connection_rows(
             .id((scope, ix))
             .group(group.clone())
             .relative()
-            .h(px(29.))
+            .h(px(if meta.is_some() { 44. } else { 32. }))
             .px(px(8.))
             .rounded(px(8.))
             .flex()
@@ -410,7 +418,9 @@ fn connection_rows(
                 gpui::transparent_black(),
                 t.ink(0.11),
             )
-            .when(active || top, |el| el.bg(t.row_active))
+            .when(top || (active && (folded || sessions.is_empty())), |el| {
+                el.bg(t.row_active)
+            })
             .on_click(cx.listener(move |shell, _, window, cx| {
                 shell.select_connection(&target, window, cx);
             }))
@@ -453,27 +463,28 @@ fn connection_rows(
                 div()
                     .flex_1()
                     .min_w_0()
-                    .truncate()
-                    .text_size(px(13.))
-                    .line_height(px(17.))
-                    .text_color(if active {
-                        t.text
-                    } else {
-                        t.text.opacity(crate::theme::by_dpi(0.8, 0.9))
-                    })
-                    .child(SharedString::from(tabs::middle_ellipsis(alias, 26))),
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .truncate()
+                            .text_size(px(13.))
+                            .line_height(px(17.))
+                            .text_color(t.text)
+                            .font_weight(gpui::FontWeight::MEDIUM)
+                            .child(alias.to_owned()),
+                    )
+                    .when_some(meta.clone(), |el, text| {
+                        el.child(
+                            div()
+                                .truncate()
+                                .text_size(px(meta_size))
+                                .line_height(px(14.))
+                                .text_color(t.muted)
+                                .child(text),
+                        )
+                    }),
             )
-            // The meta is only drawn whole: `fit_meta` already dropped what would not fit, so the
-            // name is what truncates, never an address cut mid-octet.
-            .when_some(meta.clone(), |el, text| {
-                el.child(
-                    div()
-                        .flex_none()
-                        .text_size(px(meta_size))
-                        .text_color(t.muted.opacity(crate::theme::by_dpi(0.6, 0.85)))
-                        .child(SharedString::from(text)),
-                )
-            })
             .when_some(host, |el, host| {
                 let menu_host = host.clone();
                 let more_host = host.clone();
@@ -523,9 +534,11 @@ fn connection_rows(
             body = body.child(
                 div()
                     .id(("connection-session", ix))
-                    .ml(px(16.))
-                    .h(px(27.))
-                    .px(px(8.))
+                    .relative()
+                    .ml(px(9.))
+                    .pl(px(20.))
+                    .h(px(30.))
+                    .pr(px(8.))
                     .rounded(px(6.))
                     .flex()
                     .items_center()
@@ -549,6 +562,29 @@ fn connection_rows(
                             shell.open_tab_menu(ix, e.position, cx);
                         }),
                     )
+                    .child(
+                        div()
+                            .absolute()
+                            .left(px(6.))
+                            .top_0()
+                            .w(px(8.))
+                            .h(px(15.))
+                            .border_l_1()
+                            .border_b_1()
+                            .rounded_bl(px(6.))
+                            .border_color(t.border),
+                    )
+                    .when(ordinal + 1 < sessions.len(), |el| {
+                        el.child(
+                            div()
+                                .absolute()
+                                .left(px(6.))
+                                .top_0()
+                                .bottom_0()
+                                .w(px(1.))
+                                .bg(t.border),
+                        )
+                    })
                     .child(status_dot(Some(tab.dot), t))
                     .child(
                         div()
@@ -639,15 +675,11 @@ pub fn address(host: &HostEntry) -> String {
     }
 }
 
-/// The widest the trailing meta may be, as a share of the row's inner width.
-const META_SHARE: f32 = 0.55;
-
 /// The meta that fits in a row `inner` px wide at `size` px text: the address, else the host
 /// without its port, else nothing. An address is never cut, so an IP never loses an octet; the
 /// full text stays in the row's hover tip. Digits in Geist run about 0.6 em.
 fn fit_meta(host: &HostEntry, inner: f32, size: f32) -> Option<String> {
-    let budget = inner * META_SHARE;
-    let fits = |s: &str| s.chars().count() as f32 * size * 0.6 <= budget;
+    let fits = |s: &str| s.chars().count() as f32 * size * 0.6 <= inner;
     let full = short_address(host);
     if full.is_empty() {
         return None;
@@ -673,127 +705,5 @@ fn short_address(host: &HostEntry) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn host(user: Option<&str>, port: u16) -> HostEntry {
-        HostEntry {
-            alias: "web".into(),
-            host_name: "10.0.0.5".into(),
-            port,
-            user: user.map(Into::into),
-            identity_files: Vec::new(),
-            proxy_command: None,
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn address_reads_like_an_ssh_target() {
-        assert_eq!(address(&host(Some("deploy"), 22)), "deploy@10.0.0.5");
-        assert_eq!(address(&host(None, 2222)), "10.0.0.5:2222");
-        assert_eq!(short_address(&host(Some("deploy"), 2222)), "10.0.0.5:2222");
-        let mut same = host(None, 22);
-        same.host_name = "web".into();
-        assert_eq!(short_address(&same), "");
-    }
-
-    fn entry(alias: &str, host_name: &str, port: u16) -> HostEntry {
-        HostEntry {
-            alias: alias.into(),
-            host_name: host_name.into(),
-            port,
-            ..host(None, port)
-        }
-    }
-
-    #[test]
-    fn meta_is_dropped_to_the_host_and_then_to_nothing_never_cut() {
-        let ip = entry("prod", "103.50.205.106", 2022);
-        // Wide row: the whole address.
-        assert_eq!(
-            fit_meta(&ip, 400., 12.).as_deref(),
-            Some("103.50.205.106:2022")
-        );
-        // The default 256 sidebar: the port goes first.
-        assert_eq!(
-            fit_meta(&ip, 256. - 61., 12.).as_deref(),
-            Some("103.50.205.106")
-        );
-        // Too narrow for even the host.
-        assert_eq!(fit_meta(&ip, 120., 12.), None);
-        // Nothing to say when the host only repeats the name.
-        assert_eq!(fit_meta(&entry("web", "web", 22), 400., 12.), None);
-    }
-
-    fn conn(name: &str, group: Option<&str>, tags: &[&str]) -> Connection {
-        Connection {
-            name: name.into(),
-            host: "10.0.0.5".into(),
-            port: 22,
-            user: "deploy".into(),
-            identity_file: None,
-            group: group.map(Into::into),
-            tags: tags.iter().map(|t| (*t).into()).collect(),
-            ..Connection::default()
-        }
-    }
-
-    #[test]
-    fn ungrouped_come_first_and_groups_sort_by_name_keeping_host_order() {
-        let list = [
-            conn("a", Some("Zeta"), &[]),
-            conn("b", None, &[]),
-            conn("c", Some("alpha"), &[]),
-            conn("d", Some("Zeta"), &[]),
-        ];
-        let l = layout(&list);
-        assert_eq!(l.ungrouped, vec![1]);
-        assert_eq!(
-            l.groups,
-            vec![
-                ("alpha".to_owned(), vec![2]),
-                ("Zeta".to_owned(), vec![0, 3])
-            ]
-        );
-    }
-
-    #[test]
-    fn unsaved_groups_use_the_first_global_tab_and_remain_searchable() {
-        let tabs = ["web", "temp", "web", "lab", "temp"].map(|alias| TabInfo {
-            alias: alias.into(),
-            title: None,
-            logging: false,
-            broadcast: false,
-            dot: Dot::Idle,
-            rename: None,
-        });
-        let saved = [host(None, 22)];
-        assert_eq!(unsaved_matches("", &saved, &tabs), [1, 3]);
-        assert_eq!(unsaved_matches("lab", &saved, &tabs), [3]);
-        assert!(unsaved_matches("web", &saved, &tabs).is_empty());
-    }
-
-    #[test]
-    fn search_matches_tags_and_group_and_ranks_the_name_first() {
-        let list = [
-            conn("billing", Some("prod"), &["eu", "postgres"]),
-            conn("postgres-main", None, &[]),
-            conn("web", Some("staging"), &["nginx"]),
-        ];
-        // A tag finds a host whose name lacks it.
-        assert_eq!(search("nginx", &list), vec![2]);
-        assert_eq!(search("staging", &list), vec![2]);
-        // A name match and a tag-only match are both found; the name match comes first.
-        let list2 = [
-            conn("db", Some("prod"), &["web"]),
-            conn("web-frontend", None, &[]),
-        ];
-        assert_eq!(search("web", &list2), vec![1, 0]);
-        let mut found = search("postgres", &list);
-        found.sort_unstable();
-        assert_eq!(found, vec![0, 1]);
-        assert_eq!(search("zzz", &list), Vec::<usize>::new());
-        assert_eq!(search("", &list), vec![0, 1, 2]);
-    }
-}
+#[path = "sidebar_tests.rs"]
+mod tests;

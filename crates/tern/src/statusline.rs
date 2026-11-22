@@ -68,6 +68,7 @@ pub fn render(
     latency: Option<Duration>,
     elapsed: Option<Duration>,
     bg: Hsla,
+    foreground: Hsla,
 ) -> impl IntoElement + use<> {
     let disc = div().size(px(6.)).rounded_full();
     let marker = if dot.hollow() {
@@ -84,16 +85,19 @@ pub fn render(
         .items_center()
         .gap(px(12.))
         .bg(bg)
-        .border_t_1()
-        .border_color(t.hairline)
         .text_size(px(TEXT_SIZE))
-        .text_color(t.muted)
+        .text_color(foreground.opacity(0.72))
+        .child(
+            crate::icons::icon(crate::icons::SERVER)
+                .size(px(13.))
+                .text_color(foreground.opacity(0.72)),
+        )
         .child(
             div()
                 .flex_1()
                 .min_w_0()
                 .truncate()
-                .text_color(t.text)
+                .text_color(foreground.opacity(0.80))
                 .child(label.to_owned()),
         )
         .child(
@@ -107,7 +111,7 @@ pub fn render(
         );
     if let Some(rtt) = latency {
         let colour = match lag(rtt) {
-            Lag::Fine => t.muted,
+            Lag::Fine => foreground.opacity(0.72),
             Lag::Slow => t.warning,
             Lag::Bad => t.danger,
         };
