@@ -31,6 +31,19 @@ impl Shell {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let Some(host) = self.hosts.iter().find(|host| host.alias == alias).cloned() {
+            self.connect_host(host, window, cx);
+        } else if let Some(ix) = self.remembered_session(alias) {
+            self.show_tab(ix, window, cx);
+        }
+    }
+
+    pub(super) fn restore_connection_view(
+        &mut self,
+        alias: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.leave_settings(window, cx);
         self.renaming = None;
         if let Some(ix) = self.remembered_session(alias) {

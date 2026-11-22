@@ -244,7 +244,7 @@ impl Shell {
             .as_ref()
             .filter(|alias| self.hosts.iter().any(|h| &h.alias == *alias))
         {
-            self.select_connection(alias, window, cx);
+            self.restore_connection_view(alias, window, cx);
         } else if !self.tabs.is_empty() {
             self.activate_tab(active, window, cx);
         }

@@ -208,11 +208,8 @@ impl Shell {
                 self.activate_tab(ix.min(self.tabs.len() - 1), window, cx);
             } else {
                 self.active = self.tabs.len();
-                self.workspaces.empty = self
-                    .hosts
-                    .iter()
-                    .any(|host| host.alias == closed.alias)
-                    .then_some(closed.alias);
+                self.workspaces.empty = None;
+                self.intro_entered = true;
                 self.persist_tabs();
                 if self.settings_page.is_none() {
                     self.restore_focus(window, cx);

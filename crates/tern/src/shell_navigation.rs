@@ -71,7 +71,7 @@ impl Shell {
         };
         self.nav_index = index;
         match destination {
-            Destination::Connection(alias) => self.select_connection(&alias, window, cx),
+            Destination::Connection(alias) => self.restore_connection_view(&alias, window, cx),
             Destination::Settings(section) => {
                 self.select_section(section, cx);
                 window.focus(&self.focus, cx);

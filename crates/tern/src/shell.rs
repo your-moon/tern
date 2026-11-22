@@ -484,7 +484,7 @@ impl Shell {
         if self.error.is_none()
             && (self.intro_entered || !self.hosts.is_empty() || !self.tabs.is_empty())
         {
-            return self.connections_overview(cx);
+            return self.connections_overview(window, cx);
         }
         let t = self.theme;
         if self.hosts.is_empty() && self.error.is_none() && self.settings.wallpaper.is_none() {

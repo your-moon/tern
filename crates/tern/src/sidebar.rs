@@ -347,7 +347,7 @@ fn section_header(
 }
 
 /// The session status dot, in a fixed slot so session titles line up.
-fn status_dot(status: Option<Dot>, t: &Theme) -> impl IntoElement + use<> {
+pub(crate) fn status_dot(status: Option<Dot>, t: &Theme) -> impl IntoElement + use<> {
     let color: Option<(Hsla, bool)> = status.map(|d| {
         let alpha = match d {
             Dot::Idle => 0.8,
