@@ -48,6 +48,15 @@ impl HostList {
 }
 
 impl Shell {
+    pub(super) fn showing_intro(&self) -> bool {
+        !self.intro_entered
+            && self.settings_page.is_none()
+            && self.hosts.is_empty()
+            && self.tabs.is_empty()
+            && self.error.is_none()
+            && self.settings.wallpaper.is_none()
+    }
+
     pub(super) fn search_query(&self, cx: &gpui::App) -> String {
         self.hostlist.search.read(cx).text().to_owned()
     }
@@ -56,6 +65,7 @@ impl Shell {
     /// Settings first when needed.
     pub(super) fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.settings_page = None;
+        self.intro_entered = true;
         self.picker = None;
         if self.settings.sidebar_collapsed {
             self.toggle_sidebar(cx);

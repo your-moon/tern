@@ -24,6 +24,7 @@ app=target/release/bundle/tern.app
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp target/release/tern "$app/Contents/MacOS/tern"
+cp packaging/*-LICENSE.txt crates/tern/assets/fonts/licenses/*.txt "$app/Contents/Resources/"
 cp packaging/macos/tern.icns "$app/Contents/Resources/tern.icns"
 
 # The oldest macOS the binary loads on is whatever rustc linked it for; read it back instead of

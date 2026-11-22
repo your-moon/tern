@@ -26,6 +26,16 @@ macro_rules! icon_assets {
                     $(concat!("icons/", $file, ".svg") => Some(Cow::Borrowed(
                         include_bytes!(concat!("../assets/icons/", $file, ".svg")).as_slice(),
                     )),)+
+                    "intro/marks/claude-mark.webp" => Some(Cow::Borrowed(include_bytes!("../assets/intro/marks/claude-mark.webp").as_slice())),
+                    "intro/marks/openai-mark.webp" => Some(Cow::Borrowed(include_bytes!("../assets/intro/marks/openai-mark.webp").as_slice())),
+                    "intro/marks/opencode-mark-dark.webp" => Some(Cow::Borrowed(include_bytes!("../assets/intro/marks/opencode-mark-dark.webp").as_slice())),
+                    "intro/marks/antigravity-mark.webp" => Some(Cow::Borrowed(include_bytes!("../assets/intro/marks/antigravity-mark.webp").as_slice())),
+                    "intro/marks/devin-mark.webp" => Some(Cow::Borrowed(include_bytes!("../assets/intro/marks/devin-mark.webp").as_slice())),
+                    "intro/marks/pi-mark.webp" => Some(Cow::Borrowed(include_bytes!("../assets/intro/marks/pi-mark.webp").as_slice())),
+                    "intro/marks/cursor-mark.webp" => Some(Cow::Borrowed(include_bytes!("../assets/intro/marks/cursor-mark.webp").as_slice())),
+                    "intro/marks/grok-mark.webp" => Some(Cow::Borrowed(include_bytes!("../assets/intro/marks/grok-mark.webp").as_slice())),
+                    "intro/marks/hermes-mark.webp" => Some(Cow::Borrowed(include_bytes!("../assets/intro/marks/hermes-mark.webp").as_slice())),
+                    "intro/marks/muse-mark.webp" => Some(Cow::Borrowed(include_bytes!("../assets/intro/marks/muse-mark.webp").as_slice())),
                     "intro/clouds-left.png" => Some(Cow::Borrowed(include_bytes!("../assets/intro/clouds-left.png").as_slice())),
                     "intro/clouds-mid.png" => Some(Cow::Borrowed(include_bytes!("../assets/intro/clouds-mid.png").as_slice())),
                     "intro/clouds-right.png" => Some(Cow::Borrowed(include_bytes!("../assets/intro/clouds-right.png").as_slice())),

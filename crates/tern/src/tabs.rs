@@ -120,6 +120,8 @@ pub fn strip(
     row
 }
 
+/// Natural-width session tabs from Zeron screens/shell/session_tabs.luau. Each badge
+/// reserves its own space outside the title’s 160-point limit.
 fn tab_pill(
     ix: usize,
     tab: &TabInfo,
@@ -138,18 +140,15 @@ fn tab_pill(
     div()
         .id(("tab", ix))
         .group("tab")
-        .h(px(26.))
-        .flex_shrink(1.)
-        .min_w(px(72.))
-        .w(px(112.))
-        .pl(px(10.))
-        .pr(px(4.))
+        .h(px(28.))
+        .flex_none()
+        .px(px(4.))
         .flex()
         .items_center()
-        .gap(px(3.))
-        .rounded(px(CONTROL_RADIUS))
+        .gap(px(6.))
+        .rounded(px(8.))
         .cursor_pointer()
-        .text_size(px(11.5))
+        .text_size(px(12.))
         .when(active, |el| el.bg(t.row_active).text_color(t.text))
         .when(!active, |el| {
             el.text_color(t.muted).hover_fade(
@@ -190,19 +189,20 @@ fn tab_pill(
         .child(status_dot(("tab-dot", ix), tab.dot, t))
         .child(match renaming {
             Some(input) => div()
-                .flex_1()
-                .min_w_0()
+                .w(px(160.))
                 .child(input)
                 .on_mouse_down_out(cx.listener(|shell, _, window, cx| {
                     shell.commit_rename(window, cx);
                 }))
                 .into_any_element(),
             None => div()
-                .flex_1()
-                .min_w_0()
-                .truncate()
-                .when(active, |el| el.font_weight(FontWeight::MEDIUM))
-                .child(SharedString::from(middle_ellipsis(tab.label(), 18)))
+                .flex_none()
+                .max_w(px(160.))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis_start()
+                .font_weight(FontWeight::MEDIUM)
+                .child(SharedString::from(tab.label().to_owned()))
                 .into_any_element(),
         })
         .when(tab.broadcast, |el| {
@@ -233,7 +233,7 @@ fn tab_pill(
             div()
                 .id(("close", ix))
                 .icon_button("Close tab", t)
-                .size(px(18.))
+                .size(px(20.))
                 .flex_none()
                 .flex()
                 .items_center()

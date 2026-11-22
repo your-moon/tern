@@ -162,6 +162,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 auto_sync: sync_ui::AutoSync::default(),
                 vault_ui: None,
                 intro_entered: false,
+                intro_handoff: None,
                 launched: std::time::Instant::now(),
                 last_input: std::time::Instant::now(),
                 toasts: toast::Toasts::new(),
@@ -256,6 +257,7 @@ pub struct Shell {
     auto_sync: sync_ui::AutoSync,
     vault_ui: Option<vault_ui::VaultUi>,
     intro_entered: bool,
+    intro_handoff: Option<std::time::Instant>,
     launched: std::time::Instant,
     /// The last key or mouse input to the window, for the vault's idle lock.
     last_input: std::time::Instant,
@@ -365,6 +367,11 @@ impl Shell {
     }
 
     pub fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
+        if self.showing_intro() {
+            self.intro_entered = true;
+            self.update_settings(|s| s.sidebar_collapsed = false, cx);
+            return;
+        }
         let from = self.sidebar_now();
         self.update_settings(|s| s.sidebar_collapsed = !s.sidebar_collapsed, cx);
         self.sidebar_tween = Some(WidthTween::new(from, self.sidebar_target()));
@@ -592,6 +599,7 @@ mod intro;
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.advance_intro(cx);
         // Whatever held focus can disappear (a field hidden after sync, a closed form or tab);
         // with nothing focused gpui dispatches no keys at all, so the window takes it back.
         if window.focused(cx).is_none() {
@@ -701,7 +709,7 @@ impl Render for Shell {
                 }
             }))
             .on_key_down(cx.listener(|s, e: &gpui::KeyDownEvent, w, cx| {
-                if s.on_rename_key(e, w, cx) {
+                if s.on_rename_key(e, w, cx) || s.intro_escape(e, cx) {
                     cx.stop_propagation();
                     return;
                 }
@@ -733,21 +741,14 @@ impl Render for Shell {
             .child(chrome::render_titlebar(
                 &t,
                 window.is_fullscreen(),
-                !self.settings.sidebar_collapsed,
+                !self.showing_intro() && !self.settings.sidebar_collapsed,
                 strip,
                 self.tile_tint(t.shell),
                 cx,
             ))
             .child(match self.settings_page {
                 Some(section) => self.render_settings(section, window, cx),
-                None if !self.intro_entered
-                    && self.hosts.is_empty()
-                    && self.tabs.is_empty()
-                    && self.error.is_none()
-                    && self.settings.wallpaper.is_none() =>
-                {
-                    self.welcome(window, cx)
-                }
+                None if self.showing_intro() => self.welcome(window, cx),
                 None => div()
                     .flex_1()
                     .min_h_0()

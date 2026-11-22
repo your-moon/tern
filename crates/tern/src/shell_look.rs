@@ -240,21 +240,16 @@ impl Shell {
         self.window_fill().map(|alpha| colour.opacity(alpha))
     }
 
-    /// A fixed-width tile at the left of the body (the sidebar, or Settings' nav) with the
-    /// separator on its right edge. Clipped to `width`, so collapsing never reflows its rows.
+    /// Zeron ds/sidebar.luau, non-card branch: clip the list directly over the window.
     pub(super) fn side_tile(&self, width: f32, content: impl IntoElement) -> gpui::Div {
         div()
             .flex_none()
             .relative()
             .w(px(width))
+            .h_full()
             .overflow_hidden()
-            .mb(px(4.))
-            .rounded(px(12.))
-            .border_1()
-            .border_color(self.theme.hairline)
-            .bg(self
-                .tile_tint(self.theme.shell)
-                .unwrap_or(self.theme.ink(0.05)))
+            // Full-window wallpaper needs the same contrast veil as the title bar.
+            .when_some(self.tile_tint(self.theme.shell), |el, veil| el.bg(veil))
             .child(content)
     }
 

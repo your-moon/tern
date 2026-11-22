@@ -15,8 +15,10 @@ pub const REVEAL_LABEL: &str = if cfg!(target_os = "macos") {
     "Show in Files"
 };
 
-// Bundled Geist faces (SIL OFL 1.1, `assets/fonts/licenses`), registered once at start-up.
-const FACES: [&[u8]; 7] = [
+// Bundled Geist and Instrument Serif faces (SIL OFL 1.1, `assets/fonts/licenses`), registered once at start-up.
+const FACES: [&[u8]; 9] = [
+    include_bytes!("../assets/fonts/InstrumentSerif-Regular.ttf"),
+    include_bytes!("../assets/fonts/InstrumentSerif-Italic.ttf"),
     include_bytes!("../assets/fonts/Geist.ttf"),
     include_bytes!("../assets/fonts/Geist-Medium.ttf"),
     include_bytes!("../assets/fonts/Geist-SemiBold.ttf"),
