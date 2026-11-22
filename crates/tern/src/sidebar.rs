@@ -1,7 +1,6 @@
 // Adapted from zeron crates/ui/src/shell.rs (render_chat_row, sidebar footer) and
 // crates/ui/src/shell/sidebar_sections.rs + spaces.rs (section header, project header) (MIT).
-//! The host list, laid out as zeron's sidebar: a header with +, collapsible sections (tern's
-//! own connections, then `~/.ssh/config`), one-line rows, and a footer with sync and settings.
+//! Connection workspaces with expandable session lists, user-defined folders, search and a footer.
 //! Every row action lives in the right-click menu; hover shows a "…" that opens the same menu.
 
 use crate::hover::Accessible as _;
@@ -22,15 +21,16 @@ use crate::tabs::{self, TabInfo};
 use crate::text_input::TextInput;
 use crate::theme::Theme;
 
-/// `hosts[i]` is `connections[i].entry()`: the sidebar lists tern's own connections only.
+/// Saved hosts have the same indices as their connections. Quick-connect sessions can have other aliases.
 pub struct SidebarState<'a> {
     pub hosts: &'a [HostEntry],
     pub connections: &'a [Connection],
     pub open: &'a [TabInfo],
     pub active_alias: Option<&'a str>,
+    pub active_index: Option<usize>,
+    pub collapsed_connections: &'a [String],
     pub width: f32,
     pub collapsed_groups: &'a [String],
-    /// Indices into `hosts`, newest first, already limited to what the section shows.
     pub query: &'a str,
     pub search: &'a Entity<TextInput>,
 }
@@ -86,6 +86,26 @@ pub fn search(query: &str, connections: &[Connection]) -> Vec<usize> {
     crate::picker::rank_named(query, &names, &labels)
 }
 
+/// First tab of each open connection which has no saved host row. Matches use the same
+/// fuzzy ranking as saved hosts. With no search the first tab sets the group's position.
+pub fn unsaved_matches(query: &str, hosts: &[HostEntry], open: &[TabInfo]) -> Vec<usize> {
+    let mut seen: std::collections::HashSet<&str> =
+        hosts.iter().map(|host| host.alias.as_str()).collect();
+    let first: Vec<usize> = open
+        .iter()
+        .enumerate()
+        .filter_map(|(ix, tab)| seen.insert(tab.alias.as_str()).then_some(ix))
+        .collect();
+    if query.trim().is_empty() {
+        return first;
+    }
+    let labels: Vec<&str> = first.iter().map(|ix| open[*ix].alias.as_str()).collect();
+    crate::picker::rank_labels(query, &labels)
+        .into_iter()
+        .map(|ix| first[ix])
+        .collect()
+}
+
 pub fn render(
     s: &SidebarState<'_>,
     t: &Theme,
@@ -99,18 +119,25 @@ pub fn render(
         .flex()
         .flex_col()
         .px(px(8.));
-    // What a row has to lay out: the sidebar less list padding, row padding, dot and gaps.
-    let inner = s.width - 61.;
-    let one = |scope: &'static str, ix: usize, top: bool, cx: &mut Context<Shell>| {
+    let mut sessions: std::collections::HashMap<&str, Vec<usize>> =
+        std::collections::HashMap::new();
+    for (ix, tab) in s.open.iter().enumerate() {
+        sessions.entry(&tab.alias).or_default().push(ix);
+    }
+    let unsaved = unsaved_matches(s.query, s.hosts, s.open);
+    let one = |scope, ix: usize, top, cx: &mut Context<Shell>| {
         let host = &s.hosts[ix];
-        let status = s
-            .open
-            .iter()
-            .rev()
-            .find(|tab| tab.alias == host.alias)
-            .map(|tab| tab.dot);
-        let active = s.active_alias == Some(host.alias.as_str());
-        row(scope, ix, host, status, active, top, inner, t, cx)
+        connection_rows(
+            scope,
+            ix,
+            &host.alias,
+            Some(host),
+            sessions.get(host.alias.as_str()).map_or(&[], Vec::as_slice),
+            top,
+            s,
+            t,
+            cx,
+        )
     };
     if !s.query.trim().is_empty() {
         let found = search(s.query, s.connections);
@@ -119,7 +146,7 @@ pub fn render(
             body = body.child(one("found", ix, n == 0, cx));
         }
         list = list.child(body);
-        if found.is_empty() {
+        if found.is_empty() && unsaved.is_empty() {
             list = list.child(
                 div()
                     .px(px(8.))
@@ -134,37 +161,49 @@ pub fn render(
         // No Recent (it repeated these rows) and no wrapper section around them; recency orders
         // the ⌘K picker instead.
         if !s.hosts.is_empty() {
-            {
-                let layout = layout(s.connections);
-                let mut body = div().pt(px(4.)).flex().flex_col().gap(px(2.));
-                for &ix in &layout.ungrouped {
-                    body = body.child(one("host", ix, false, cx));
-                }
-                list = list.child(body);
-                for (n, (name, rows)) in layout.groups.iter().enumerate() {
-                    let folded = s.collapsed_groups.contains(name);
-                    let toggled = name.clone();
-                    list = list.child(section_header(
-                        ("group-header", n),
-                        SharedString::from(format!("{name} · {}", rows.len())),
-                        folded,
-                        true,
-                        t,
-                        cx,
-                        move |shell, cx| shell.toggle_group(&toggled, cx),
-                    ));
-                    if !folded {
-                        let mut body = div().pt(px(4.)).pl(px(12.)).flex().flex_col().gap(px(2.));
-                        for &ix in rows {
-                            body = body.child(one("host", ix, false, cx));
-                        }
-                        list = list.child(body);
+            let layout = layout(s.connections);
+            let mut body = div().pt(px(4.)).flex().flex_col().gap(px(2.));
+            for &ix in &layout.ungrouped {
+                body = body.child(one("host", ix, false, cx));
+            }
+            list = list.child(body);
+            for (n, (name, rows)) in layout.groups.iter().enumerate() {
+                let folded = s.collapsed_groups.contains(name);
+                let toggled = name.clone();
+                list = list.child(section_header(
+                    ("group-header", n),
+                    SharedString::from(format!("{name} · {}", rows.len())),
+                    folded,
+                    true,
+                    t,
+                    cx,
+                    move |shell, cx| shell.toggle_group(&toggled, cx),
+                ));
+                if !folded {
+                    let mut body = div().pt(px(4.)).pl(px(12.)).flex().flex_col().gap(px(2.));
+                    for &ix in rows {
+                        body = body.child(one("host", ix, false, cx));
                     }
+                    list = list.child(body);
                 }
             }
         }
     }
-    if s.hosts.is_empty() {
+    for ix in unsaved {
+        let alias = &s.open[ix].alias;
+        list = list.child(connection_rows(
+            "open-host",
+            ix,
+            alias,
+            None,
+            &sessions[alias.as_str()],
+            false,
+            s,
+            t,
+            cx,
+        ));
+    }
+    if s.hosts.is_empty() && s.open.is_empty() {
         list = list.child(empty_state(t, cx));
     }
     div()
@@ -303,7 +342,7 @@ fn section_header(
         .child(div().text_size(px(12.)).text_color(faint).child(label))
 }
 
-/// The leading 13 pt slot: a 6 pt dot coloured by the host's newest tab.
+/// The session status dot, in a fixed slot so session titles line up.
 fn status_dot(status: Option<Dot>, t: &Theme) -> impl IntoElement + use<> {
     let color: Option<(Hsla, bool)> = status.map(|d| {
         let alpha = match d {
@@ -331,119 +370,195 @@ fn status_dot(status: Option<Dot>, t: &Theme) -> impl IntoElement + use<> {
         })
 }
 
-/// The "..." button's element id, distinct per section so a host listed twice has two.
-fn scope_more(scope: &'static str) -> &'static str {
-    match scope {
-        "recent" => "recent-more",
-        "found" => "found-more",
-        _ => "host-more",
-    }
-}
-
-/// One host on one line, as zeron's session row: dot, name, the address faint at the end.
+/// Connection header and its visible sessions. Session actions retain their global tab indices.
 #[allow(clippy::too_many_arguments)]
-fn row(
+fn connection_rows(
     scope: &'static str,
     ix: usize,
-    host: &HostEntry,
-    status: Option<Dot>,
-    active: bool,
+    alias: &str,
+    host: Option<&HostEntry>,
+    sessions: &[usize],
     top: bool,
-    inner: f32,
+    state: &SidebarState<'_>,
     t: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
-    let target = host.clone();
-    let menu_host = host.clone();
-    let more_host = host.clone();
+    let target = alias.to_owned();
+    let folded = state.collapsed_connections.iter().any(|name| name == alias);
+    let active = state.active_alias == Some(alias);
     let group: SharedString = format!("host-row-{scope}-{ix}").into();
     let meta_size = if crate::theme::low_dpi() { 12. } else { 11. };
-    let meta = fit_meta(host, inner, meta_size);
-    div()
-        .id((scope, ix))
-        .group(group.clone())
-        .relative()
-        .h(px(29.))
-        .px(px(8.))
-        .rounded(px(8.))
-        .flex()
-        .items_center()
-        .gap(px(8.))
-        .cursor_pointer()
-        .hover_fade(
-            format!("host-{scope}-{ix}"),
-            gpui::transparent_black(),
-            t.ink(0.11),
-        )
-        .when(active || top, |el| el.bg(t.row_active))
-        .on_click(cx.listener(move |shell, _, window, cx| {
-            shell.connect_host(target.clone(), window, cx);
-        }))
-        .on_mouse_down(
-            MouseButton::Right,
-            cx.listener(move |shell, e: &MouseDownEvent, _, cx| {
-                cx.stop_propagation();
-                shell.open_host_menu(&menu_host, ix, e.position, cx);
-            }),
-        )
-        .child(status_dot(status, t))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .truncate()
-                .text_size(px(13.))
-                .line_height(px(17.))
-                .text_color(if active {
-                    t.text
-                } else {
-                    t.text.opacity(crate::theme::by_dpi(0.8, 0.9))
-                })
-                .child(SharedString::from(tabs::middle_ellipsis(&host.alias, 26))),
-        )
-        // The meta is only drawn whole: `fit_meta` already dropped what would not fit, so the
-        // name is what truncates, never an address cut mid-octet.
-        .when_some(meta.clone(), |el, text| {
-            el.child(
-                div()
-                    .flex_none()
-                    .text_size(px(meta_size))
-                    .text_color(t.muted.opacity(crate::theme::by_dpi(0.6, 0.85)))
-                    .child(SharedString::from(text)),
+    let meta = host.and_then(|host| fit_meta(host, state.width - 61., meta_size));
+    let header =
+        div()
+            .id((scope, ix))
+            .group(group.clone())
+            .relative()
+            .h(px(29.))
+            .px(px(8.))
+            .rounded(px(8.))
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .cursor_pointer()
+            .hover_fade(
+                format!("host-{scope}-{ix}"),
+                gpui::transparent_black(),
+                t.ink(0.11),
             )
-        })
-        .when(
-            meta.as_deref() != Some(short_address(host).as_str()),
-            |el| el.hint(address(host), t),
-        )
-        // zeron's hover corner: floats over the end of the row, so it reserves no width.
-        .child(
-            div()
-                .id((scope_more(scope), ix))
-                .icon_button("Host actions", t)
-                .absolute()
-                .right(px(4.))
-                .top(px(5.))
-                .size(px(19.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(px(5.))
-                .bg(t.popup)
-                .invisible()
-                .group_hover(group, |s| s.visible())
-                .hover(|s| s.bg(t.ink(0.18)))
-                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .on_click(cx.listener(move |shell, e: &gpui::ClickEvent, _, cx| {
-                    cx.stop_propagation();
-                    shell.open_host_menu(&more_host, ix, e.position(), cx);
-                }))
+            .when(active || top, |el| el.bg(t.row_active))
+            .on_click(cx.listener(move |shell, _, window, cx| {
+                shell.select_connection(&target, window, cx);
+            }))
+            .child(if sessions.is_empty() {
+                div().size(px(15.)).flex_none()
+            } else {
+                let toggled = alias.to_owned();
+                div().size(px(15.)).flex_none().child(
+                    div()
+                        .id("connection-disclosure")
+                        .icon_button(
+                            if folded {
+                                "Show sessions"
+                            } else {
+                                "Hide sessions"
+                            },
+                            t,
+                        )
+                        .size_full()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .cursor_pointer()
+                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                        .on_click(cx.listener(move |shell, _, _, cx| {
+                            cx.stop_propagation();
+                            shell.toggle_connection_group(&toggled, cx);
+                        }))
+                        .child(
+                            icon(icons::CHEVRON_RIGHT)
+                                .size(px(12.))
+                                .text_color(t.muted)
+                                .with_transformation(Transformation::rotate(percentage(
+                                    if folded { 0. } else { 0.25 },
+                                ))),
+                        ),
+                )
+            })
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .text_size(px(13.))
+                    .line_height(px(17.))
+                    .text_color(if active {
+                        t.text
+                    } else {
+                        t.text.opacity(crate::theme::by_dpi(0.8, 0.9))
+                    })
+                    .child(SharedString::from(tabs::middle_ellipsis(alias, 26))),
+            )
+            // The meta is only drawn whole: `fit_meta` already dropped what would not fit, so the
+            // name is what truncates, never an address cut mid-octet.
+            .when_some(meta.clone(), |el, text| {
+                el.child(
+                    div()
+                        .flex_none()
+                        .text_size(px(meta_size))
+                        .text_color(t.muted.opacity(crate::theme::by_dpi(0.6, 0.85)))
+                        .child(SharedString::from(text)),
+                )
+            })
+            .when_some(host, |el, host| {
+                let menu_host = host.clone();
+                let more_host = host.clone();
+                el.when(
+                    meta.as_deref() != Some(short_address(host).as_str()),
+                    |el| el.hint(address(host), t),
+                )
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |shell, e: &MouseDownEvent, _, cx| {
+                        cx.stop_propagation();
+                        shell.open_host_menu(&menu_host, ix, e.position, cx);
+                    }),
+                )
                 .child(
-                    icon(icons::MORE)
-                        .size(px(crate::theme::fit(19., 13.)))
-                        .text_color(t.muted),
-                ),
-        )
+                    div()
+                        .id("host-more")
+                        .icon_button("Host actions", t)
+                        .absolute()
+                        .right(px(4.))
+                        .top(px(5.))
+                        .size(px(19.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(px(5.))
+                        .bg(t.popup)
+                        .invisible()
+                        .group_hover(group, |s| s.visible())
+                        .hover(|s| s.bg(t.ink(0.18)))
+                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                        .on_click(cx.listener(move |shell, e: &gpui::ClickEvent, _, cx| {
+                            cx.stop_propagation();
+                            shell.open_host_menu(&more_host, ix, e.position(), cx);
+                        }))
+                        .child(
+                            icon(icons::MORE)
+                                .size(px(crate::theme::fit(19., 13.)))
+                                .text_color(t.muted),
+                        ),
+                )
+            });
+    let mut body = div().flex_none().flex().flex_col().child(header);
+    if !folded {
+        for (ordinal, &ix) in sessions.iter().enumerate() {
+            let tab = &state.open[ix];
+            body = body.child(
+                div()
+                    .id(("connection-session", ix))
+                    .ml(px(16.))
+                    .h(px(27.))
+                    .px(px(8.))
+                    .rounded(px(6.))
+                    .flex()
+                    .items_center()
+                    .gap(px(6.))
+                    .cursor_pointer()
+                    .hover_fade(
+                        format!("connection-session-{ix}"),
+                        gpui::transparent_black(),
+                        t.row_hover,
+                    )
+                    .when(active && state.active_index == Some(ix), |el| {
+                        el.bg(t.row_active)
+                    })
+                    .on_click(
+                        cx.listener(move |shell, _, window, cx| shell.show_tab(ix, window, cx)),
+                    )
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener(move |shell, e: &MouseDownEvent, _, cx| {
+                            cx.stop_propagation();
+                            shell.open_tab_menu(ix, e.position, cx);
+                        }),
+                    )
+                    .child(status_dot(Some(tab.dot), t))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_size(px(12.))
+                            .text_color(t.text)
+                            .child(tab.session_label(ordinal + 1)),
+                    ),
+            );
+        }
+    }
+    body
 }
 
 /// zeron's footer: a pill on the left (here: sync) and the settings gear on the right.
@@ -637,6 +752,22 @@ mod tests {
                 ("Zeta".to_owned(), vec![0, 3])
             ]
         );
+    }
+
+    #[test]
+    fn unsaved_groups_use_the_first_global_tab_and_remain_searchable() {
+        let tabs = ["web", "temp", "web", "lab", "temp"].map(|alias| TabInfo {
+            alias: alias.into(),
+            title: None,
+            logging: false,
+            broadcast: false,
+            dot: Dot::Idle,
+            rename: None,
+        });
+        let saved = [host(None, 22)];
+        assert_eq!(unsaved_matches("", &saved, &tabs), [1, 3]);
+        assert_eq!(unsaved_matches("lab", &saved, &tabs), [3]);
+        assert!(unsaved_matches("web", &saved, &tabs).is_empty());
     }
 
     #[test]

@@ -1,17 +1,21 @@
 // Adapted from zeron apps/zgx/ui/screens/shell/route.luau and ds/sidebar.luau (MIT).
 use super::*;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub(super) enum Destination {
     Workspace(Option<broadcast_ui::TabId>),
     Settings(settings_ui::Section),
+    Connection(String),
 }
 
 impl Shell {
     // Zeron shell/route.luau replaces the Settings entry when switching sections.
     pub(super) fn remember_destination(&mut self) {
         let current = self.settings_page.map_or_else(
-            || Destination::Workspace(self.tabs.get(self.active).map(|tab| tab.id)),
+            || match &self.workspaces.empty {
+                Some(alias) => Destination::Connection(alias.clone()),
+                None => Destination::Workspace(self.tabs.get(self.active).map(|tab| tab.id)),
+            },
             Destination::Settings,
         );
         if self.nav_tab_count == self.tabs.len()
@@ -24,6 +28,7 @@ impl Shell {
             Destination::Workspace(Some(id)) => self.tabs.iter().any(|tab| tab.id == *id),
             Destination::Workspace(None) => self.tabs.is_empty(),
             Destination::Settings(_) => true,
+            Destination::Connection(alias) => self.hosts.iter().any(|host| &host.alias == alias),
         };
         let before = self
             .navigation
@@ -39,7 +44,7 @@ impl Shell {
                 return;
             }
             if matches!(
-                (*entry, current),
+                (&*entry, &current),
                 (Destination::Settings(_), Destination::Settings(_))
             ) {
                 *entry = current;
@@ -60,12 +65,13 @@ impl Shell {
             self.nav_index.checked_sub(1)
         };
         let Some((index, destination)) =
-            next.and_then(|index| self.navigation.get(index).copied().map(|d| (index, d)))
+            next.and_then(|index| self.navigation.get(index).cloned().map(|d| (index, d)))
         else {
             return;
         };
         self.nav_index = index;
         match destination {
+            Destination::Connection(alias) => self.select_connection(&alias, window, cx),
             Destination::Settings(section) => {
                 self.select_section(section, cx);
                 window.focus(&self.focus, cx);
@@ -76,6 +82,7 @@ impl Shell {
                 }
             }
             Destination::Workspace(None) => {
+                self.workspaces.empty = None;
                 self.leave_settings(window, cx);
                 self.restore_focus(window, cx);
             }

@@ -149,19 +149,19 @@ pub fn render_titlebar(
                             })
                             .child(crate::icons::icon(glyph).size(px(21.)).text_color(t.muted))
                     }),
-                )
-                .child(
-                    control("find-host", t)
-                        .icon_button("New tab: find a host", t)
-                        .on_click(cx.listener(|s, _, w, cx| s.toggle_picker(w, cx)))
-                        .child(
-                            crate::icons::icon(crate::icons::PLUS)
-                                .size(px(16.))
-                                .text_color(t.muted),
-                        ),
                 ),
         )
         .child(tabs)
+        .child(
+            control("new-workspace-session", t)
+                .icon_button("New terminal", t)
+                .on_click(cx.listener(|s, _, w, cx| s.new_workspace_session(w, cx)))
+                .child(
+                    crate::icons::icon(crate::icons::PLUS)
+                        .size(px(16.))
+                        .text_color(t.muted),
+                ),
+        )
         .child(
             div()
                 // The drag strip keeps a grab area even when the tabs fill the bar.

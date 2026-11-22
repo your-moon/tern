@@ -97,9 +97,15 @@ impl Shell {
             "enter" => {
                 let query = self.search_query(cx);
                 let top = sidebar::search(&query, &self.connections).first().copied();
-                if let Some(host) = top.and_then(|ix| self.hosts.get(ix).cloned()) {
+                let alias = top.map(|ix| self.hosts[ix].alias.clone()).or_else(|| {
+                    let infos = self.tab_infos(cx);
+                    sidebar::unsaved_matches(&query, &self.hosts, &infos)
+                        .first()
+                        .map(|&ix| infos[ix].alias.clone())
+                });
+                if let Some(alias) = alias {
                     self.clear_search(cx);
-                    self.connect_host(host, window, cx);
+                    self.select_connection(&alias, window, cx);
                 }
             }
             _ => return,

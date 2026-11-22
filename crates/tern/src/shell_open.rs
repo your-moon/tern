@@ -19,7 +19,7 @@ impl Shell {
     /// a new tab.
     pub fn connect_host(&mut self, host: HostEntry, window: &mut Window, cx: &mut Context<Self>) {
         self.record_recent(&host.alias);
-        if let Some(ix) = self.tabs.iter().position(|tab| tab.alias == host.alias) {
+        if let Some(ix) = self.remembered_session(&host.alias) {
             let session = self.tabs[ix].session().clone();
             session.update(cx, |s, cx| {
                 if s.status.is_dormant() {
@@ -153,8 +153,17 @@ impl Shell {
             return;
         };
         self.active = ix;
+        self.workspaces.empty = None;
+        self.workspaces
+            .last_session
+            .insert(tab.alias.clone(), tab.id);
         self.persist_tabs();
-        self.tab_scroll.scroll_to_item(ix);
+        self.tab_scroll.scroll_to_item(
+            self.tabs[..ix]
+                .iter()
+                .filter(|other| other.alias == tab.alias)
+                .count(),
+        );
         // Behind Settings the terminal is hidden, and keys sent to it would be typed blind.
         if self.settings_page.is_none() {
             let focus = tab.session().read(cx).view.focus_handle(cx);
@@ -176,21 +185,45 @@ impl Shell {
             return;
         }
         self.renaming = None;
-        self.tabs.remove(ix);
+        let active_id = self.tabs.get(self.active).map(|t| t.id);
+        let closed = self.tabs.remove(ix);
         self.sync_broadcast(cx);
-        if self.tabs.is_empty() {
-            self.active = 0;
-            self.persist_tabs();
-            window.focus(&self.focus, cx);
-            cx.notify();
-            return;
-        }
-        let next = if self.active > ix || self.active == self.tabs.len() {
-            self.active - 1
+        if let Some(index) = self.tabs.iter().position(|tab| Some(tab.id) == active_id) {
+            self.activate_tab(index, window, cx);
+        } else if active_id == Some(closed.id) {
+            let next = self.tabs[ix..]
+                .iter()
+                .position(|tab| tab.alias == closed.alias)
+                .map(|n| n + ix)
+                .or_else(|| {
+                    self.tabs[..ix]
+                        .iter()
+                        .rposition(|tab| tab.alias == closed.alias)
+                });
+            if let Some(next) = next {
+                self.activate_tab(next, window, cx);
+            } else if !self.hosts.iter().any(|host| host.alias == closed.alias)
+                && !self.tabs.is_empty()
+            {
+                self.activate_tab(ix.min(self.tabs.len() - 1), window, cx);
+            } else {
+                self.active = self.tabs.len();
+                self.workspaces.empty = self
+                    .hosts
+                    .iter()
+                    .any(|host| host.alias == closed.alias)
+                    .then_some(closed.alias);
+                self.persist_tabs();
+                if self.settings_page.is_none() {
+                    self.restore_focus(window, cx);
+                }
+                cx.notify();
+            }
         } else {
-            self.active
-        };
-        self.activate_tab(next, window, cx);
+            self.active = self.tabs.len();
+            self.persist_tabs();
+            cx.notify();
+        }
     }
 }
 

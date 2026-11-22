@@ -58,6 +58,8 @@ mod look;
 mod menu;
 #[path = "shell_navigation.rs"]
 mod navigation;
+#[path = "shell_workspaces.rs"]
+mod workspaces;
 use navigation::Destination;
 
 #[path = "shell_open.rs"]
@@ -152,6 +154,7 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 next_pane: 0,
                 navigation: Vec::new(),
                 nav_index: 0,
+                workspaces: workspaces::Workspaces::default(),
                 nav_tab_count: 0,
                 settings_search: settings_ui::NavSearch::new(&theme, cx),
                 broadcast: None,
@@ -250,6 +253,7 @@ pub struct Shell {
     next_pane: PaneId,
     navigation: Vec<Destination>,
     nav_index: usize,
+    workspaces: workspaces::Workspaces,
     nav_tab_count: usize,
     settings_search: settings_ui::NavSearch,
     broadcast: Option<broadcast_ui::Broadcast>,
@@ -408,6 +412,15 @@ impl Shell {
             .iter()
             .map(|c| c.entry_in(&self.connections))
             .collect();
+        if self
+            .workspaces
+            .empty
+            .as_ref()
+            .is_some_and(|alias| !self.hosts.iter().any(|h| &h.alias == alias))
+        {
+            self.workspaces.empty = None;
+            self.active = self.tabs.len().saturating_sub(1);
+        }
     }
 
     /// Focus back to the active terminal, or the window when there is none.
@@ -451,28 +464,6 @@ impl Shell {
         cx.notify();
     }
 
-    fn tab_infos(&self, cx: &App) -> Vec<TabInfo> {
-        self.tabs
-            .iter()
-            .enumerate()
-            .map(|(ix, tab)| TabInfo {
-                alias: tab.alias.clone(),
-                title: tab.title.clone(),
-                logging: tab.session().read(cx).is_logging(),
-                broadcast: self.is_broadcasting(tab.id),
-                dot: {
-                    let s = tab.session().read(cx);
-                    Dot::of(&s.status, s.is_asking())
-                },
-                rename: self
-                    .renaming
-                    .as_ref()
-                    .filter(|r| r.ix == ix)
-                    .map(|r| r.input.clone()),
-            })
-            .collect()
-    }
-
     /// The main panel's content: the active tab's panes, or the empty view, which carries the
     /// wallpaper `hero` (the picture filling the tile) under its text.
     fn panel_content(
@@ -484,6 +475,9 @@ impl Shell {
     ) -> AnyElement {
         if let Some(tab) = self.tabs.get(self.active) {
             return self.render_panes(tab, cx);
+        }
+        if self.workspaces.empty.is_some() {
+            return self.empty_workspace(cx);
         }
         let t = self.theme;
         if self.hosts.is_empty() && self.error.is_none() && self.settings.wallpaper.is_none() {
@@ -594,8 +588,15 @@ impl Render for Shell {
         self.sync_frame(window);
         let t = self.theme;
         let infos = self.tab_infos(cx);
-        let active_alias = infos.get(self.active).map(|i| i.alias.clone());
-        let strip = tabs::strip(&infos, self.active, &self.tab_scroll, &t, cx);
+        let active_alias = self.workspace_alias().map(str::to_owned);
+        let strip = tabs::strip(
+            &infos,
+            active_alias.as_deref(),
+            self.active,
+            &self.tab_scroll,
+            &t,
+            cx,
+        );
         let query = self.search_query(cx);
         let sidebar = sidebar::render(
             &sidebar::SidebarState {
@@ -603,6 +604,8 @@ impl Render for Shell {
                 connections: &self.connections,
                 open: &infos,
                 active_alias: active_alias.as_deref(),
+                active_index: infos.get(self.active).map(|_| self.active),
+                collapsed_connections: &self.workspaces.collapsed,
                 width: self.settings.sidebar_width,
                 collapsed_groups: &self.hostlist.collapsed_groups,
                 query: &query,
@@ -674,13 +677,11 @@ impl Render for Shell {
             .on_action(cx.listener(|s, _: &FocusPaneDown, w, cx| {
                 s.move_pane_focus(split::Direction::Down, w, cx)
             }))
-            .on_action(cx.listener(|s, _: &NextTab, w, cx| {
-                s.show_tab(tabs::step(s.active, s.tabs.len(), 1), w, cx)
-            }))
-            .on_action(cx.listener(|s, _: &PrevTab, w, cx| {
-                s.show_tab(tabs::step(s.active, s.tabs.len(), -1), w, cx)
-            }))
-            .on_action(cx.listener(|s, a: &ActivateTab, w, cx| s.show_tab(a.0, w, cx)))
+            .on_action(cx.listener(|s, _: &NextTab, w, cx| s.workspace_tab(None, 1, w, cx)))
+            .on_action(cx.listener(|s, _: &PrevTab, w, cx| s.workspace_tab(None, -1, w, cx)))
+            .on_action(
+                cx.listener(|s, a: &ActivateTab, w, cx| s.workspace_tab(Some(a.0), 0, w, cx)),
+            )
             .on_action(cx.listener(|s, _: &ToggleHostPicker, w, cx| s.toggle_picker(w, cx)))
             .on_action(cx.listener(|s, _: &FocusHostSearch, w, cx| s.focus_search(w, cx)))
             .on_action(cx.listener(|s, _: &ToggleSnippets, w, cx| s.toggle_snippet_picker(w, cx)))

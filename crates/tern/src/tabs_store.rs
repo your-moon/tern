@@ -32,6 +32,19 @@ pub struct SavedTab {
 pub struct SavedTabs {
     pub tabs: Vec<SavedTab>,
     pub active: usize,
+    #[serde(
+        default,
+        rename = "emptyConnection",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub empty_connection: Option<String>,
+    /// Selected session as a zero-based slot within each connection.
+    #[serde(
+        default,
+        rename = "connectionSessions",
+        skip_serializing_if = "std::collections::BTreeMap::is_empty"
+    )]
+    pub connection_sessions: std::collections::BTreeMap<String, usize>,
 }
 
 impl SavedTabs {
@@ -112,6 +125,7 @@ mod tests {
                 },
             ],
             active: 1,
+            ..Default::default()
         }
     }
 

@@ -139,10 +139,7 @@ impl Shell {
         items.push(action(
             icons::PLUS,
             "New tab to this host",
-            move |s, w, cx| match s.hosts.iter().find(|h| h.alias == again).cloned() {
-                Some(host) => s.open_new_tab(&host, w, cx),
-                None => s.connect_target(&again, w, cx),
-            },
+            move |s, w, cx| s.new_session_for(&again, w, cx),
         ));
         items.push(action(icons::PEN, "Rename…", move |s, w, cx| {
             s.start_rename(ix, w, cx)
@@ -180,7 +177,7 @@ impl Shell {
         items.push(destructive(icons::CLOSE, "Close tab", move |s, w, cx| {
             s.close_tab_at(ix, w, cx)
         }));
-        if self.tabs.len() > 1 {
+        if self.tabs.iter().filter(|tab| tab.alias == alias).count() > 1 {
             items.push(destructive(
                 icons::CLOSE,
                 "Close other tabs",
@@ -214,7 +211,12 @@ impl Shell {
     }
 
     /// A second session to the same host, even when one is already open.
-    fn open_new_tab(&mut self, host: &HostEntry, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_new_tab(
+        &mut self,
+        host: &HostEntry,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         match ConnectSpec::from_host_entry(host) {
             Ok(spec) => self.open_tab(super::Launch::Ssh(spec), host.alias.clone(), window, cx),
             Err(e) => self.notify_toast(super::ToastKind::Critical, e.to_string(), cx),
@@ -225,10 +227,12 @@ impl Shell {
         if keep >= self.tabs.len() {
             return;
         }
-        let kept = self.tabs.remove(keep);
-        self.tabs = vec![kept];
+        let id = self.tabs[keep].id;
+        let alias = self.tabs[keep].alias.clone();
+        self.tabs.retain(|tab| tab.id == id || tab.alias != alias);
+        let index = self.tabs.iter().position(|tab| tab.id == id).unwrap_or(0);
         self.sync_broadcast(cx);
-        self.activate_tab(0, window, cx);
+        self.activate_tab(index, window, cx);
     }
 
     fn close_menu(&mut self, cx: &mut Context<Self>) {

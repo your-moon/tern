@@ -273,7 +273,7 @@ impl Shell {
     /// full-window wallpaper it paints only the rim, as the terminal draws its own glass at the same
     /// alpha; anything else it shows (Settings, the empty view) sits on the tile's tint.
     pub(super) fn main_tile(&self, panel: Hsla) -> gpui::Div {
-        let shows_terminal = !self.tabs.is_empty() && self.settings_page.is_none();
+        let shows_terminal = self.tabs.get(self.active).is_some() && self.settings_page.is_none();
         let tint = self.tile_tint(panel);
         let terminal_glass = shows_terminal && tint.is_some();
         div()

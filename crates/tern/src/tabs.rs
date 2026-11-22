@@ -66,8 +66,10 @@ pub struct TabInfo {
 }
 
 impl TabInfo {
-    pub fn label(&self) -> &str {
-        self.title.as_deref().unwrap_or(&self.alias)
+    pub fn session_label(&self, ordinal: usize) -> String {
+        self.title
+            .clone()
+            .unwrap_or_else(|| format!("Terminal {ordinal}"))
     }
 }
 
@@ -100,6 +102,7 @@ impl Render for DraggedTab {
 /// they no longer fit; `scroll` keeps the active one in view.
 pub fn strip(
     tabs: &[TabInfo],
+    alias: Option<&str>,
     active: usize,
     scroll: &ScrollHandle,
     t: &Theme,
@@ -114,10 +117,36 @@ pub fn strip(
         .flex_shrink(1.)
         .overflow_x_scroll()
         .track_scroll(scroll);
-    for (ix, tab) in tabs.iter().enumerate() {
-        row = row.child(tab_pill(ix, tab, ix == active, t, cx));
+    let group = tabs
+        .iter()
+        .enumerate()
+        .filter(|(_, tab)| Some(tab.alias.as_str()) == alias);
+    for (ordinal, (ix, tab)) in group.enumerate() {
+        row = row.child(tab_pill(
+            ix,
+            tab,
+            tab.session_label(ordinal + 1),
+            ix == active,
+            t,
+            cx,
+        ));
     }
-    row
+    div()
+        .min_w_0()
+        .flex()
+        .items_center()
+        .gap(px(6.))
+        .when_some(alias, |head, name| {
+            head.child(
+                div()
+                    .max_w(px(160.))
+                    .truncate()
+                    .text_sm()
+                    .text_color(t.text)
+                    .child(name.to_owned()),
+            )
+        })
+        .child(row)
 }
 
 /// Natural-width session tabs from Zeron screens/shell/session_tabs.luau. Each badge
@@ -125,13 +154,14 @@ pub fn strip(
 fn tab_pill(
     ix: usize,
     tab: &TabInfo,
+    label: String,
     active: bool,
     t: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let dragged = DraggedTab {
         ix,
-        label: SharedString::from(middle_ellipsis(tab.label(), 18)),
+        label: SharedString::from(middle_ellipsis(&label, 18)),
         background: t.popup,
         color: t.text,
     };
@@ -202,7 +232,7 @@ fn tab_pill(
                 .whitespace_nowrap()
                 .text_ellipsis_start()
                 .font_weight(FontWeight::MEDIUM)
-                .child(SharedString::from(tab.label().to_owned()))
+                .child(SharedString::from(label))
                 .into_any_element(),
         })
         .when(tab.broadcast, |el| {
