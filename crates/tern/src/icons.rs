@@ -26,6 +26,12 @@ macro_rules! icon_assets {
                     $(concat!("icons/", $file, ".svg") => Some(Cow::Borrowed(
                         include_bytes!(concat!("../assets/icons/", $file, ".svg")).as_slice(),
                     )),)+
+                    "intro/clouds-left.png" => Some(Cow::Borrowed(include_bytes!("../assets/intro/clouds-left.png").as_slice())),
+                    "intro/clouds-mid.png" => Some(Cow::Borrowed(include_bytes!("../assets/intro/clouds-mid.png").as_slice())),
+                    "intro/clouds-right.png" => Some(Cow::Borrowed(include_bytes!("../assets/intro/clouds-right.png").as_slice())),
+                    "intro/plate-1-night.jpg" => Some(Cow::Borrowed(include_bytes!("../assets/intro/plate-1-night.jpg").as_slice())),
+                    "intro/plate-2-bluehour.jpg" => Some(Cow::Borrowed(include_bytes!("../assets/intro/plate-2-bluehour.jpg").as_slice())),
+                    "intro/plate-3-sunrise.jpg" => Some(Cow::Borrowed(include_bytes!("../assets/intro/plate-3-sunrise.jpg").as_slice())),
                     _ => None,
                 })
             }

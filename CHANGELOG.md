@@ -4,6 +4,10 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Added
+
+- First-host onboarding opens on an animated seascape and offers a new SSH connection or an import from `~/.ssh/config`. Reduce Motion shows the sunrise immediately.
+
 ## [0.1.4] - 2026-11-18
 
 ### Security

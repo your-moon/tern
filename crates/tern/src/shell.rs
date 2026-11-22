@@ -161,6 +161,8 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 sync_ui: None,
                 auto_sync: sync_ui::AutoSync::default(),
                 vault_ui: None,
+                intro_entered: false,
+                launched: std::time::Instant::now(),
                 last_input: std::time::Instant::now(),
                 toasts: toast::Toasts::new(),
                 tab_scroll: gpui::ScrollHandle::new(),
@@ -253,6 +255,8 @@ pub struct Shell {
     sync_ui: Option<sync_ui::SyncUi>,
     auto_sync: sync_ui::AutoSync,
     vault_ui: Option<vault_ui::VaultUi>,
+    intro_entered: bool,
+    launched: std::time::Instant,
     /// The last key or mouse input to the window, for the vault's idle lock.
     last_input: std::time::Instant,
     toasts: toast::Toasts,
@@ -483,6 +487,7 @@ impl Shell {
     /// wallpaper `hero` (the picture filling the tile) under its text.
     fn panel_content(
         &self,
+        window: &mut Window,
         hero: Option<AnyElement>,
         panel_bg: gpui::Hsla,
         cx: &mut Context<Self>,
@@ -491,6 +496,9 @@ impl Shell {
             return self.render_panes(tab, cx);
         }
         let t = self.theme;
+        if self.hosts.is_empty() && self.error.is_none() && self.settings.wallpaper.is_none() {
+            return self.welcome(window, cx);
+        }
         let keymap = cx.global::<crate::keymap::Keymap>();
         let hint = |id: crate::keymap::ShortcutId, label: &'static str| {
             div()
@@ -578,6 +586,9 @@ impl Shell {
             .into_any_element()
     }
 }
+
+#[path = "intro.rs"]
+mod intro;
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -729,6 +740,14 @@ impl Render for Shell {
             ))
             .child(match self.settings_page {
                 Some(section) => self.render_settings(section, window, cx),
+                None if !self.intro_entered
+                    && self.hosts.is_empty()
+                    && self.tabs.is_empty()
+                    && self.error.is_none()
+                    && self.settings.wallpaper.is_none() =>
+                {
+                    self.welcome(window, cx)
+                }
                 None => div()
                     .flex_1()
                     .min_h_0()
@@ -741,7 +760,7 @@ impl Render for Shell {
                                 div()
                                     .flex_1()
                                     .min_h_0()
-                                    .child(self.panel_content(hero, panel_bg, cx)),
+                                    .child(self.panel_content(window, hero, panel_bg, cx)),
                             )
                             .when_some(status_line, |el, line| el.child(line)),
                     )
