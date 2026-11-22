@@ -218,10 +218,11 @@ mod tests {
         }
     }
 
-    /// Faint text keeps 3:1, not 4.5: zeron's light faint (3.9 on its shell) is left as it is.
+    /// Exercise a faint ink between the incidental and body-text contrast thresholds.
     #[test]
     fn faint_text_that_clears_three_to_one_is_not_pushed_further() {
-        let base = Theme::zeron_light();
+        let mut base = Theme::zeron_light();
+        base.faint = hex(0x797981);
         let theme = base.tinted([255, 255, 255]);
         let surfaces = [theme.shell, theme.popup, theme.terminal_background];
         let worst = surfaces

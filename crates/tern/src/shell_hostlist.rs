@@ -48,6 +48,15 @@ impl HostList {
 }
 
 impl Shell {
+    pub(super) fn showing_intro(&self) -> bool {
+        !self.intro_entered
+            && self.settings_page.is_none()
+            && self.hosts.is_empty()
+            && self.tabs.is_empty()
+            && self.error.is_none()
+            && self.settings.wallpaper.is_none()
+    }
+
     pub(super) fn search_query(&self, cx: &gpui::App) -> String {
         self.hostlist.search.read(cx).text().to_owned()
     }
@@ -55,10 +64,11 @@ impl Shell {
     /// Moves the caret into the sidebar's search box, opening the sidebar and leaving
     /// Settings first when needed.
     pub(super) fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.settings_page = None;
+        self.leave_settings(window, cx);
+        self.intro_entered = true;
         self.picker = None;
         if self.settings.sidebar_collapsed {
-            self.toggle_sidebar(cx);
+            self.toggle_sidebar(false, cx);
         }
         let focus = self.hostlist.search.focus_handle(cx);
         window.focus(&focus, cx);
@@ -87,9 +97,15 @@ impl Shell {
             "enter" => {
                 let query = self.search_query(cx);
                 let top = sidebar::search(&query, &self.connections).first().copied();
-                if let Some(host) = top.and_then(|ix| self.hosts.get(ix).cloned()) {
+                let alias = top.map(|ix| self.hosts[ix].alias.clone()).or_else(|| {
+                    let infos = self.tab_infos(cx);
+                    sidebar::unsaved_matches(&query, &self.hosts, &infos)
+                        .first()
+                        .map(|&ix| infos[ix].alias.clone())
+                });
+                if let Some(alias) = alias {
                     self.clear_search(cx);
-                    self.connect_host(host, window, cx);
+                    self.select_connection(&alias, window, cx);
                 }
             }
             _ => return,

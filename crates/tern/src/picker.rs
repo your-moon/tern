@@ -203,7 +203,7 @@ impl Shell {
 
 /// Results list height: zeron's `palette_results_height`.
 pub(crate) fn results_height(viewport: Size<Pixels>) -> f32 {
-    (f32::from(viewport.height) - 180.0).clamp(100.0, 360.0)
+    (f32::from(viewport.height) - 204.0).clamp(160.0, 440.0)
 }
 
 pub fn render(
@@ -224,7 +224,7 @@ pub fn render(
             .mx(px(4.))
             .px(px(12.))
             .py(px(4.))
-            .min_h(px(30.))
+            .min_h(px(52.))
             .rounded(px(10.))
             .flex()
             .items_center()
@@ -241,19 +241,30 @@ pub fn render(
                 shell.connect_host(target.clone(), window, cx);
             }))
             .child(
-                div()
-                    .text_sm()
-                    .font_weight(FontWeight::MEDIUM)
-                    .child(SharedString::from(host.alias.clone())),
+                crate::icons::icon(crate::icons::SERVER)
+                    .size(px(18.))
+                    .text_color(t.muted),
             )
             .child(
                 div()
                     .flex_1()
                     .min_w_0()
-                    .truncate()
-                    .text_xs()
-                    .text_color(t.muted)
-                    .child(SharedString::from(sidebar::address(host))),
+                    .flex()
+                    .flex_col()
+                    .child(
+                        div()
+                            .truncate()
+                            .text_size(px(13.))
+                            .font_weight(FontWeight::MEDIUM)
+                            .child(host.alias.clone()),
+                    )
+                    .child(
+                        div()
+                            .truncate()
+                            .text_xs()
+                            .text_color(t.muted)
+                            .child(sidebar::address(host)),
+                    ),
             )
             .when(
                 picker.query.is_empty() && recent.contains(&host.alias),
@@ -268,7 +279,7 @@ pub fn render(
     let card = div()
         .id("host-picker")
         .track_focus(&picker.focus)
-        .w(px(560.0_f32.min(f32::from(viewport.width) - 32.0)))
+        .w(px(640.0_f32.min(f32::from(viewport.width) - 32.0)))
         .flex()
         .flex_col()
         .rounded(px(16.))
@@ -280,7 +291,7 @@ pub fn render(
         .on_mouse_down_out(cx.listener(|shell, _, window, cx| shell.close_picker(window, cx)))
         .child(
             div()
-                .min_h(px(44.))
+                .min_h(px(52.))
                 .px(px(16.))
                 .py(px(8.))
                 .flex()
@@ -349,7 +360,7 @@ pub fn render(
         .child(
             div()
                 .px(px(16.))
-                .py(px(7.))
+                .min_h(px(40.))
                 .border_t_1()
                 .border_color(t.hairline)
                 .flex()
@@ -366,9 +377,10 @@ pub fn render(
                 .w(viewport.width)
                 .h(viewport.height)
                 .bg(t.scrim(0.35))
+                .pt(px(88.))
                 .flex()
+                .flex_col()
                 .items_center()
-                .justify_center()
                 .child(card),
         ),
     )

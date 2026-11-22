@@ -58,7 +58,7 @@ jobs:
           cp "target/${{ matrix.target }}/release/tern" "dist/$name/tern"
           cp packaging/linux/tern.desktop "dist/$name/tern.desktop"
           cp packaging/linux/tern.png "dist/$name/tern.png"
-          cp LICENSE README.md "dist/$name/"
+          cp crates/tern/assets/fonts/licenses/*.txt packaging/*-LICENSE.txt LICENSE README.md "dist/$name/"
           tar -C dist -czf "dist/$name.tar.gz" "$name"
           echo "ASSET=dist/$name.tar.gz" >> "$GITHUB_ENV"
       - name: Package (Windows)
@@ -68,8 +68,8 @@ jobs:
           $name = "tern-${{ steps.version.outputs.version }}-windows-x86_64"
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/tern.exe" "dist/tern.exe"
-          Copy-Item LICENSE, README.md dist/
-          Compress-Archive -Path dist/tern.exe, dist/LICENSE, dist/README.md -DestinationPath "dist/$name.zip" -Force
+          Copy-Item crates/tern/assets/fonts/licenses/*.txt, packaging/*-LICENSE.txt, LICENSE, README.md dist/
+          Compress-Archive -Path dist/tern.exe, dist/LICENSE, dist/*.txt, dist/README.md -DestinationPath "dist/$name.zip" -Force
           "ASSET=dist/$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Upload the build
         if: runner.os != 'macOS'

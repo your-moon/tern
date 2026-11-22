@@ -12,6 +12,7 @@ use gpui::{
 
 #[path = "shell_settings_nav.rs"]
 mod nav;
+pub(super) use nav::NavSearch;
 
 use super::Shell;
 use crate::keymap::{Keymap, Record, ShortcutId, badge, record};
@@ -83,27 +84,39 @@ impl Section {
 }
 
 impl Shell {
-    pub(crate) fn toggle_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn leave_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.settings_page.take().is_some() {
+            self.settings_search.clear(cx);
+            self.context_menu = None;
+            self.recording = None;
+            self.record_interceptor = None;
+            self.close_theme_picker(false, window, cx);
+        }
+    }
+
+    pub(crate) fn toggle_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.settings_page.is_some() {
+            self.leave_settings(window, cx);
             self.restore_focus(window, cx);
         } else {
             self.picker = None;
-            self.settings_page = Some(Section::Appearance);
+            self.select_section(Section::Appearance, cx);
             window.focus(&self.focus, cx);
-            cx.notify();
         }
     }
 
     pub(crate) fn open_settings_at_sync(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.picker = None;
-        self.settings_page = Some(Section::Sync);
-        self.ensure_sync_ui(cx);
+        self.select_section(Section::Sync, cx);
         window.focus(&self.focus, cx);
-        cx.notify();
     }
 
     /// Opens `section` and starts whatever it shows that loads lazily.
-    fn select_section(&mut self, section: Section, cx: &mut Context<Self>) {
+    pub(super) fn select_section(&mut self, section: Section, cx: &mut Context<Self>) {
+        self.settings_search.clear(cx);
+        self.recording = None;
+        self.record_interceptor = None;
+        self.record_notice = None;
         self.settings_page = Some(section);
         if section == Section::Sync {
             self.ensure_sync_ui(cx);
@@ -136,14 +149,12 @@ impl Shell {
             .flex_1()
             .min_h_0()
             .flex()
-            .child(self.side_tile(
-                super::look::snap(self.settings.sidebar_width, self.frame.scale),
-                nav,
-            ))
+            .relative()
+            .child(self.side_tile(self.sidebar_now(), nav))
             // The page is the body's main tile, so it carries the same tint as every other
             // view of it over a wallpaper.
             .child(
-                self.main_tile(self.panel_background()).child(
+                self.main_tile(self.theme.page_surface()).child(
                     div()
                         .id("settings-scroll")
                         .flex_1()
@@ -152,6 +163,10 @@ impl Shell {
                         .overflow_y_scroll()
                         .child(page),
                 ),
+            )
+            .when(
+                !self.settings.sidebar_collapsed && self.sidebar_tween.is_none(),
+                |el| el.child(self.resize_handle(cx)),
             )
             .into_any_element()
     }
@@ -190,7 +205,14 @@ impl Shell {
             appearance_modes = appearance_modes.child(
                 w::button(&t, id, label)
                     .when(selected, |el| {
-                        el.bg(t.ink(0.18)).font_weight(gpui::FontWeight::MEDIUM)
+                        el.bg(if t.light {
+                            gpui::rgba(0xffffffeb).into()
+                        } else {
+                            t.ink(0.18)
+                        })
+                        .border_1()
+                        .border_color(t.border)
+                        .font_weight(gpui::FontWeight::MEDIUM)
                     })
                     .on_click(cx.listener(move |s, _, _, cx| {
                         s.update_settings(|st| st.appearance = mode, cx);
@@ -208,7 +230,7 @@ impl Shell {
                     &t,
                     true,
                     "Appearance",
-                    Some("System follows macOS; the default terminal colours follow it too".into()),
+                    Some("System follows your device; the default terminal colours follow it too".into()),
                     appearance_modes,
                 ))
                 .child(w::row(
@@ -247,28 +269,35 @@ impl Shell {
                     false,
                     "Terminal theme",
                     Some(
-                        "For every host without its own; set one per host from the sidebar".into(),
+                        "Default for this appearance. Individual hosts can use their own theme.".into(),
                     ),
                     w::button(
                         &t,
                         "theme-default",
                         self.settings
-                            .terminal_theme
-                            .clone()
+                            .terminal_scheme(t.light)
+                            .cloned()
                             .unwrap_or_else(|| crate::theme::themes::default_name(t.light).to_owned()),
                     )
                     .on_click(cx.listener(|s, _, window, cx| {
-                        s.open_theme_picker(super::ThemeTarget::Default, window, cx)
+                        s.open_theme_picker(super::ThemeTarget::Default { light: s.theme.light }, window, cx)
                     })),
                 )),
             ))
             .child(w::section(
                 &t,
-                "Terminal text",
-                w::card(&t).child(w::row(
+                "Fonts",
+                w::card(&t)
+                .child(w::row(&t, true, "Interface font", None,
+                    self.font_button(super::menu::FontTarget::Interface, cx),
+                ))
+                .child(w::row(&t, false, "Terminal font", None,
+                    self.font_button(super::menu::FontTarget::Terminal, cx),
+                ))
+                .child(w::row(
                     &t,
-                    true,
-                    "Font size",
+                    false,
+                    "Terminal font size",
                     Some(
                         format!(
                             "{FONT_MIN:.0}–{FONT_MAX:.0} pt · {} {} {}",

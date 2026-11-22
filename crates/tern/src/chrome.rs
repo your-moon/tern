@@ -19,7 +19,12 @@ use crate::hover::{Accessible as _, HoverFade as _};
 use crate::settings::{SIDEBAR_MAX, SIDEBAR_MIN};
 use crate::theme::{SPACE_SM, TITLEBAR_HEIGHT, TITLEBAR_TOP_PAD, Theme, titlebar_content_start};
 
-actions!(tern, [Quit, Hide, HideOthers, ShowAll, Minimize, Zoom]);
+actions!(
+    tern,
+    [
+        Quit, Hide, HideOthers, ShowAll, Minimize, Zoom, GoBack, GoForward
+    ]
+);
 
 pub fn init_menus(cx: &mut App) {
     cx.on_action(|_: &Quit, cx| cx.quit());
@@ -70,6 +75,8 @@ pub fn menu_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-h", Hide, None),
         KeyBinding::new("alt-cmd-h", HideOthers, None),
         KeyBinding::new("cmd-m", Minimize, None),
+        KeyBinding::new("cmd-[", GoBack, None),
+        KeyBinding::new("cmd-]", GoForward, None),
     ]
 }
 
@@ -79,23 +86,25 @@ fn with_active_window(cx: &mut App, f: impl FnOnce(&mut Window)) {
     }
 }
 
-/// zeron's titlebar cluster: the sidebar toggle and + (find a host) at x = 88, 24 pt buttons,
-/// 16 pt icons, then the tabs.
+/// Zeron ds/title_bar.luau: sidebar toggle, Back and Forward, followed by the app action and tabs.
 pub fn render_titlebar(
     t: &Theme,
-    fullscreen: bool,
+    window: &Window,
     sidebar_open: bool,
+    navigation: (bool, bool),
     tabs: impl IntoElement,
     tint: Option<gpui::Hsla>,
     cx: &mut gpui::Context<crate::shell::Shell>,
 ) -> impl IntoElement {
+    let fullscreen = window.is_fullscreen();
+    let windows_caption = cfg!(windows) && !fullscreen;
     div()
         .h(px(TITLEBAR_HEIGHT))
         .flex_none()
         .when_some(tint, |el, c| el.bg(c))
         .pt(px(TITLEBAR_TOP_PAD))
         .pl(px(titlebar_content_start(fullscreen)))
-        .pr(px(SPACE_SM))
+        .when(!windows_caption, |bar| bar.pr(px(SPACE_SM)))
         .flex()
         .items_center()
         .gap(px(SPACE_SM))
@@ -107,21 +116,52 @@ pub fn render_titlebar(
                 .child(
                     control("toggle-sidebar", t)
                         .icon_button("Toggle sidebar", t)
-                        .on_click(cx.listener(|s, _, _, cx| s.toggle_sidebar(cx)))
+                        .on_click(cx.listener(|s, _, _, cx| s.toggle_sidebar(true, cx)))
                         .child(crate::icons::sidebar_glyph(sidebar_open, 16., t.muted)),
                 )
-                .child(
-                    control("find-host", t)
-                        .icon_button("New tab: find a host", t)
-                        .on_click(cx.listener(|s, _, w, cx| s.toggle_picker(w, cx)))
-                        .child(
-                            crate::icons::icon(crate::icons::PLUS)
-                                .size(px(16.))
-                                .text_color(t.muted),
+                .child(div().w(px(4.)))
+                .children(
+                    [
+                        (
+                            "nav-previous",
+                            "Back",
+                            crate::icons::ARROW_LEFT,
+                            false,
+                            navigation.0,
                         ),
+                        (
+                            "nav-next",
+                            "Forward",
+                            crate::icons::ARROW_RIGHT,
+                            true,
+                            navigation.1,
+                        ),
+                    ]
+                    .into_iter()
+                    .map(|(id, label, glyph, forward, enabled)| {
+                        control(id, t)
+                            .icon_button(label, t)
+                            .when(!enabled, |el| el.opacity(0.35).cursor_default())
+                            .when(enabled, |el| {
+                                el.on_click(
+                                    cx.listener(move |s, _, w, cx| s.navigate(forward, w, cx)),
+                                )
+                            })
+                            .child(crate::icons::icon(glyph).size(px(21.)).text_color(t.muted))
+                    }),
                 ),
         )
         .child(tabs)
+        .child(
+            control("new-workspace-session", t)
+                .icon_button("New terminal", t)
+                .on_click(cx.listener(|s, _, w, cx| s.new_workspace_session(w, cx)))
+                .child(
+                    crate::icons::icon(crate::icons::PLUS)
+                        .size(px(16.))
+                        .text_color(t.muted),
+                ),
+        )
         .child(
             div()
                 // The drag strip keeps a grab area even when the tabs fill the bar.
@@ -131,6 +171,39 @@ pub fn render_titlebar(
                 .window_control_area(WindowControlArea::Drag)
                 .on_mouse_down(MouseButton::Left, |_, window, _| window.start_window_move()),
         )
+        .when(windows_caption, |bar| {
+            let (zoom, glyph) = if window.is_maximized() {
+                ("Restore", "\u{e923}")
+            } else {
+                ("Maximize", "\u{e922}")
+            };
+            bar.child(
+                div().flex().h_full().flex_none().children(
+                    [
+                        ("Minimize", "\u{e921}", WindowControlArea::Min),
+                        (zoom, glyph, WindowControlArea::Max),
+                        ("Close", "\u{e8bb}", WindowControlArea::Close),
+                    ]
+                    .into_iter()
+                    .map(|(label, glyph, area)| {
+                        div()
+                            .id(label)
+                            .icon_button(label, t)
+                            .w(px(46.))
+                            .h_full()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .font_family("Segoe MDL2 Assets")
+                            .text_size(px(10.))
+                            .text_color(t.text)
+                            .hover(|button| button.bg(t.row_hover))
+                            .window_control_area(area)
+                            .child(glyph)
+                    }),
+                ),
+            )
+        })
 }
 
 fn control(id: &'static str, t: &Theme) -> gpui::Stateful<gpui::Div> {
@@ -140,7 +213,7 @@ fn control(id: &'static str, t: &Theme) -> gpui::Stateful<gpui::Div> {
         .flex()
         .items_center()
         .justify_center()
-        .rounded(px(6.))
+        .rounded(px(8.))
         .cursor_pointer()
         .hover_fade(
             format!("titlebar-{id}"),

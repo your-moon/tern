@@ -103,12 +103,14 @@
       <p>Press <kbd>⌘K</kbd> and type a few letters: tern finds the host, ordered by what you used last, and connects. Groups, tags, ProxyJump and port forwards are set once per host, and a dropped network reconnects on its own.</p>
     </div>
     <div class="tabs" role="tablist" aria-label="Connect">
-      <button type="button" role="tab" aria-controls="connect-picker" aria-selected="true">Host picker</button>
+      <button type="button" role="tab" aria-controls="connect-overview" aria-selected="true">Connections</button>
+      <button type="button" role="tab" aria-controls="connect-picker" aria-selected="false">Host picker</button>
       <button type="button" role="tab" aria-controls="connect-session" aria-selected="false">Session</button>
     </div>
     <figure class="feature-frame">
-      <div class="tab-panel" role="tabpanel" id="connect-picker"><img src="assets/picker.jpg" width="1600" height="1000" loading="lazy" alt="The ⌘K host picker filtering saved hosts"></div>
-      <div class="tab-panel" role="tabpanel" id="connect-session" hidden><img src="assets/terminal.jpg" width="1600" height="1000" loading="lazy" alt="tern connected to web-01 and running htop"></div>
+      <div class="tab-panel" role="tabpanel" id="connect-overview"><img src="assets/connections.jpg" width="1600" height="1068" loading="lazy" alt="Connections grouped by host, with an active terminal under web-01"></div>
+      <div class="tab-panel" role="tabpanel" id="connect-picker" hidden><img src="assets/picker.jpg" width="1600" height="1068" loading="lazy" alt="The ⌘K host picker filtering saved hosts"></div>
+      <div class="tab-panel" role="tabpanel" id="connect-session" hidden><img src="assets/terminal.jpg" width="1600" height="1068" loading="lazy" alt="tern connected to web-01 and running htop"></div>
     </figure>
   </section>
 
@@ -121,7 +123,7 @@
       <p>Logins come from your SSH key, your password manager (any command, like <code>op read …</code> or <code>pass show …</code>), or tern's encrypted vault. At a sudo prompt, press <kbd>⌘\</kbd> (<kbd>Ctrl+Shift+\</kbd> on Windows and Linux) and tern types it. Never on its own.</p>
     </div>
     <figure class="feature-frame">
-      <img src="assets/docker.jpg" width="1600" height="1000" loading="lazy" alt="sudo docker ps, with the sudo password filled by ⌘\">
+      <img src="assets/docker.jpg" width="1600" height="1068" loading="lazy" alt="sudo docker ps, with the sudo password filled by ⌘\">
     </figure>
   </section>
 
@@ -139,9 +141,9 @@
       <button type="button" role="tab" aria-controls="work-snippets" aria-selected="false">Snippets</button>
     </div>
     <figure class="feature-frame">
-      <div class="tab-panel" role="tabpanel" id="work-split"><img src="assets/split.jpg" width="1600" height="1000" loading="lazy" alt="Two panes side by side, with find in scrollback"></div>
-      <div class="tab-panel" role="tabpanel" id="work-files" hidden><img src="assets/sftp.jpg" width="1600" height="1000" loading="lazy" alt="The SFTP side panel listing a remote home folder"></div>
-      <div class="tab-panel" role="tabpanel" id="work-snippets" hidden><img src="assets/snippets.jpg" width="1600" height="1000" loading="lazy" alt="The snippets picker filtering docker commands"></div>
+      <div class="tab-panel" role="tabpanel" id="work-split"><img src="assets/split.jpg" width="1600" height="1068" loading="lazy" alt="Two panes side by side, with find in scrollback"></div>
+      <div class="tab-panel" role="tabpanel" id="work-files" hidden><img src="assets/sftp.jpg" width="1600" height="1068" loading="lazy" alt="The SFTP side panel listing a remote home folder"></div>
+      <div class="tab-panel" role="tabpanel" id="work-snippets" hidden><img src="assets/snippets.jpg" width="1600" height="1068" loading="lazy" alt="The snippets picker filtering docker commands"></div>
     </figure>
   </section>
 
@@ -186,14 +188,14 @@
       <p>Seven public-domain artworks built in, or any image. The window takes its colours from it and keeps every line readable, in light, dark or following your system. Any monospace font, any of 725 terminal themes.</p>
     </div>
     <div class="tabs" role="tablist" aria-label="Make it yours">
-      <button type="button" role="tab" aria-controls="look-wallpaper" aria-selected="true">Wallpaper</button>
+      <button type="button" role="tab" aria-controls="look-wallpaper" aria-selected="true">Dark</button>
       <button type="button" role="tab" aria-controls="look-light" aria-selected="false">Light</button>
       <button type="button" role="tab" aria-controls="look-settings" aria-selected="false">Settings</button>
     </div>
     <figure class="feature-frame">
-      <div class="tab-panel" role="tabpanel" id="look-wallpaper"><img src="assets/wallpaper.jpg" width="1600" height="1000" loading="lazy" alt="Hosts in a frosted sidebar over Hokusai's Great Wave"></div>
-      <div class="tab-panel" role="tabpanel" id="look-light" hidden><img src="assets/light.jpg" width="1600" height="1000" loading="lazy" alt="tern in light appearance over Van Gogh's Wheat Field"></div>
-      <div class="tab-panel" role="tabpanel" id="look-settings" hidden><img src="assets/settings.jpg" width="1600" height="1000" loading="lazy" alt="Settings, Appearance, with the wallpaper gallery"></div>
+      <div class="tab-panel" role="tabpanel" id="look-wallpaper"><img src="assets/wallpaper.jpg" width="1600" height="1068" loading="lazy" alt="The Connections page in dark appearance"></div>
+      <div class="tab-panel" role="tabpanel" id="look-light" hidden><img src="assets/light.jpg" width="1600" height="1068" loading="lazy" alt="A terminal connected to web-01 in light appearance"></div>
+      <div class="tab-panel" role="tabpanel" id="look-settings" hidden><img src="assets/settings.jpg" width="1600" height="1068" loading="lazy" alt="Settings, Appearance, with the wallpaper gallery"></div>
     </figure>
   </section>
 

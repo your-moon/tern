@@ -30,7 +30,7 @@ impl Shell {
         self.settings
             .host_themes
             .get(alias)
-            .or(self.settings.terminal_theme.as_ref())
+            .or(self.settings.terminal_scheme(self.theme.light))
             .and_then(|name| crate::theme::themes::find(name))
     }
 
@@ -111,22 +111,21 @@ impl Shell {
     }
 
     /// The strip under the active tab's terminal, when the setting is on.
-    pub(super) fn render_status_line(
-        &self,
-        bg: gpui::Hsla,
-        cx: &App,
-    ) -> Option<impl IntoElement + use<>> {
+    pub(super) fn render_status_line(&self, cx: &App) -> Option<impl IntoElement + use<>> {
         if !self.settings.show_status_line {
             return None;
         }
-        let session = self.tabs.get(self.active)?.session().read(cx);
+        let tab = self.tabs.get(self.active)?;
+        let session = tab.session().read(cx);
+        let palette = self.terminal_theme(&tab.alias);
         Some(statusline::render(
             &self.theme,
             &session.label(),
             Dot::of(&session.status, session.is_asking()),
             session.latency(),
             session.elapsed(),
-            bg,
+            self.veil(palette.background),
+            palette.foreground,
         ))
     }
 
@@ -229,7 +228,9 @@ impl Shell {
                 .inset_0()
                 .size_full()
                 .object_fit(gpui::ObjectFit::Cover)
-                .opacity(self.settings.wallpaper_hero_opacity)
+                .opacity(
+                    self.settings.wallpaper_hero_opacity * (1. - self.window_fill().unwrap_or(0.)),
+                )
                 .into_any_element(),
         ]
     }
@@ -240,44 +241,46 @@ impl Shell {
         self.window_fill().map(|alpha| colour.opacity(alpha))
     }
 
-    /// A fixed-width tile at the left of the body (the sidebar, or Settings' nav) with the
-    /// separator on its right edge. Clipped to `width`, so collapsing never reflows its rows.
+    /// Sidebar flush with the window and the adjoining workspace.
     pub(super) fn side_tile(&self, width: f32, content: impl IntoElement) -> gpui::Div {
         div()
             .flex_none()
             .relative()
-            .h_full()
             .w(px(width))
+            .min_h_0()
             .overflow_hidden()
-            .when_some(self.tile_tint(self.theme.shell), |el, tint| el.bg(tint))
+            .bg(if self.settings_page.is_some() {
+                self.tile_tint(self.theme.page_surface())
+                    .unwrap_or(self.theme.page_surface())
+            } else if let Some(veil) = self.tile_tint(self.theme.shell) {
+                veil
+            } else if crate::theme::BLURS_BEHIND && !crate::theme::low_dpi() {
+                gpui::rgba(if self.theme.light {
+                    0x1a1a1a0d
+                } else {
+                    0xebebeb0d
+                })
+                .into()
+            } else {
+                self.theme.page_surface()
+            })
             .child(content)
-            .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .bottom_0()
-                    .right_0()
-                    .w(px(1.))
-                    .bg(self.theme.hairline),
-            )
     }
 
-    /// The main tile: fills what the side tile leaves. When it shows a terminal over a
-    /// full-window wallpaper it paints nothing, as the terminal draws its own glass at the same
-    /// alpha; anything else it shows (Settings, the empty view) sits on the tile's tint.
+    /// The terminal paints its own translucent background over a wallpaper.
     pub(super) fn main_tile(&self, panel: Hsla) -> gpui::Div {
-        let shows_terminal = !self.tabs.is_empty() && self.settings_page.is_none();
-        let terminal_glass = shows_terminal && self.window_fill().is_some();
+        let shows_terminal = self.tabs.get(self.active).is_some() && self.settings_page.is_none();
+        let tint = self.tile_tint(panel);
         div()
             .flex_1()
+            .when(!shows_terminal || tint.is_none(), |el| {
+                el.bg(tint.unwrap_or(panel))
+            })
             .min_w_0()
             .relative()
             .overflow_hidden()
             .flex()
             .flex_col()
-            .when(!terminal_glass, |el| {
-                el.bg(self.tile_tint(panel).unwrap_or(panel))
-            })
     }
 }
 

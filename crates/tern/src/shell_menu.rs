@@ -15,6 +15,17 @@ use tern_ssh::{ConnectSpec, HostEntry};
 use super::{Shell, ThemeTarget};
 use crate::icons::{self, icon};
 
+#[derive(Clone, Copy)]
+pub(super) enum FontTarget {
+    Interface,
+    Terminal,
+}
+
+#[path = "font_families.rs"]
+mod font_families;
+#[path = "shell_font_picker.rs"]
+mod font_picker;
+
 type Run = Rc<dyn Fn(&mut Shell, &mut Window, &mut Context<Shell>)>;
 
 enum Item {
@@ -53,7 +64,12 @@ fn destructive(
     }
 }
 
-pub(super) struct ContextMenu {
+pub(super) enum ContextMenu {
+    Actions(ActionMenu),
+    Fonts(font_picker::FontMenu),
+}
+
+pub(super) struct ActionMenu {
     position: Point<Pixels>,
     items: Vec<Item>,
 }
@@ -91,7 +107,7 @@ impl Shell {
             s.confirm_delete = Some(editable);
             s.delete_connection(editable, cx);
         }));
-        self.context_menu = Some(ContextMenu { position, items });
+        self.context_menu = Some(ContextMenu::Actions(ActionMenu { position, items }));
         cx.notify();
     }
 
@@ -123,10 +139,7 @@ impl Shell {
         items.push(action(
             icons::PLUS,
             "New tab to this host",
-            move |s, w, cx| match s.hosts.iter().find(|h| h.alias == again).cloned() {
-                Some(host) => s.open_new_tab(&host, w, cx),
-                None => s.connect_target(&again, w, cx),
-            },
+            move |s, w, cx| s.new_session_for(&again, w, cx),
         ));
         items.push(action(icons::PEN, "Rename…", move |s, w, cx| {
             s.start_rename(ix, w, cx)
@@ -164,14 +177,14 @@ impl Shell {
         items.push(destructive(icons::CLOSE, "Close tab", move |s, w, cx| {
             s.close_tab_at(ix, w, cx)
         }));
-        if self.tabs.len() > 1 {
+        if self.tabs.iter().filter(|tab| tab.alias == alias).count() > 1 {
             items.push(destructive(
                 icons::CLOSE,
                 "Close other tabs",
                 move |s, w, cx| s.close_other_tabs(ix, w, cx),
             ));
         }
-        self.context_menu = Some(ContextMenu { position, items });
+        self.context_menu = Some(ContextMenu::Actions(ActionMenu { position, items }));
         cx.notify();
     }
 
@@ -193,12 +206,17 @@ impl Shell {
         items.push(destructive(icons::TRASH, "Delete", move |s, _, cx| {
             s.delete_secret(&key, cx)
         }));
-        self.context_menu = Some(ContextMenu { position, items });
+        self.context_menu = Some(ContextMenu::Actions(ActionMenu { position, items }));
         cx.notify();
     }
 
     /// A second session to the same host, even when one is already open.
-    fn open_new_tab(&mut self, host: &HostEntry, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_new_tab(
+        &mut self,
+        host: &HostEntry,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         match ConnectSpec::from_host_entry(host) {
             Ok(spec) => self.open_tab(super::Launch::Ssh(spec), host.alias.clone(), window, cx),
             Err(e) => self.notify_toast(super::ToastKind::Critical, e.to_string(), cx),
@@ -209,10 +227,12 @@ impl Shell {
         if keep >= self.tabs.len() {
             return;
         }
-        let kept = self.tabs.remove(keep);
-        self.tabs = vec![kept];
+        let id = self.tabs[keep].id;
+        let alias = self.tabs[keep].alias.clone();
+        self.tabs.retain(|tab| tab.id == id || tab.alias != alias);
+        let index = self.tabs.iter().position(|tab| tab.id == id).unwrap_or(0);
         self.sync_broadcast(cx);
-        self.activate_tab(0, window, cx);
+        self.activate_tab(index, window, cx);
     }
 
     fn close_menu(&mut self, cx: &mut Context<Self>) {
@@ -222,12 +242,15 @@ impl Shell {
     }
 
     pub(super) fn render_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let menu = self.context_menu.as_ref()?;
+        let menu = match self.context_menu.as_ref()? {
+            ContextMenu::Actions(menu) => menu,
+            ContextMenu::Fonts(menu) => return Some(self.render_font_menu(menu, cx)),
+        };
         let t = self.theme;
         let mut card = div()
             .id("context-menu")
             .occlude()
-            .min_w(px(216.))
+            .min_w(px(232.))
             .max_w(px(360.))
             .max_h(px(480.))
             .overflow_y_scroll()
@@ -259,8 +282,8 @@ impl Shell {
                         div()
                             .id(("menu-item", ix))
                             .px(px(8.))
-                            .py(px(6.))
-                            .rounded(px(7.))
+                            .min_h(px(28.))
+                            .rounded(px(4.))
                             .flex()
                             .items_center()
                             .gap(px(10.))
@@ -297,78 +320,5 @@ impl Shell {
             .priority(2)
             .into_any_element(),
         )
-    }
-
-    /// The terminal font menu: the monospace families installed on this Mac, by name.
-    pub(crate) fn open_font_menu(&mut self, position: Point<Pixels>, cx: &mut Context<Self>) {
-        let current = self.settings.terminal_font_family.clone();
-        let mut names = monospace_families(cx.text_system().all_font_names());
-        names.retain(|n| n != crate::theme::MONO_FONT);
-        names.insert(0, crate::theme::MONO_FONT.to_owned());
-        let items = names
-            .into_iter()
-            .map(|name| {
-                let chosen = current.as_deref().unwrap_or(crate::theme::MONO_FONT) == name;
-                let label = if chosen {
-                    format!("{name}  ✓")
-                } else {
-                    name.clone()
-                };
-                action(icons::TERMINAL, label, move |s, _, cx| {
-                    let family = (name != crate::theme::MONO_FONT).then(|| name.clone());
-                    s.set_terminal_font(family, cx);
-                })
-            })
-            .collect();
-        self.context_menu = Some(ContextMenu { position, items });
-        cx.notify();
-    }
-}
-
-/// Families a terminal can use: fixed-width by name (gpui exposes no monospace flag). Nerd Font
-/// "Propo" variants are proportional and left out; capped so the menu fits on screen.
-fn monospace_families(all: Vec<String>) -> Vec<String> {
-    const KNOWN: [&str; 6] = [
-        "Menlo",
-        "Monaco",
-        "Courier",
-        "Courier New",
-        "SF Mono",
-        "PT Mono",
-    ];
-    let mut names: Vec<String> = all
-        .into_iter()
-        .filter(|n| {
-            (n.contains("Mono") || n.contains("Code") || KNOWN.contains(&n.as_str()))
-                && !n.contains("Propo")
-                && !n.starts_with('.')
-        })
-        .collect();
-    names.sort();
-    names.dedup();
-    names.truncate(30);
-    names
-}
-
-#[cfg(test)]
-mod font_tests {
-    use super::monospace_families;
-
-    #[test]
-    fn keeps_fixed_width_families_and_drops_proportional_nerd_variants() {
-        let all = [
-            "JetBrainsMono Nerd Font Mono",
-            "JetBrainsMono Nerd Font Propo",
-            "Helvetica",
-            "Menlo",
-            "Fira Code",
-            ".SF NS Mono",
-        ]
-        .map(String::from)
-        .to_vec();
-        assert_eq!(
-            monospace_families(all),
-            ["Fira Code", "JetBrainsMono Nerd Font Mono", "Menlo"]
-        );
     }
 }

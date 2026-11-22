@@ -13,6 +13,7 @@ use crate::text_input::{InputColors, TextInput};
 pub(super) struct Rename {
     pub ix: usize,
     pub input: Entity<TextInput>,
+    original: String,
 }
 
 impl Shell {
@@ -25,7 +26,15 @@ impl Shell {
         let Some(tab) = self.tabs.get(ix) else {
             return;
         };
-        let current = tab.title.clone().unwrap_or_else(|| tab.alias.clone());
+        let ordinal = self.tabs[..ix]
+            .iter()
+            .filter(|t| t.alias == tab.alias)
+            .count()
+            + 1;
+        let current = tab
+            .title
+            .clone()
+            .unwrap_or_else(|| format!("Terminal {ordinal}"));
         let t = self.theme;
         let colors = InputColors {
             text: t.text,
@@ -35,12 +44,17 @@ impl Shell {
         };
         let input = cx.new(|cx| {
             let mut input = TextInput::new(tab.alias.clone(), false, colors, cx);
-            input.set_text(current, cx);
+            input.set_text(current.clone(), cx);
             input.select_everything(cx);
             input
         });
+        self.show_tab(ix, window, cx);
         window.focus(&gpui::Focusable::focus_handle(input.read(cx), cx), cx);
-        self.renaming = Some(Rename { ix, input });
+        self.renaming = Some(Rename {
+            ix,
+            input,
+            original: current,
+        });
         cx.notify();
     }
 
@@ -50,7 +64,11 @@ impl Shell {
             return;
         };
         let typed = rename.input.read(cx).text().trim().to_owned();
-        if let Some(tab) = self.tabs.get_mut(rename.ix) {
+        if let Some(tab) = self
+            .tabs
+            .get_mut(rename.ix)
+            .filter(|_| typed != rename.original)
+        {
             tab.title = custom_title(&typed, &tab.alias);
         }
         self.persist_tabs();
@@ -170,7 +188,21 @@ impl Shell {
                     title: tab.title.clone(),
                 })
                 .collect(),
-            active: self.active,
+            active: self.active.min(self.tabs.len().saturating_sub(1)),
+            connections_overview: self.workspace_alias().is_none() && self.intro_entered,
+            empty_connection: self.workspaces.empty.clone(),
+            connection_sessions: self
+                .workspaces
+                .last_session
+                .iter()
+                .filter_map(|(alias, id)| {
+                    self.tabs
+                        .iter()
+                        .filter(|t| &t.alias == alias)
+                        .position(|t| t.id == *id)
+                        .map(|ix| (alias.clone(), ix))
+                })
+                .collect(),
         }
     }
 
@@ -183,23 +215,40 @@ impl Shell {
             return;
         };
         self.restoring = true;
-        for saved_tab in &saved.tabs {
+        let mut active = 0;
+        let target = saved.active_slot();
+        for (slot, saved_tab) in saved.tabs.iter().enumerate() {
             let opened = match &saved_tab.kind {
                 SavedKind::Ssh { alias } => self.reopen_idle(alias, window, cx),
                 SavedKind::Unknown => false,
             };
             if opened {
+                if slot <= target {
+                    active = self.tabs.len() - 1;
+                }
                 let title = saved_tab.title.clone();
                 if let Some(tab) = self.tabs.last_mut() {
                     tab.title = title;
                 }
             }
         }
-        self.restoring = false;
-        if !self.tabs.is_empty() {
-            let active = saved.active_slot().min(self.tabs.len() - 1);
+        for (alias, &slot) in &saved.connection_sessions {
+            if let Some(tab) = self.tabs.iter().filter(|t| &t.alias == alias).nth(slot) {
+                self.workspaces.last_session.insert(alias.clone(), tab.id);
+            }
+        }
+        if saved.connections_overview {
+            self.show_connections(window, cx);
+        } else if let Some(alias) = saved
+            .empty_connection
+            .as_ref()
+            .filter(|alias| self.hosts.iter().any(|h| &h.alias == *alias))
+        {
+            self.restore_connection_view(alias, window, cx);
+        } else if !self.tabs.is_empty() {
             self.activate_tab(active, window, cx);
         }
+        self.restoring = false;
     }
 
     /// A connection tab that does not dial yet. A host that is gone from the lists is skipped.

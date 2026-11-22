@@ -2,7 +2,6 @@
 //! Adding, editing and removing connections: the form, its vault step, and the list changes.
 
 use crate::hover::HoverFade as _;
-use gpui::prelude::FluentBuilder;
 use gpui::{
     AnyElement, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement,
     IntoElement, KeyDownEvent, ParentElement, SharedString, StatefulInteractiveElement, Styled,
@@ -714,21 +713,7 @@ pub(crate) fn button(
     primary: bool,
     t: &Theme,
 ) -> gpui::Stateful<gpui::Div> {
-    div()
-        .id(id)
-        .h(px(28.))
-        .px(px(12.))
-        .flex()
-        .items_center()
-        .rounded(px(8.))
-        .text_sm()
-        .cursor_pointer()
-        .when(primary, |el| el.bg(t.accent).text_color(t.on_accent))
-        .when(!primary, |el| {
-            el.hover_fade(format!("form-button-{id}"), t.row_hover, t.row_active)
-                .text_color(t.text)
-        })
-        .child(label.into())
+    crate::settings_widgets::action_button(t, id, label, primary)
 }
 
 /// A typed password is what makes the form need the vault; an empty field never asks the Keychain.

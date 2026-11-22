@@ -231,7 +231,7 @@ impl Shell {
         let card = div()
             .id("snippet-picker")
             .track_focus(&p.focus)
-            .w(px(560.0_f32.min(f32::from(viewport.width) - 32.0)))
+            .w(px(640.0_f32.min(f32::from(viewport.width) - 32.0)))
             .flex()
             .flex_col()
             .rounded(px(16.))
@@ -245,7 +245,7 @@ impl Shell {
             )
             .child(
                 div()
-                    .min_h(px(44.))
+                    .min_h(px(52.))
                     .px(px(16.))
                     .py(px(8.))
                     .flex()
@@ -299,7 +299,7 @@ impl Shell {
                                             .on_click(
                                                 cx.listener(|s, _, w, cx| {
                                                     s.close_snippet_picker(w, cx);
-                                                    s.settings_page = Some(Section::Snippets);
+                                                    s.select_section(Section::Snippets, cx);
                                                     w.focus(&s.focus, cx);
                                                     cx.notify();
                                                 }),

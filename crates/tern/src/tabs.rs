@@ -66,8 +66,10 @@ pub struct TabInfo {
 }
 
 impl TabInfo {
-    pub fn label(&self) -> &str {
-        self.title.as_deref().unwrap_or(&self.alias)
+    pub fn session_label(&self, ordinal: usize) -> String {
+        self.title
+            .clone()
+            .unwrap_or_else(|| format!("Terminal {ordinal}"))
     }
 }
 
@@ -100,6 +102,7 @@ impl Render for DraggedTab {
 /// they no longer fit; `scroll` keeps the active one in view.
 pub fn strip(
     tabs: &[TabInfo],
+    alias: Option<&str>,
     active: usize,
     scroll: &ScrollHandle,
     t: &Theme,
@@ -114,22 +117,62 @@ pub fn strip(
         .flex_shrink(1.)
         .overflow_x_scroll()
         .track_scroll(scroll);
-    for (ix, tab) in tabs.iter().enumerate() {
-        row = row.child(tab_pill(ix, tab, ix == active, t, cx));
+    let group = tabs
+        .iter()
+        .enumerate()
+        .filter(|(_, tab)| Some(tab.alias.as_str()) == alias);
+    // The lone default terminal is the connection. Its pill retains the close, rename,
+    // status, and context-menu controls without repeating the host in a second label.
+    let single_default = group.clone().count() == 1
+        && group
+            .clone()
+            .next()
+            .is_some_and(|(_, tab)| tab.title.is_none());
+    for (ordinal, (ix, tab)) in group.enumerate() {
+        row = row.child(tab_pill(
+            ix,
+            tab,
+            if single_default {
+                tab.alias.clone()
+            } else {
+                tab.session_label(ordinal + 1)
+            },
+            ix == active,
+            t,
+            cx,
+        ));
     }
-    row
+    div()
+        .min_w_0()
+        .flex()
+        .items_center()
+        .gap(px(6.))
+        .when_some(alias.filter(|_| !single_default), |head, name| {
+            head.child(
+                div()
+                    .max_w(px(160.))
+                    .truncate()
+                    .text_sm()
+                    .text_color(t.text)
+                    .child(name.to_owned()),
+            )
+        })
+        .child(row)
 }
 
+/// Natural-width session tabs from Zeron screens/shell/session_tabs.luau. Each badge
+/// reserves its own space outside the title’s 160-point limit.
 fn tab_pill(
     ix: usize,
     tab: &TabInfo,
+    label: String,
     active: bool,
     t: &Theme,
     cx: &mut Context<Shell>,
 ) -> impl IntoElement + use<> {
     let dragged = DraggedTab {
         ix,
-        label: SharedString::from(middle_ellipsis(tab.label(), 18)),
+        label: SharedString::from(middle_ellipsis(&label, 18)),
         background: t.popup,
         color: t.text,
     };
@@ -138,18 +181,15 @@ fn tab_pill(
     div()
         .id(("tab", ix))
         .group("tab")
-        .h(px(26.))
-        .flex_shrink(1.)
-        .min_w(px(72.))
-        .max_w(px(200.))
-        .pl(px(10.))
-        .pr(px(4.))
+        .h(px(28.))
+        .flex_none()
+        .px(px(4.))
         .flex()
         .items_center()
         .gap(px(6.))
-        .rounded(px(CONTROL_RADIUS))
+        .rounded(px(8.))
         .cursor_pointer()
-        .text_sm()
+        .text_size(px(12.))
         .when(active, |el| el.bg(t.row_active).text_color(t.text))
         .when(!active, |el| {
             el.text_color(t.muted).hover_fade(
@@ -190,19 +230,20 @@ fn tab_pill(
         .child(status_dot(("tab-dot", ix), tab.dot, t))
         .child(match renaming {
             Some(input) => div()
-                .flex_1()
-                .min_w_0()
+                .w(px(160.))
                 .child(input)
                 .on_mouse_down_out(cx.listener(|shell, _, window, cx| {
                     shell.commit_rename(window, cx);
                 }))
                 .into_any_element(),
             None => div()
-                .flex_1()
-                .min_w_0()
-                .truncate()
-                .when(active, |el| el.font_weight(FontWeight::MEDIUM))
-                .child(SharedString::from(middle_ellipsis(tab.label(), 18)))
+                .flex_none()
+                .max_w(px(160.))
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis_start()
+                .font_weight(FontWeight::MEDIUM)
+                .child(SharedString::from(label))
                 .into_any_element(),
         })
         .when(tab.broadcast, |el| {
@@ -233,7 +274,7 @@ fn tab_pill(
             div()
                 .id(("close", ix))
                 .icon_button("Close tab", t)
-                .size(px(18.))
+                .size(px(20.))
                 .flex_none()
                 .flex()
                 .items_center()

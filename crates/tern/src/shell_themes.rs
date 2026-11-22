@@ -19,7 +19,7 @@ use crate::theme::themes::{self, Scheme};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ThemeTarget {
-    Default,
+    Default { light: bool },
     Host(String),
 }
 
@@ -64,7 +64,7 @@ fn choices(target: &ThemeTarget) -> Vec<Choice> {
     if matches!(target, ThemeTarget::Host(_)) {
         out.push(Choice::FollowDefault);
     }
-    if matches!(target, ThemeTarget::Default) {
+    if matches!(target, ThemeTarget::Default { .. }) {
         out.push(Choice::Zeron);
     }
     out.extend(themes::all().iter().map(Choice::Scheme));
@@ -106,7 +106,7 @@ impl Shell {
 
     fn theme_value(&self, target: &ThemeTarget) -> Option<String> {
         match target {
-            ThemeTarget::Default => self.settings.terminal_theme.clone(),
+            ThemeTarget::Default { light } => self.settings.terminal_scheme(*light).cloned(),
             ThemeTarget::Host(alias) => self.settings.host_themes.get(alias).cloned(),
         }
     }
@@ -121,7 +121,7 @@ impl Shell {
     ) {
         let value = value.map(str::to_owned);
         let apply = |s: &mut crate::settings::Settings| match target {
-            ThemeTarget::Default => s.terminal_theme = value.clone(),
+            ThemeTarget::Default { light } => *s.terminal_scheme_mut(*light) = value.clone(),
             ThemeTarget::Host(alias) => match &value {
                 Some(v) => {
                     s.host_themes.insert(alias.clone(), v.clone());
@@ -140,7 +140,12 @@ impl Shell {
         cx.notify();
     }
 
-    fn close_theme_picker(&mut self, keep: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn close_theme_picker(
+        &mut self,
+        keep: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(picker) = self.theme_picker.take() else {
             return;
         };
@@ -221,7 +226,7 @@ impl Shell {
         let matches = self.matches();
         let active = p.active.min(matches.len().saturating_sub(1));
         let title = match &p.target {
-            ThemeTarget::Default => "Default terminal theme".to_owned(),
+            ThemeTarget::Default { .. } => "Default terminal theme".to_owned(),
             ThemeTarget::Host(alias) => format!("Theme for {alias}"),
         };
         let rows = matches.iter().enumerate().map(|(row, choice)| {
@@ -268,7 +273,7 @@ impl Shell {
         let card = div()
             .id("theme-picker")
             .track_focus(&p.focus)
-            .w(px(560.0_f32.min(f32::from(viewport.width) - 32.0)))
+            .w(px(640.0_f32.min(f32::from(viewport.width) - 32.0)))
             .flex()
             .flex_col()
             .rounded(px(16.))
@@ -305,7 +310,7 @@ impl Shell {
                 div()
                     .id("theme-results")
                     .py(px(8.))
-                    .max_h(px((f32::from(viewport.height) - 180.0).clamp(100.0, 360.0)))
+                    .max_h(px(crate::picker::results_height(viewport)))
                     .overflow_y_scroll()
                     .track_scroll(&p.scroll)
                     .flex()

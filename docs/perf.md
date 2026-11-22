@@ -54,6 +54,25 @@ macOS 26.6.2, with the screen locked, so no frames were being composited. A conn
 costs about 5 MB over an empty window. phys_footprint_peak reached 153 MB during start-up
 and connection; that transient is not explained yet (likely shader and font atlas set-up).
 
+## 2026-11-22 — 0.2.0 release gate
+
+Measured the published 0.1.4 arm64 app and the installed, notarised 0.2.0 app
+back to back on the same Mac. Both connected to the loopback demo SSH server
+with one tab, Aizen Dark and the same cached full-window wallpaper. After an
+8 s settle, recorded physical footprint with `vmmap -summary` and RSS with
+`scripts/measure-rss.sh` over 30 s. Launch Services confirmed each measured
+app was frontmost at the start and end of its sample.
+
+| Build | Final RSS (peak) | Physical footprint |
+| --- | --- | --- |
+| 0.1.4 | 117.4 MB (117.4) | 192.0 MB |
+| 0.2.0 | 120.2 MB (120.2) | 194.6 MB |
+
+Final RSS rose 2.4% and footprint rose 1.4%. Earlier samples without foreground
+verification ranged from 97.1 to 144.5 MB on 0.1.4 and 114.7 to 148.1 MB on
+the candidates. The memory maps also showed differences in resident graphics
+allocations. The table uses the paired foreground measurement.
+
 ## 2026-11-18 — 0.1.4 release gate
 
 Release builds measured back to back on an M4 Pro: one tab connected to the local demo

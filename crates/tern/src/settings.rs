@@ -8,9 +8,9 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-pub const SIDEBAR_MIN: f32 = 224.0;
+pub const SIDEBAR_MIN: f32 = 242.0;
 pub const SIDEBAR_MAX: f32 = 400.0;
-pub const SIDEBAR_DEFAULT: f32 = 256.0;
+pub const SIDEBAR_DEFAULT: f32 = 272.0;
 /// zeron `typography::FONT_SIZE_MIN/MAX` and `TERMINAL_FONT_SIZE_DEFAULT`.
 pub const FONT_MIN: f32 = 8.0;
 pub const FONT_MAX: f32 = 32.0;
@@ -58,6 +58,8 @@ pub struct Settings {
     pub sharp_text: bool,
     pub sidebar_width: f32,
     pub sidebar_collapsed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interface_font_family: Option<String>,
     pub terminal_font_size: f32,
     /// Terminal font family; `None` is the bundled Geist Mono.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -70,8 +72,11 @@ pub struct Settings {
     pub reopen_tabs: bool,
     /// Write every session's output to a log file.
     pub log_sessions: bool,
-    /// Bundled scheme for every host without its own; `None` is zeron's palette.
-    pub terminal_theme: Option<String>,
+    /// Pre-appearance setting, migrated on load.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) terminal_theme: Option<String>,
+    pub light_terminal_theme: Option<String>,
+    pub dark_terminal_theme: Option<String>,
     /// Per-host scheme by host alias, as Termius does per host.
     pub host_themes: BTreeMap<String, String>,
     /// Image (png, jpeg, webp) shown as the hero of the empty view and tinting the window's
@@ -136,6 +141,7 @@ impl Default for Settings {
             sharp_text: true,
             sidebar_width: SIDEBAR_DEFAULT,
             sidebar_collapsed: false,
+            interface_font_family: None,
             terminal_font_size: FONT_DEFAULT,
             terminal_font_family: None,
             reduce_motion: false,
@@ -143,6 +149,8 @@ impl Default for Settings {
             reopen_tabs: true,
             log_sessions: false,
             terminal_theme: None,
+            light_terminal_theme: None,
+            dark_terminal_theme: None,
             host_themes: BTreeMap::new(),
             wallpaper: None,
             wallpaper_hero_opacity: WALLPAPER_HERO_OPACITY_DEFAULT,
@@ -167,6 +175,22 @@ impl Default for Settings {
 }
 
 impl Settings {
+    pub fn terminal_scheme(&self, light: bool) -> Option<&String> {
+        if light {
+            self.light_terminal_theme.as_ref()
+        } else {
+            self.dark_terminal_theme.as_ref()
+        }
+    }
+
+    pub fn terminal_scheme_mut(&mut self, light: bool) -> &mut Option<String> {
+        if light {
+            &mut self.light_terminal_theme
+        } else {
+            &mut self.dark_terminal_theme
+        }
+    }
+
     /// Missing file → defaults. A file that does not parse is logged and replaced by defaults
     /// rather than stopping the app; fields it lacks take their defaults.
     pub fn load(dir: &Path) -> Self {
@@ -174,7 +198,16 @@ impl Settings {
             return Self::default();
         };
         match serde_json::from_str::<Self>(&text) {
-            Ok(settings) => settings.clamped(),
+            Ok(mut settings) => {
+                if let Some(old) = settings.terminal_theme.take() {
+                    let light = crate::theme::themes::find(&old).is_some_and(|scheme| {
+                        crate::wallpaper_fx::contrast_ratio(scheme.background, 0)
+                            > crate::wallpaper_fx::contrast_ratio(scheme.foreground, 0)
+                    });
+                    settings.terminal_scheme_mut(light).get_or_insert(old);
+                }
+                settings.clamped()
+            }
             Err(e) => {
                 tracing::warn!(error = %e, "settings_corrupt_using_defaults");
                 Self::default()
@@ -402,6 +435,22 @@ mod tests {
     }
 
     #[test]
+    fn a_legacy_dark_scheme_leaves_light_appearance_on_its_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir = dir.path();
+        std::fs::write(
+            dir.join(FILE_NAME),
+            r#"{"appearance":"light","terminalTheme":"Aizen Dark"}"#,
+        )
+        .unwrap();
+        let settings = Settings::load(dir);
+        assert!(settings.terminal_scheme(true).is_none());
+        assert_eq!(settings.dark_terminal_theme.as_deref(), Some("Aizen Dark"));
+        settings.save(dir).unwrap();
+        assert_eq!(Settings::load(dir), settings);
+    }
+
+    #[test]
     fn save_then_load_round_trips() {
         let dir = temp_dir("roundtrip");
         let saved = Settings {
@@ -410,13 +459,16 @@ mod tests {
             sharp_text: false,
             sidebar_width: 312.0,
             sidebar_collapsed: true,
+            interface_font_family: Some("Segoe UI".into()),
             terminal_font_size: 15.0,
             terminal_font_family: Some("JetBrainsMono Nerd Font Mono".into()),
             reduce_motion: true,
             option_as_meta: false,
             reopen_tabs: false,
             log_sessions: true,
-            terminal_theme: Some("Dracula".into()),
+            terminal_theme: None,
+            dark_terminal_theme: Some("Dracula".into()),
+            light_terminal_theme: None,
             host_themes: BTreeMap::from([("grape".into(), "Nord".into())]),
             wallpaper: Some("/tmp/w.png".into()),
             wallpaper_hero_opacity: 0.5,

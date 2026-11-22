@@ -56,6 +56,14 @@ mod gallery_ui;
 mod look;
 #[path = "shell_menu.rs"]
 mod menu;
+#[path = "shell_navigation.rs"]
+mod navigation;
+#[path = "shell_connections_overview.rs"]
+mod overview;
+#[path = "shell_workspaces.rs"]
+mod workspaces;
+use navigation::Destination;
+
 #[path = "shell_open.rs"]
 mod open;
 #[path = "shell_settings.rs"]
@@ -146,6 +154,11 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 restoring: false,
                 next_tab: 0,
                 next_pane: 0,
+                navigation: Vec::new(),
+                nav_index: 0,
+                workspaces: workspaces::Workspaces::default(),
+                nav_tab_count: 0,
+                settings_search: settings_ui::NavSearch::new(&theme, cx),
                 broadcast: None,
                 broadcast_picker: None,
                 panels: Default::default(),
@@ -161,6 +174,9 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 sync_ui: None,
                 auto_sync: sync_ui::AutoSync::default(),
                 vault_ui: None,
+                intro_entered: false,
+                intro_handoff: None,
+                launched: std::time::Instant::now(),
                 last_input: std::time::Instant::now(),
                 toasts: toast::Toasts::new(),
                 tab_scroll: gpui::ScrollHandle::new(),
@@ -237,6 +253,11 @@ pub struct Shell {
     /// Input typed in one tab also going to others, and the list that picks them.
     next_tab: broadcast_ui::TabId,
     next_pane: PaneId,
+    navigation: Vec<Destination>,
+    nav_index: usize,
+    workspaces: workspaces::Workspaces,
+    nav_tab_count: usize,
+    settings_search: settings_ui::NavSearch,
     broadcast: Option<broadcast_ui::Broadcast>,
     broadcast_picker: Option<broadcast_ui::BroadcastPicker>,
     panels: forwards_ui::Panels,
@@ -253,6 +274,9 @@ pub struct Shell {
     sync_ui: Option<sync_ui::SyncUi>,
     auto_sync: sync_ui::AutoSync,
     vault_ui: Option<vault_ui::VaultUi>,
+    intro_entered: bool,
+    intro_handoff: Option<std::time::Instant>,
+    launched: std::time::Instant,
     /// The last key or mouse input to the window, for the vault's idle lock.
     last_input: std::time::Instant,
     toasts: toast::Toasts,
@@ -342,30 +366,6 @@ impl Shell {
         cx.notify();
     }
 
-    fn sidebar_target(&self) -> f32 {
-        if self.settings.sidebar_collapsed {
-            0.0
-        } else {
-            look::snap(self.settings.sidebar_width, self.frame.scale)
-        }
-    }
-
-    /// The sidebar's width this frame: mid-tween while collapsing or expanding.
-    fn sidebar_now(&self) -> f32 {
-        self.sidebar_tween
-            .and_then(|tween| tween.sample(std::time::Instant::now()))
-            .map_or_else(
-                || self.sidebar_target(),
-                |w| look::snap(w, self.frame.scale),
-            )
-    }
-
-    pub fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
-        let from = self.sidebar_now();
-        self.update_settings(|s| s.sidebar_collapsed = !s.sidebar_collapsed, cx);
-        self.sidebar_tween = Some(WidthTween::new(from, self.sidebar_target()));
-    }
-
     /// Live drag: follows the pointer without writing the file on every move.
     fn on_sidebar_drag(&mut self, x: f32, cx: &mut Context<Self>) {
         self.settings.sidebar_width = look::snap(chrome::dragged_width(x), self.frame.scale);
@@ -414,6 +414,15 @@ impl Shell {
             .iter()
             .map(|c| c.entry_in(&self.connections))
             .collect();
+        if self
+            .workspaces
+            .empty
+            .as_ref()
+            .is_some_and(|alias| !self.hosts.iter().any(|h| &h.alias == alias))
+        {
+            self.workspaces.empty = None;
+            self.active = self.tabs.len().saturating_sub(1);
+        }
     }
 
     /// Focus back to the active terminal, or the window when there is none.
@@ -457,32 +466,11 @@ impl Shell {
         cx.notify();
     }
 
-    fn tab_infos(&self, cx: &App) -> Vec<TabInfo> {
-        self.tabs
-            .iter()
-            .enumerate()
-            .map(|(ix, tab)| TabInfo {
-                alias: tab.alias.clone(),
-                title: tab.title.clone(),
-                logging: tab.session().read(cx).is_logging(),
-                broadcast: self.is_broadcasting(tab.id),
-                dot: {
-                    let s = tab.session().read(cx);
-                    Dot::of(&s.status, s.is_asking())
-                },
-                rename: self
-                    .renaming
-                    .as_ref()
-                    .filter(|r| r.ix == ix)
-                    .map(|r| r.input.clone()),
-            })
-            .collect()
-    }
-
     /// The main panel's content: the active tab's panes, or the empty view, which carries the
     /// wallpaper `hero` (the picture filling the tile) under its text.
     fn panel_content(
         &self,
+        window: &mut Window,
         hero: Option<AnyElement>,
         panel_bg: gpui::Hsla,
         cx: &mut Context<Self>,
@@ -490,7 +478,18 @@ impl Shell {
         if let Some(tab) = self.tabs.get(self.active) {
             return self.render_panes(tab, cx);
         }
+        if self.workspaces.empty.is_some() {
+            return self.empty_workspace(cx);
+        }
+        if self.error.is_none()
+            && (self.intro_entered || !self.hosts.is_empty() || !self.tabs.is_empty())
+        {
+            return self.connections_overview(window, cx);
+        }
         let t = self.theme;
+        if self.hosts.is_empty() && self.error.is_none() && self.settings.wallpaper.is_none() {
+            return self.welcome(window, cx);
+        }
         let keymap = cx.global::<crate::keymap::Keymap>();
         let hint = |id: crate::keymap::ShortcutId, label: &'static str| {
             div()
@@ -579,20 +578,32 @@ impl Shell {
     }
 }
 
+#[path = "intro.rs"]
+mod intro;
+
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.advance_intro(cx);
         // Whatever held focus can disappear (a field hidden after sync, a closed form or tab);
         // with nothing focused gpui dispatches no keys at all, so the window takes it back.
         if window.focused(cx).is_none() {
             window.focus(&self.focus, cx);
         }
         self.sync_density(window);
+        self.remember_destination();
         self.sync_wallpaper(cx);
         self.sync_frame(window);
         let t = self.theme;
         let infos = self.tab_infos(cx);
-        let active_alias = infos.get(self.active).map(|i| i.alias.clone());
-        let strip = tabs::strip(&infos, self.active, &self.tab_scroll, &t, cx);
+        let active_alias = self.workspace_alias().map(str::to_owned);
+        let strip = tabs::strip(
+            &infos,
+            active_alias.as_deref(),
+            self.active,
+            &self.tab_scroll,
+            &t,
+            cx,
+        );
         let query = self.search_query(cx);
         let sidebar = sidebar::render(
             &sidebar::SidebarState {
@@ -600,6 +611,8 @@ impl Render for Shell {
                 connections: &self.connections,
                 open: &infos,
                 active_alias: active_alias.as_deref(),
+                active_index: infos.get(self.active).map(|_| self.active),
+                collapsed_connections: &self.workspaces.collapsed,
                 width: self.settings.sidebar_width,
                 collapsed_groups: &self.hostlist.collapsed_groups,
                 query: &query,
@@ -615,7 +628,7 @@ impl Render for Shell {
         let panel_bg = self.panel_background();
         let hero = self.empty_view_hero(window);
         let layers = self.backdrop();
-        let status_line = self.render_status_line(self.veil(panel_bg), cx);
+        let status_line = self.render_status_line(cx);
         let theme_picker = self.render_theme_picker(window, cx);
         let toast = self.render_toast(window, cx);
         let context_menu = self.render_menu(cx);
@@ -643,8 +656,15 @@ impl Render for Shell {
             .flex_col()
             .bg(self.window_base())
             .children(layers)
-            .font_family(UI_FONT)
+            .font_family(
+                self.settings
+                    .interface_font_family
+                    .clone()
+                    .unwrap_or_else(|| UI_FONT.to_owned()),
+            )
             .text_color(t.text)
+            .on_action(cx.listener(|s, _: &chrome::GoBack, w, cx| s.navigate(false, w, cx)))
+            .on_action(cx.listener(|s, _: &chrome::GoForward, w, cx| s.navigate(true, w, cx)))
             .on_action(cx.listener(|s, _: &CloseTab, w, cx| s.close_pane_or_tab(w, cx)))
             .on_action(
                 cx.listener(|s, _: &SplitRight, w, cx| s.split_pane(split::Axis::Row, w, cx)),
@@ -664,17 +684,15 @@ impl Render for Shell {
             .on_action(cx.listener(|s, _: &FocusPaneDown, w, cx| {
                 s.move_pane_focus(split::Direction::Down, w, cx)
             }))
-            .on_action(cx.listener(|s, _: &NextTab, w, cx| {
-                s.show_tab(tabs::step(s.active, s.tabs.len(), 1), w, cx)
-            }))
-            .on_action(cx.listener(|s, _: &PrevTab, w, cx| {
-                s.show_tab(tabs::step(s.active, s.tabs.len(), -1), w, cx)
-            }))
-            .on_action(cx.listener(|s, a: &ActivateTab, w, cx| s.show_tab(a.0, w, cx)))
+            .on_action(cx.listener(|s, _: &NextTab, w, cx| s.workspace_tab(None, 1, w, cx)))
+            .on_action(cx.listener(|s, _: &PrevTab, w, cx| s.workspace_tab(None, -1, w, cx)))
+            .on_action(
+                cx.listener(|s, a: &ActivateTab, w, cx| s.workspace_tab(Some(a.0), 0, w, cx)),
+            )
             .on_action(cx.listener(|s, _: &ToggleHostPicker, w, cx| s.toggle_picker(w, cx)))
             .on_action(cx.listener(|s, _: &FocusHostSearch, w, cx| s.focus_search(w, cx)))
             .on_action(cx.listener(|s, _: &ToggleSnippets, w, cx| s.toggle_snippet_picker(w, cx)))
-            .on_action(cx.listener(|s, _: &ToggleSidebar, _, cx| s.toggle_sidebar(cx)))
+            .on_action(cx.listener(|s, _: &ToggleSidebar, _, cx| s.toggle_sidebar(false, cx)))
             .on_action(cx.listener(|s, _: &ToggleSftp, w, cx| s.toggle_sftp(w, cx)))
             .on_action(cx.listener(|s, _: &FillPassword, _, cx| s.fill_password(cx)))
             .on_action(cx.listener(|s, _: &NewConnection, w, cx| s.open_form(None, None, w, cx)))
@@ -690,7 +708,7 @@ impl Render for Shell {
                 }
             }))
             .on_key_down(cx.listener(|s, e: &gpui::KeyDownEvent, w, cx| {
-                if s.on_rename_key(e, w, cx) {
+                if s.on_rename_key(e, w, cx) || s.intro_escape(e, cx) {
                     cx.stop_propagation();
                     return;
                 }
@@ -721,14 +739,19 @@ impl Render for Shell {
             )
             .child(chrome::render_titlebar(
                 &t,
-                window.is_fullscreen(),
-                !self.settings.sidebar_collapsed,
+                window,
+                !self.showing_intro() && !self.settings.sidebar_collapsed,
+                (
+                    self.nav_index > 0,
+                    self.nav_index + 1 < self.navigation.len(),
+                ),
                 strip,
                 self.tile_tint(t.shell),
                 cx,
             ))
             .child(match self.settings_page {
                 Some(section) => self.render_settings(section, window, cx),
+                None if self.showing_intro() => self.welcome(window, cx),
                 None => div()
                     .flex_1()
                     .min_h_0()
@@ -741,7 +764,7 @@ impl Render for Shell {
                                 div()
                                     .flex_1()
                                     .min_h_0()
-                                    .child(self.panel_content(hero, panel_bg, cx)),
+                                    .child(self.panel_content(window, hero, panel_bg, cx)),
                             )
                             .when_some(status_line, |el, line| el.child(line)),
                     )

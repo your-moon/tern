@@ -136,14 +136,7 @@ impl Shell {
             }))
             .child(w::toggle(&t, s.log_sessions, "log-sessions"));
 
-        let family = s
-            .terminal_font_family
-            .clone()
-            .unwrap_or_else(|| crate::theme::MONO_FONT.to_owned());
-        let font =
-            w::button(&t, "terminal-font", family).on_click(cx.listener(
-                |shell, e: &gpui::ClickEvent, _, cx| shell.open_font_menu(e.position(), cx),
-            ));
+        let font = self.font_button(super::menu::FontTarget::Terminal, cx);
         w::page_column()
             .child(w::page_header(&t, "Terminal"))
             .child(w::section(
@@ -153,7 +146,7 @@ impl Shell {
                     &t,
                     true,
                     "Font",
-                    Some("Monospace fonts on this Mac; a Nerd Font \"Mono\" keeps icons one cell wide".into()),
+                    Some("Installed monospace fonts. A Nerd Font \"Mono\" keeps icons one cell wide".into()),
                     font,
                 )),
             ))
