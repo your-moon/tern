@@ -103,7 +103,7 @@ impl Shell {
             )
     }
 
-    pub fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
+    pub fn toggle_sidebar(&mut self, animate: bool, cx: &mut Context<Self>) {
         if self.showing_intro() {
             self.intro_entered = true;
             self.update_settings(|s| s.sidebar_collapsed = false, cx);
@@ -111,6 +111,7 @@ impl Shell {
         }
         let from = self.sidebar_now();
         self.update_settings(|s| s.sidebar_collapsed = !s.sidebar_collapsed, cx);
-        self.sidebar_tween = Some(WidthTween::new(from, self.sidebar_target()));
+        self.sidebar_tween =
+            (animate && !cx.reduce_motion()).then(|| WidthTween::new(from, self.sidebar_target()));
     }
 }

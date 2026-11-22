@@ -68,7 +68,7 @@ impl Shell {
         self.intro_entered = true;
         self.picker = None;
         if self.settings.sidebar_collapsed {
-            self.toggle_sidebar(cx);
+            self.toggle_sidebar(false, cx);
         }
         let focus = self.hostlist.search.focus_handle(cx);
         window.focus(&focus, cx);

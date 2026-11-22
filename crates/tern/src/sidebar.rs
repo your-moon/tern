@@ -397,6 +397,11 @@ fn connection_rows(
 ) -> impl IntoElement + use<> {
     let target = alias.to_owned();
     let folded = state.collapsed_connections.iter().any(|name| name == alias);
+    let only_session = match sessions {
+        [ix] if state.open[*ix].title.is_none() => Some(&state.open[*ix]),
+        _ => None,
+    };
+    let show_children = !sessions.is_empty() && only_session.is_none();
     let active = state.active_alias == Some(alias);
     let group: SharedString = format!("host-row-{scope}-{ix}").into();
     let meta_size = if crate::theme::low_dpi() { 12. } else { 11. };
@@ -418,14 +423,17 @@ fn connection_rows(
                 gpui::transparent_black(),
                 t.ink(0.11),
             )
-            .when(top || (active && (folded || sessions.is_empty())), |el| {
+            .when(top || (active && (folded || !show_children)), |el| {
                 el.bg(t.row_active)
             })
             .on_click(cx.listener(move |shell, _, window, cx| {
                 shell.select_connection(&target, window, cx);
             }))
-            .child(if sessions.is_empty() {
-                div().size(px(15.)).flex_none()
+            .child(if !show_children {
+                div()
+                    .size(px(15.))
+                    .flex_none()
+                    .child(status_dot(only_session.map(|tab| tab.dot), t))
             } else {
                 let toggled = alias.to_owned();
                 div().size(px(15.)).flex_none().child(
@@ -485,6 +493,15 @@ fn connection_rows(
                         )
                     }),
             )
+            .when(host.is_none() && only_session.is_some(), |el| {
+                el.on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(move |shell, e: &MouseDownEvent, _, cx| {
+                        cx.stop_propagation();
+                        shell.open_tab_menu(ix, e.position, cx);
+                    }),
+                )
+            })
             .when_some(host, |el, host| {
                 let menu_host = host.clone();
                 let more_host = host.clone();
@@ -528,7 +545,7 @@ fn connection_rows(
                 )
             });
     let mut body = div().flex_none().flex().flex_col().child(header);
-    if !folded {
+    if show_children && !folded {
         for (ordinal, &ix) in sessions.iter().enumerate() {
             let tab = &state.open[ix];
             body = body.child(

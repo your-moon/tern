@@ -228,7 +228,10 @@ impl Shell {
                 .inset_0()
                 .size_full()
                 .object_fit(gpui::ObjectFit::Cover)
-                .opacity(self.settings.wallpaper_hero_opacity)
+                // Match the gutters to the titlebar surface around the inset panels.
+                .opacity(
+                    self.settings.wallpaper_hero_opacity * (1. - self.window_fill().unwrap_or(0.)),
+                )
                 .into_any_element(),
         ]
     }

@@ -1,5 +1,5 @@
-//! How opaque the panels over a full-window wallpaper must be. The picture shows at full
-//! strength in the gaps and through each panel at `1 - alpha`; instead of dimming it, the alpha
+//! How opaque the panels over a full-window wallpaper must be. The shell dims the picture in
+//! the gaps. For readability on every panel, the alpha
 //! is the smallest one at which every text colour keeps its contrast over the picture's
 //! brightest and darkest regions, so a dark picture on a dark theme barely needs a panel and a
 //! white one needs nearly opaque ones.

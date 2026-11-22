@@ -4,17 +4,23 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
-### Changed
-
-- Light and dark appearances remember separate default terminal palettes. Settings follows the window appearance, and the intro cards use Tern’s own SSH and workspace icons.
-
-- Host and Settings sidebars share the window background. Session tabs reserve room for status badges and keep host suffixes visible. Sidebar shortcuts also work from the welcome screen.
-
-- The desktop workspace uses Zeron’s inset panels, light and dark control palettes, compact session tabs, settings cards, and two-line host picker.
+## [0.2.0] - 2026-11-22
 
 ### Added
 
 - First-host onboarding opens on an animated seascape and offers a new SSH connection or an import from `~/.ssh/config`. Reduce Motion shows the sunrise immediately.
+- The Connections page groups terminals by host. Selecting a host opens its remembered terminal or starts SSH in one click.
+- Settings includes searchable interface and terminal font selectors. Windows uses native caption controls and respects system animation preferences.
+
+### Changed
+
+- Light and dark appearances remember separate default terminal palettes. Settings follows the window appearance, and the intro cards use Tern’s own SSH and workspace icons.
+
+- A single unnamed terminal uses the host name in the tab bar and appears once in the sidebar. Named terminals and multiple sessions remain individually accessible. The footer follows the active terminal palette, and full-window wallpapers blend into the pane edges. Sidebar keyboard shortcuts act immediately, and pointer toggles respect Reduce Motion.
+- Closing Settings with the close shortcut returns to the workspace and preserves the active session.
+- Host and Settings sidebars share the window background. Session tabs reserve room for status badges and keep host suffixes visible. Sidebar shortcuts also work from the welcome screen.
+
+- The desktop workspace uses Zeron’s inset panels, light and dark control palettes, compact session tabs, settings cards, and two-line host picker.
 
 ## [0.1.4] - 2026-11-18
 
@@ -148,7 +154,8 @@ The first release: a daily-driver SSH client for macOS.
 - Secrets are held as zeroizing `SecretString`s and never logged; session output is redacted from `Debug`.
 - RUSTSEC-2023-0071 in `rsa` (via russh) is accepted for now; see [SECURITY.md](SECURITY.md) and #16.
 
-[Unreleased]: https://github.com/your-moon/tern/compare/v0.1.4...main
+[Unreleased]: https://github.com/your-moon/tern/compare/v0.2.0...main
+[0.2.0]: https://github.com/your-moon/tern/compare/v0.1.4...v0.2.0
 [0.1.4]: https://github.com/your-moon/tern/releases/tag/v0.1.4
 [0.1.3]: https://github.com/your-moon/tern/releases/tag/v0.1.3
 [0.1.2]: https://github.com/your-moon/tern/releases/tag/v0.1.2

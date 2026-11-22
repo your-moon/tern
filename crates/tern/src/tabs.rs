@@ -121,11 +121,22 @@ pub fn strip(
         .iter()
         .enumerate()
         .filter(|(_, tab)| Some(tab.alias.as_str()) == alias);
+    // The lone default terminal is the connection. Its pill retains the close, rename,
+    // status, and context-menu controls without repeating the host in a second label.
+    let single_default = group.clone().count() == 1
+        && group
+            .clone()
+            .next()
+            .is_some_and(|(_, tab)| tab.title.is_none());
     for (ordinal, (ix, tab)) in group.enumerate() {
         row = row.child(tab_pill(
             ix,
             tab,
-            tab.session_label(ordinal + 1),
+            if single_default {
+                tab.alias.clone()
+            } else {
+                tab.session_label(ordinal + 1)
+            },
             ix == active,
             t,
             cx,
@@ -136,7 +147,7 @@ pub fn strip(
         .flex()
         .items_center()
         .gap(px(6.))
-        .when_some(alias, |head, name| {
+        .when_some(alias.filter(|_| !single_default), |head, name| {
             head.child(
                 div()
                     .max_w(px(160.))

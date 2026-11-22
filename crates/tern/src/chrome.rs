@@ -116,7 +116,7 @@ pub fn render_titlebar(
                 .child(
                     control("toggle-sidebar", t)
                         .icon_button("Toggle sidebar", t)
-                        .on_click(cx.listener(|s, _, _, cx| s.toggle_sidebar(cx)))
+                        .on_click(cx.listener(|s, _, _, cx| s.toggle_sidebar(true, cx)))
                         .child(crate::icons::sidebar_glyph(sidebar_open, 16., t.muted)),
                 )
                 .child(div().w(px(4.)))
