@@ -64,7 +64,7 @@ impl Shell {
     /// Moves the caret into the sidebar's search box, opening the sidebar and leaving
     /// Settings first when needed.
     pub(super) fn focus_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.settings_page = None;
+        self.leave_settings(window, cx);
         self.intro_entered = true;
         self.picker = None;
         if self.settings.sidebar_collapsed {

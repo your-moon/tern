@@ -16,10 +16,55 @@ use gpui::{
 
 use super::{Section, Shell};
 use crate::hover;
-use crate::hover::Accessible as _;
 use crate::icons::icon;
 use crate::shell::CubicBezier;
 use crate::theme::{self, SPACE_LG, SPACE_SM, Theme};
+
+pub(crate) struct NavSearch {
+    field: gpui::Entity<crate::text_input::TextInput>,
+    _changes: gpui::Subscription,
+}
+
+impl NavSearch {
+    pub(crate) fn new(theme: &Theme, cx: &mut Context<Shell>) -> Self {
+        use gpui::AppContext as _;
+        let colors = crate::text_input::InputColors {
+            text: theme.text,
+            placeholder: theme.faint,
+            cursor: theme.accent,
+            selection: theme.accent.opacity(0.35),
+        };
+        let field =
+            cx.new(|cx| crate::text_input::TextInput::new("Search settings", false, colors, cx));
+        let changes = cx.observe(&field, |_, _, cx| cx.notify());
+        Self {
+            field,
+            _changes: changes,
+        }
+    }
+
+    pub(crate) fn clear(&self, cx: &mut Context<Shell>) {
+        self.field.update(cx, |field, cx| field.set_text("", cx));
+    }
+}
+
+fn matches(section: Section, query: &str) -> bool {
+    let terms = match section {
+        Section::Appearance => {
+            "appearance system light dark theme wallpaper interface font terminal font size motion reduce motion show status line sharper text on standard displays"
+        }
+        Section::Terminal => {
+            "terminal cursor blink font scrollback logging bell clipboard paste copy"
+        }
+        Section::Shortcuts => "shortcuts keyboard keys bindings",
+        Section::Connections => "connections hosts ssh import",
+        Section::Snippets => "snippets commands",
+        Section::Vault => "vault password passphrase keychain lock",
+        Section::Sync => "sync git remote repository",
+        Section::About => "about version updates",
+    };
+    query.split_whitespace().all(|word| terms.contains(word))
+}
 
 /// The nav's groups in order, each a small muted label over its sections.
 pub(super) const GROUPS: [(&str, &[Section]); 4] = [
@@ -35,8 +80,7 @@ pub(super) const GROUPS: [(&str, &[Section]); 4] = [
 
 /// Where a navigation key lands from `current`. Up/down wrap, as zeron's do; Home and End jump.
 /// Anything else is not the nav's key.
-pub(super) fn target(current: Section, key: &str) -> Option<Section> {
-    let all = Section::ALL;
+fn target_in(all: &[Section], current: Section, key: &str) -> Option<Section> {
     let at = all.iter().position(|s| *s == current)?;
     let next = match key {
         "up" => (at + all.len() - 1) % all.len(),
@@ -151,27 +195,52 @@ pub(super) fn render(
     let reduced = cx.reduce_motion();
     let faint = th.muted.opacity(theme::by_dpi(0.7, 1.0));
 
-    let header = div()
-        .flex_none()
-        .px(px(SPACE_SM))
-        .pb(px(4.))
-        .h(px(32.))
+    let header = tab(&th, false, 0., "nav-back", "nav-back-hover".into())
+        .role(gpui::Role::Button)
+        .aria_label("Back")
+        .cursor_pointer()
+        .on_click(cx.listener(|s, _, window, cx| s.toggle_settings(window, cx)))
+        .child(
+            icon(crate::icons::ARROW_LEFT)
+                .size(px(16.))
+                .text_color(th.muted),
+        )
+        .child("Back");
+
+    let field = shell.settings_search.field.clone();
+    let query = field.read(cx).text().trim().to_lowercase();
+    let visible: Vec<_> = Section::ALL
+        .into_iter()
+        .filter(|section| matches(*section, &query))
+        .collect();
+    let first_hit = visible.first().copied();
+    let search = div()
+        .px(px(8.))
+        .py(px(6.))
         .flex()
         .items_center()
-        .gap(px(6.))
-        .child(
-            crate::sidebar::icon_button("nav-back", crate::icons::CHEVRON_LEFT, 24., 16., &th)
-                .icon_button("Back", &th)
-                .on_click(cx.listener(|s, _, window, cx| s.toggle_settings(window, cx))),
+        .gap(px(8.))
+        .rounded(px(8.))
+        .border_1()
+        .border_color(th.hairline)
+        .bg(th.field_fill())
+        .on_key_down(
+            cx.listener(move |shell, event: &gpui::KeyDownEvent, window, cx| {
+                if event.keystroke.key == "enter"
+                    && let Some(section) = first_hit
+                {
+                    shell.select_section(section, cx);
+                    window.focus(&shell.focus, cx);
+                    cx.stop_propagation();
+                }
+            }),
         )
         .child(
-            div()
-                .text_size(px(15.))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(th.text)
-                .child("Settings"),
-        );
-
+            icon(crate::icons::SEARCH)
+                .size(px(13.))
+                .text_color(th.muted),
+        )
+        .child(div().flex_1().min_w_0().child(field));
     let mut list = div()
         .id("settings-sections")
         .role(gpui::Role::TabList)
@@ -183,6 +252,9 @@ pub(super) fn render(
         .flex_col()
         .gap(px(2.));
     for (n, (label, members)) in GROUPS.iter().enumerate() {
+        if !members.iter().any(|s| visible.contains(s)) {
+            continue;
+        }
         if label.is_empty() {
             list = list.child(div().h(px(SPACE_LG)));
         } else {
@@ -198,7 +270,7 @@ pub(super) fn render(
                     .child(*label),
             );
         }
-        for &item in *members {
+        for &item in members.iter().filter(|s| visible.contains(s)) {
             let index = Section::ALL.iter().position(|s| *s == item).unwrap_or(0);
             let selected = item == section;
             let hover_key = format!("{}-hover", item.id());
@@ -210,6 +282,7 @@ pub(super) fn render(
             );
             let glyph = hover::blend(&hover_key, hover::mix(th.muted, th.text, t), th.text);
             let handles = handles.clone();
+            let visible = visible.clone();
             list = list.child(
                 tab(&th, selected, t, item.id(), hover_key)
                     .role(gpui::Role::Tab)
@@ -220,7 +293,8 @@ pub(super) fn render(
                     .cursor_pointer()
                     .on_key_down(
                         cx.listener(move |shell, e: &gpui::KeyDownEvent, window, cx| {
-                            let Some(next) = target(item, e.keystroke.key.as_str()) else {
+                            let Some(next) = target_in(&visible, item, e.keystroke.key.as_str())
+                            else {
                                 return;
                             };
                             shell.select_section(next, cx);
@@ -251,7 +325,16 @@ pub(super) fn render(
         .flex_col()
         .gap(px(SPACE_SM))
         .child(header)
-        .child(list)
+        .child(search)
+        .child(list.when(visible.is_empty(), |list| {
+            list.child(
+                div()
+                    .p(px(8.))
+                    .text_color(th.muted)
+                    .text_sm()
+                    .child("No matching settings"),
+            )
+        }))
         .into_any_element()
 }
 
@@ -260,6 +343,16 @@ pub(super) fn render(
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn finds_the_visible_font_controls_by_their_labels() {
+        for label in ["Interface font", "Terminal font", "Terminal font size"] {
+            assert!(
+                matches(Section::Appearance, &label.to_lowercase()),
+                "{label}"
+            );
+        }
+    }
 
     #[test]
     fn every_section_is_in_exactly_one_group_in_nav_order() {
@@ -280,22 +373,40 @@ mod tests {
 
     #[test]
     fn arrows_walk_the_list_and_wrap_at_both_ends() {
-        assert_eq!(target(Section::Terminal, "down"), Some(Section::Shortcuts));
-        assert_eq!(target(Section::Terminal, "up"), Some(Section::Appearance));
-        assert_eq!(target(Section::About, "down"), Some(Section::Appearance));
-        assert_eq!(target(Section::Appearance, "up"), Some(Section::About));
+        assert_eq!(
+            target_in(&Section::ALL, Section::Terminal, "down"),
+            Some(Section::Shortcuts)
+        );
+        assert_eq!(
+            target_in(&Section::ALL, Section::Terminal, "up"),
+            Some(Section::Appearance)
+        );
+        assert_eq!(
+            target_in(&Section::ALL, Section::About, "down"),
+            Some(Section::Appearance)
+        );
+        assert_eq!(
+            target_in(&Section::ALL, Section::Appearance, "up"),
+            Some(Section::About)
+        );
     }
 
     #[test]
     fn home_and_end_jump_from_the_middle() {
-        assert_eq!(target(Section::Vault, "home"), Some(Section::Appearance));
-        assert_eq!(target(Section::Vault, "end"), Some(Section::About));
+        assert_eq!(
+            target_in(&Section::ALL, Section::Vault, "home"),
+            Some(Section::Appearance)
+        );
+        assert_eq!(
+            target_in(&Section::ALL, Section::Vault, "end"),
+            Some(Section::About)
+        );
     }
 
     #[test]
     fn other_keys_are_left_alone() {
-        assert_eq!(target(Section::Vault, "enter"), None);
-        assert_eq!(target(Section::Vault, "left"), None);
+        assert_eq!(target_in(&Section::ALL, Section::Vault, "enter"), None);
+        assert_eq!(target_in(&Section::ALL, Section::Vault, "left"), None);
     }
 
     #[test]

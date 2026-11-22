@@ -56,6 +56,10 @@ mod gallery_ui;
 mod look;
 #[path = "shell_menu.rs"]
 mod menu;
+#[path = "shell_navigation.rs"]
+mod navigation;
+use navigation::Destination;
+
 #[path = "shell_open.rs"]
 mod open;
 #[path = "shell_settings.rs"]
@@ -146,6 +150,10 @@ pub fn open_main_window(cx: &mut App) -> anyhow::Result<WindowHandle<Shell>> {
                 restoring: false,
                 next_tab: 0,
                 next_pane: 0,
+                navigation: Vec::new(),
+                nav_index: 0,
+                nav_tab_count: 0,
+                settings_search: settings_ui::NavSearch::new(&theme, cx),
                 broadcast: None,
                 broadcast_picker: None,
                 panels: Default::default(),
@@ -240,6 +248,10 @@ pub struct Shell {
     /// Input typed in one tab also going to others, and the list that picks them.
     next_tab: broadcast_ui::TabId,
     next_pane: PaneId,
+    navigation: Vec<Destination>,
+    nav_index: usize,
+    nav_tab_count: usize,
+    settings_search: settings_ui::NavSearch,
     broadcast: Option<broadcast_ui::Broadcast>,
     broadcast_picker: Option<broadcast_ui::BroadcastPicker>,
     panels: forwards_ui::Panels,
@@ -348,38 +360,9 @@ impl Shell {
         cx.notify();
     }
 
-    fn sidebar_target(&self) -> f32 {
-        if self.settings.sidebar_collapsed {
-            0.0
-        } else {
-            look::snap(self.settings.sidebar_width, self.frame.scale)
-        }
-    }
-
-    /// The sidebar's width this frame: mid-tween while collapsing or expanding.
-    fn sidebar_now(&self) -> f32 {
-        self.sidebar_tween
-            .and_then(|tween| tween.sample(std::time::Instant::now()))
-            .map_or_else(
-                || self.sidebar_target(),
-                |w| look::snap(w, self.frame.scale),
-            )
-    }
-
-    pub fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
-        if self.showing_intro() {
-            self.intro_entered = true;
-            self.update_settings(|s| s.sidebar_collapsed = false, cx);
-            return;
-        }
-        let from = self.sidebar_now();
-        self.update_settings(|s| s.sidebar_collapsed = !s.sidebar_collapsed, cx);
-        self.sidebar_tween = Some(WidthTween::new(from, self.sidebar_target()));
-    }
-
     /// Live drag: follows the pointer without writing the file on every move.
     fn on_sidebar_drag(&mut self, x: f32, cx: &mut Context<Self>) {
-        self.settings.sidebar_width = look::snap(chrome::dragged_width(x), self.frame.scale);
+        self.settings.sidebar_width = look::snap(chrome::dragged_width(x - 5.), self.frame.scale);
         self.settings.sidebar_collapsed = false;
         self.sidebar_tween = None;
         cx.notify();
@@ -391,7 +374,7 @@ impl Shell {
             .absolute()
             .top_0()
             .bottom_0()
-            .left(px(self.sidebar_now() - chrome::HANDLE_HALF_WIDTH))
+            .left(px(self.sidebar_now() + 5. - chrome::HANDLE_HALF_WIDTH))
             .w(px(chrome::HANDLE_HALF_WIDTH * 2.0))
             .occlude()
             .cursor_col_resize()
@@ -606,6 +589,7 @@ impl Render for Shell {
             window.focus(&self.focus, cx);
         }
         self.sync_density(window);
+        self.remember_destination();
         self.sync_wallpaper(cx);
         self.sync_frame(window);
         let t = self.theme;
@@ -662,8 +646,15 @@ impl Render for Shell {
             .flex_col()
             .bg(self.window_base())
             .children(layers)
-            .font_family(UI_FONT)
+            .font_family(
+                self.settings
+                    .interface_font_family
+                    .clone()
+                    .unwrap_or_else(|| UI_FONT.to_owned()),
+            )
             .text_color(t.text)
+            .on_action(cx.listener(|s, _: &chrome::GoBack, w, cx| s.navigate(false, w, cx)))
+            .on_action(cx.listener(|s, _: &chrome::GoForward, w, cx| s.navigate(true, w, cx)))
             .on_action(cx.listener(|s, _: &CloseTab, w, cx| s.close_pane_or_tab(w, cx)))
             .on_action(
                 cx.listener(|s, _: &SplitRight, w, cx| s.split_pane(split::Axis::Row, w, cx)),
@@ -742,6 +733,10 @@ impl Render for Shell {
                 &t,
                 window,
                 !self.showing_intro() && !self.settings.sidebar_collapsed,
+                (
+                    self.nav_index > 0,
+                    self.nav_index + 1 < self.navigation.len(),
+                ),
                 strip,
                 self.tile_tint(t.shell),
                 cx,

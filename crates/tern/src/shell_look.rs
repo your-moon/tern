@@ -240,35 +240,64 @@ impl Shell {
         self.window_fill().map(|alpha| colour.opacity(alpha))
     }
 
-    /// Zeron ds/sidebar.luau, non-card branch: clip the list directly over the window.
+    /// Zeron desktop sidebar card (ds/sidebar.luau), inset five points from the window.
     pub(super) fn side_tile(&self, width: f32, content: impl IntoElement) -> gpui::Div {
         div()
             .flex_none()
             .relative()
+            .ml(px(width.min(5.)))
+            .mb(px(5.))
             .w(px(width))
-            .h_full()
+            .min_h_0()
             .overflow_hidden()
-            // Full-window wallpaper needs the same contrast veil as the title bar.
-            .when_some(self.tile_tint(self.theme.shell), |el, veil| el.bg(veil))
+            .rounded(px(12.))
+            .bg(if self.settings_page.is_some() {
+                self.tile_tint(self.theme.page_surface())
+                    .unwrap_or(self.theme.page_surface())
+            } else if let Some(veil) = self.tile_tint(self.theme.shell) {
+                veil
+            } else if crate::theme::BLURS_BEHIND && !crate::theme::low_dpi() {
+                gpui::rgba(if self.theme.light {
+                    0x1a1a1a0d
+                } else {
+                    0xebebeb0d
+                })
+                .into()
+            } else {
+                self.theme.page_surface()
+            })
             .child(content)
     }
 
     /// The main tile: fills what the side tile leaves. When it shows a terminal over a
-    /// full-window wallpaper it paints nothing, as the terminal draws its own glass at the same
+    /// full-window wallpaper it paints only the rim, as the terminal draws its own glass at the same
     /// alpha; anything else it shows (Settings, the empty view) sits on the tile's tint.
     pub(super) fn main_tile(&self, panel: Hsla) -> gpui::Div {
         let shows_terminal = !self.tabs.is_empty() && self.settings_page.is_none();
-        let terminal_glass = shows_terminal && self.window_fill().is_some();
+        let tint = self.tile_tint(panel);
+        let terminal_glass = shows_terminal && tint.is_some();
         div()
             .flex_1()
+            .ml(px(5. - self.sidebar_now().min(5.) / 5.))
+            .mr(px(5.))
+            .mb(px(5.))
+            .rounded(px(12.))
+            // GPUI clips child painting to a rectangle. Four points on both axes
+            // keep each child corner inside the 12-point arc, including terminal quads.
+            .when(terminal_glass, |el| {
+                el.border_4().border_color(tint.unwrap_or(panel))
+            })
+            .when(!terminal_glass, |el| {
+                el.border_1()
+                    .border_color(self.theme.hairline)
+                    .p(px(3.))
+                    .bg(tint.unwrap_or(panel))
+            })
             .min_w_0()
             .relative()
             .overflow_hidden()
             .flex()
             .flex_col()
-            .when(!terminal_glass, |el| {
-                el.bg(self.tile_tint(panel).unwrap_or(panel))
-            })
     }
 }
 

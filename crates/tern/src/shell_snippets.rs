@@ -299,7 +299,7 @@ impl Shell {
                                             .on_click(
                                                 cx.listener(|s, _, w, cx| {
                                                     s.close_snippet_picker(w, cx);
-                                                    s.settings_page = Some(Section::Snippets);
+                                                    s.select_section(Section::Snippets, cx);
                                                     w.focus(&s.focus, cx);
                                                     cx.notify();
                                                 }),

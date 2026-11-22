@@ -166,7 +166,7 @@ impl Shell {
 
     /// Shows tab `ix` because the user asked for that session, so Settings closes.
     pub fn show_tab(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
-        self.settings_page = None;
+        self.leave_settings(window, cx);
         self.activate_tab(ix, window, cx);
     }
 

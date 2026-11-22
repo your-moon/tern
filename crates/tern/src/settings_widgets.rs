@@ -16,19 +16,19 @@ use crate::theme::Theme;
 use gpui::StatefulInteractiveElement as _;
 
 const PAGE_MAX_WIDTH: f32 = 640.0;
-const PAGE_PAD_X: f32 = 40.0;
-const SECTION_LABEL_INSET: f32 = 8.0;
+const PAGE_PAD_X: f32 = 32.0;
+const SECTION_LABEL_INSET: f32 = 17.0;
 const SECTION_GAP: f32 = 32.0;
 
 /// Centered content column, 640 wide with 40 of air each side.
 pub fn page_column() -> Div {
     div()
         .w_full()
-        .max_w(px(PAGE_MAX_WIDTH))
+        .max_w(px(PAGE_MAX_WIDTH + 2. * PAGE_PAD_X))
         .mx_auto()
         .px(px(PAGE_PAD_X))
         .pt(px(16.0))
-        .pb(px(48.0))
+        .pb(px(64.0))
         .flex()
         .flex_col()
 }
@@ -38,7 +38,7 @@ pub fn page_header(t: &Theme, title: &'static str) -> Div {
         .px(px(SECTION_LABEL_INSET))
         .text_size(px(20.))
         .line_height(px(26.))
-        .font_weight(FontWeight::MEDIUM)
+        .font_weight(FontWeight::SEMIBOLD)
         .text_color(t.text)
         .child(title)
 }
@@ -96,12 +96,9 @@ pub fn row(
     control: impl IntoElement,
 ) -> Div {
     div()
-        .mx(px(16.))
+        .px(px(16.))
         .py(px(12.))
-        .min_h(px(52.))
-        .when(!first, |el| {
-            el.border_t_1().border_color(t.border.opacity(0.6))
-        })
+        .when(!first, |el| el.border_t_1().border_color(t.hairline))
         .flex()
         .items_center()
         .gap(px(16.))

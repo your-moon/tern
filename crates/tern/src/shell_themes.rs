@@ -140,7 +140,12 @@ impl Shell {
         cx.notify();
     }
 
-    fn close_theme_picker(&mut self, keep: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn close_theme_picker(
+        &mut self,
+        keep: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(picker) = self.theme_picker.take() else {
             return;
         };

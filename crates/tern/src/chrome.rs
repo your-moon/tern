@@ -19,7 +19,12 @@ use crate::hover::{Accessible as _, HoverFade as _};
 use crate::settings::{SIDEBAR_MAX, SIDEBAR_MIN};
 use crate::theme::{SPACE_SM, TITLEBAR_HEIGHT, TITLEBAR_TOP_PAD, Theme, titlebar_content_start};
 
-actions!(tern, [Quit, Hide, HideOthers, ShowAll, Minimize, Zoom]);
+actions!(
+    tern,
+    [
+        Quit, Hide, HideOthers, ShowAll, Minimize, Zoom, GoBack, GoForward
+    ]
+);
 
 pub fn init_menus(cx: &mut App) {
     cx.on_action(|_: &Quit, cx| cx.quit());
@@ -70,6 +75,8 @@ pub fn menu_bindings() -> Vec<KeyBinding> {
         KeyBinding::new("cmd-h", Hide, None),
         KeyBinding::new("alt-cmd-h", HideOthers, None),
         KeyBinding::new("cmd-m", Minimize, None),
+        KeyBinding::new("cmd-[", GoBack, None),
+        KeyBinding::new("cmd-]", GoForward, None),
     ]
 }
 
@@ -79,12 +86,12 @@ fn with_active_window(cx: &mut App, f: impl FnOnce(&mut Window)) {
     }
 }
 
-/// zeron's titlebar cluster: the sidebar toggle and + (find a host) at x = 88, 24 pt buttons,
-/// 16 pt icons, then the tabs.
+/// Zeron ds/title_bar.luau: sidebar toggle, Back and Forward, followed by the app action and tabs.
 pub fn render_titlebar(
     t: &Theme,
     window: &Window,
     sidebar_open: bool,
+    navigation: (bool, bool),
     tabs: impl IntoElement,
     tint: Option<gpui::Hsla>,
     cx: &mut gpui::Context<crate::shell::Shell>,
@@ -106,16 +113,42 @@ pub fn render_titlebar(
                 .flex()
                 .items_center()
                 .gap(px(2.))
-                .p(px(4.))
-                .rounded(px(12.))
-                .bg(t.row_hover)
-                .border_1()
-                .border_color(t.hairline)
                 .child(
                     control("toggle-sidebar", t)
                         .icon_button("Toggle sidebar", t)
                         .on_click(cx.listener(|s, _, _, cx| s.toggle_sidebar(cx)))
                         .child(crate::icons::sidebar_glyph(sidebar_open, 16., t.muted)),
+                )
+                .child(div().w(px(4.)))
+                .children(
+                    [
+                        (
+                            "nav-previous",
+                            "Back",
+                            crate::icons::ARROW_LEFT,
+                            false,
+                            navigation.0,
+                        ),
+                        (
+                            "nav-next",
+                            "Forward",
+                            crate::icons::ARROW_RIGHT,
+                            true,
+                            navigation.1,
+                        ),
+                    ]
+                    .into_iter()
+                    .map(|(id, label, glyph, forward, enabled)| {
+                        control(id, t)
+                            .icon_button(label, t)
+                            .when(!enabled, |el| el.opacity(0.35).cursor_default())
+                            .when(enabled, |el| {
+                                el.on_click(
+                                    cx.listener(move |s, _, w, cx| s.navigate(forward, w, cx)),
+                                )
+                            })
+                            .child(crate::icons::icon(glyph).size(px(21.)).text_color(t.muted))
+                    }),
                 )
                 .child(
                     control("find-host", t)

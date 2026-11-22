@@ -15,7 +15,7 @@ pub const BLURS_BEHIND: bool = cfg!(target_os = "macos");
 
 /// Window frost over the blurred desktop (zeron `Theme::GLASS_ALPHA`, macOS).
 pub const GLASS_ALPHA: f32 = 0.80;
-pub const TITLEBAR_HEIGHT: f32 = 38.0;
+pub const TITLEBAR_HEIGHT: f32 = 42.0;
 pub const TITLEBAR_TOP_PAD: f32 = 4.0;
 pub const SPACE_SM: f32 = 8.0;
 /// zeron `Theme::SPACE_LG` (crates/ui/src/theme.rs:842): the gap between nav groups.
@@ -107,7 +107,9 @@ fn wash_for(light: bool, alpha: f32) -> Hsla {
 /// Where titlebar content starts: clear of the traffic lights, or the edge in fullscreen
 /// (zeron `titlebar_cluster_start`).
 pub fn titlebar_content_start(fullscreen: bool) -> f32 {
-    if cfg!(target_os = "macos") && !fullscreen {
+    if cfg!(windows) {
+        10.0
+    } else if cfg!(target_os = "macos") && !fullscreen {
         88.0
     } else {
         12.0
@@ -454,11 +456,16 @@ mod tests {
 
     #[test]
     fn titlebar_reserves_space_only_for_visible_mac_traffic_lights() {
-        assert_eq!(titlebar_content_start(true), 12.0);
+        assert_eq!(
+            titlebar_content_start(true),
+            if cfg!(windows) { 10.0 } else { 12.0 }
+        );
         assert_eq!(
             titlebar_content_start(false),
             if cfg!(target_os = "macos") {
                 88.0
+            } else if cfg!(windows) {
+                10.0
             } else {
                 12.0
             }

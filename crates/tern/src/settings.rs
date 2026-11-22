@@ -8,9 +8,9 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-pub const SIDEBAR_MIN: f32 = 224.0;
+pub const SIDEBAR_MIN: f32 = 242.0;
 pub const SIDEBAR_MAX: f32 = 400.0;
-pub const SIDEBAR_DEFAULT: f32 = 256.0;
+pub const SIDEBAR_DEFAULT: f32 = 272.0;
 /// zeron `typography::FONT_SIZE_MIN/MAX` and `TERMINAL_FONT_SIZE_DEFAULT`.
 pub const FONT_MIN: f32 = 8.0;
 pub const FONT_MAX: f32 = 32.0;
@@ -58,6 +58,8 @@ pub struct Settings {
     pub sharp_text: bool,
     pub sidebar_width: f32,
     pub sidebar_collapsed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interface_font_family: Option<String>,
     pub terminal_font_size: f32,
     /// Terminal font family; `None` is the bundled Geist Mono.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -139,6 +141,7 @@ impl Default for Settings {
             sharp_text: true,
             sidebar_width: SIDEBAR_DEFAULT,
             sidebar_collapsed: false,
+            interface_font_family: None,
             terminal_font_size: FONT_DEFAULT,
             terminal_font_family: None,
             reduce_motion: false,
@@ -456,6 +459,7 @@ mod tests {
             sharp_text: false,
             sidebar_width: 312.0,
             sidebar_collapsed: true,
+            interface_font_family: Some("Segoe UI".into()),
             terminal_font_size: 15.0,
             terminal_font_family: Some("JetBrainsMono Nerd Font Mono".into()),
             reduce_motion: true,
