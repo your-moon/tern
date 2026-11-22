@@ -83,19 +83,21 @@ fn with_active_window(cx: &mut App, f: impl FnOnce(&mut Window)) {
 /// 16 pt icons, then the tabs.
 pub fn render_titlebar(
     t: &Theme,
-    fullscreen: bool,
+    window: &Window,
     sidebar_open: bool,
     tabs: impl IntoElement,
     tint: Option<gpui::Hsla>,
     cx: &mut gpui::Context<crate::shell::Shell>,
 ) -> impl IntoElement {
+    let fullscreen = window.is_fullscreen();
+    let windows_caption = cfg!(windows) && !fullscreen;
     div()
         .h(px(TITLEBAR_HEIGHT))
         .flex_none()
         .when_some(tint, |el, c| el.bg(c))
         .pt(px(TITLEBAR_TOP_PAD))
         .pl(px(titlebar_content_start(fullscreen)))
-        .pr(px(SPACE_SM))
+        .when(!windows_caption, |bar| bar.pr(px(SPACE_SM)))
         .flex()
         .items_center()
         .gap(px(SPACE_SM))
@@ -136,6 +138,39 @@ pub fn render_titlebar(
                 .window_control_area(WindowControlArea::Drag)
                 .on_mouse_down(MouseButton::Left, |_, window, _| window.start_window_move()),
         )
+        .when(windows_caption, |bar| {
+            let (zoom, glyph) = if window.is_maximized() {
+                ("Restore", "\u{e923}")
+            } else {
+                ("Maximize", "\u{e922}")
+            };
+            bar.child(
+                div().flex().h_full().flex_none().children(
+                    [
+                        ("Minimize", "\u{e921}", WindowControlArea::Min),
+                        (zoom, glyph, WindowControlArea::Max),
+                        ("Close", "\u{e8bb}", WindowControlArea::Close),
+                    ]
+                    .into_iter()
+                    .map(|(label, glyph, area)| {
+                        div()
+                            .id(label)
+                            .icon_button(label, t)
+                            .w(px(46.))
+                            .h_full()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .font_family("Segoe MDL2 Assets")
+                            .text_size(px(10.))
+                            .text_color(t.text)
+                            .hover(|button| button.bg(t.row_hover))
+                            .window_control_area(area)
+                            .child(glyph)
+                    }),
+                ),
+            )
+        })
 }
 
 fn control(id: &'static str, t: &Theme) -> gpui::Stateful<gpui::Div> {

@@ -107,7 +107,11 @@ fn wash_for(light: bool, alpha: f32) -> Hsla {
 /// Where titlebar content starts: clear of the traffic lights, or the edge in fullscreen
 /// (zeron `titlebar_cluster_start`).
 pub fn titlebar_content_start(fullscreen: bool) -> f32 {
-    if fullscreen { 12.0 } else { 88.0 }
+    if cfg!(target_os = "macos") && !fullscreen {
+        88.0
+    } else {
+        12.0
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -446,6 +450,19 @@ mod tests {
         let c = gpui::Rgba::from(c);
         let ch = |v: f32| (v * 255.0).round() as u32;
         ch(c.r) << 16 | ch(c.g) << 8 | ch(c.b)
+    }
+
+    #[test]
+    fn titlebar_reserves_space_only_for_visible_mac_traffic_lights() {
+        assert_eq!(titlebar_content_start(true), 12.0);
+        assert_eq!(
+            titlebar_content_start(false),
+            if cfg!(target_os = "macos") {
+                88.0
+            } else {
+                12.0
+            }
+        );
     }
 
     #[test]

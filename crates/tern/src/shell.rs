@@ -740,7 +740,7 @@ impl Render for Shell {
             )
             .child(chrome::render_titlebar(
                 &t,
-                window.is_fullscreen(),
+                window,
                 !self.showing_intro() && !self.settings.sidebar_collapsed,
                 strip,
                 self.tile_tint(t.shell),

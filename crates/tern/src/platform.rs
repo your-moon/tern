@@ -69,7 +69,14 @@ pub fn system_reduce_motion() -> bool {
     objc2_app_kit::NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion()
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+pub fn system_reduce_motion() -> bool {
+    windows::UI::ViewManagement::UISettings::new()
+        .and_then(|settings| settings.AnimationsEnabled())
+        .is_ok_and(|enabled| !enabled)
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
 pub fn system_reduce_motion() -> bool {
     false
 }

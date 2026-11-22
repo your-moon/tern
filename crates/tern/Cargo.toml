@@ -46,6 +46,7 @@ workspace = true
 # Windows Credential Manager, or the Secret Service (GNOME Keyring, KWallet) on Linux.
 [target.'cfg(target_os = "windows")'.dependencies]
 keyring = { workspace = true, features = ["windows-native"] }
+windows = { version = "0.62", features = ["UI_ViewManagement"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { workspace = true, features = ["sync-secret-service", "crypto-rust", "vendored"] }
