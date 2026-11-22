@@ -194,20 +194,8 @@ fn empty_state(t: &Theme, cx: &mut Context<Shell>) -> impl IntoElement + use<> {
             "No hosts yet.",
         ))
         .child(
-            div()
-                .id("empty-new")
-                .h(px(28.))
-                .px(px(12.))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(px(8.))
-                .cursor_pointer()
-                .text_size(px(13.))
-                .bg(t.accent)
-                .text_color(t.on_accent)
-                .on_click(cx.listener(|s, _, w, cx| s.open_form(None, None, w, cx)))
-                .child("New connection"),
+            crate::settings_widgets::action_button(t, "empty-new", "New connection", true)
+                .on_click(cx.listener(|s, _, w, cx| s.open_form(None, None, w, cx))),
         )
         .child(
             div()
@@ -241,7 +229,9 @@ fn search_field(
             .items_center()
             .gap(px(8.))
             .rounded(px(8.))
-            .bg(t.ink(0.04))
+            .border_1()
+            .border_color(t.hairline)
+            .bg(t.field_fill())
             .text_size(px(13.))
             .on_key_down(cx.listener(Shell::on_search_key))
             .child(icon(icons::SEARCH).size(px(13.)).text_color(t.muted))
@@ -385,7 +375,7 @@ fn row(
             gpui::transparent_black(),
             t.ink(0.11),
         )
-        .when(active || top, |el| el.bg(t.ink(0.11)))
+        .when(active || top, |el| el.bg(t.row_active))
         .on_click(cx.listener(move |shell, _, window, cx| {
             shell.connect_host(target.clone(), window, cx);
         }))

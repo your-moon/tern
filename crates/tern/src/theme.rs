@@ -1,5 +1,5 @@
 // Adapted from zeron crates/theme/src/builtins.rs `zeron_dark` / `zeron_light` and
-// crates/ui/src/theme.rs (MIT).
+// crates/ui/src/theme.rs and apps/zgx/ui/ds/themes/zeron-{dark,light}.json (MIT).
 //! The Zeron Dark and Light palettes and layout tokens, values copied from zeron's source.
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -150,17 +150,16 @@ impl Theme {
         }
     }
 
-    /// zeron `zeron_light` (crates/theme/src/builtins.rs:273-304); washes, hairlines and the
-    /// popup from crates/ui/src/theme.rs:1715-1733 (`popup` is the variant's `card`, #ffffff).
+    /// Desktop light palette with opaque ink for the terminal and solid popovers.
     pub fn zeron_light() -> Self {
         Self {
             light: true,
             shell: hex(0xf3f3f5),
-            text: hex(0x303035),
-            muted: hex(0x62626a),
-            faint: hex(0x797981),
-            accent: hex(0x5b43e8),
-            on_accent: on_accent_for(hex(0x5b43e8)),
+            text: hex(0x1b1b1d),
+            muted: hex(0x535355),
+            faint: hex(0x69696b),
+            accent: hex(0x7a55c4),
+            on_accent: on_accent_for(hex(0x7a55c4)),
             success: hex(0x15803d),
             danger: hex(0xdc2626),
             warning: hex(0xb45309),
@@ -168,7 +167,7 @@ impl Theme {
             row_active: wash_for(true, 0.10),
             row_hover: wash_for(true, 0.05),
             hairline: hairline_for(true, 0.06),
-            popup: hex(0xffffff),
+            popup: hex(0xfbfbfc),
             terminal_background: hex(0xfafafa),
             tint: None,
         }
@@ -178,22 +177,27 @@ impl Theme {
         Self {
             light: false,
             shell: hex(0x0d0d0d),
-            text: hex(0xe8e8ea),
-            muted: hex(0xa9a9ae),
-            faint: hex(0x85858a),
-            accent: hex(0x8b7cf6),
-            on_accent: on_accent_for(hex(0x8b7cf6)),
+            text: hex(0xededef),
+            muted: hex(0x939395),
+            faint: hex(0x777779),
+            accent: hex(0x9277b0),
+            on_accent: on_accent_for(hex(0x9277b0)),
             success: hex(0x34d399),
             danger: hex(0xf87171),
-            warning: hex(0xfbbf24),
+            warning: hex(0xfacc15),
             border: hairline_for(false, 0.08),
             row_active: wash_for(false, 0.10),
             row_hover: wash_for(false, 0.05),
             hairline: hairline_for(false, 0.06),
-            popup: hsla(0.0, 0.0, 0.09, 1.0),
+            popup: hex(0x1c1c1f),
             terminal_background: hex(0x090909),
             tint: None,
         }
+    }
+
+    /// Zeron desktop field glass and edge, from the two ds/themes palettes.
+    pub fn field_fill(&self) -> Hsla {
+        gpui::rgba(if self.light { 0xffffff59 } else { 0xebebeb0f }).into()
     }
 
     /// The terminal palette: a bundled scheme when one is chosen, else zeron's dark one.
@@ -440,13 +444,13 @@ mod tests {
         let t = Theme::zeron_light();
         assert!(t.light);
         assert_eq!(rgb_of(t.shell), 0xf3f3f5);
-        assert_eq!(rgb_of(t.text), 0x303035);
-        assert_eq!(rgb_of(t.muted), 0x62626a);
-        assert_eq!(rgb_of(t.faint), 0x797981);
-        assert_eq!(rgb_of(t.accent), 0x5b43e8);
+        assert_eq!(rgb_of(t.text), 0x1b1b1d);
+        assert_eq!(rgb_of(t.muted), 0x535355);
+        assert_eq!(rgb_of(t.faint), 0x69696b);
+        assert_eq!(rgb_of(t.accent), 0x7a55c4);
         assert_eq!(rgb_of(t.on_accent), 0xffffff);
         assert_eq!(rgb_of(t.terminal_background), 0xfafafa);
-        assert_eq!(rgb_of(t.popup), 0xffffff);
+        assert_eq!(rgb_of(t.popup), 0xfbfbfc);
         assert!(!Theme::zeron_dark().light);
         assert_eq!(rgb_of(Theme::zeron_dark().on_accent), 0x0d0d0d);
         assert!(Theme::zeron(true).light && !Theme::zeron(false).light);

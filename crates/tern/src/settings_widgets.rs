@@ -12,15 +12,15 @@ use gpui::{
     SharedString, Stateful, Styled, Window, div, px,
 };
 
-use crate::hover::HoverFade as _;
 use crate::theme::Theme;
+use gpui::StatefulInteractiveElement as _;
 
-const PAGE_MAX_WIDTH: f32 = 760.0;
+const PAGE_MAX_WIDTH: f32 = 640.0;
 const PAGE_PAD_X: f32 = 40.0;
 const SECTION_LABEL_INSET: f32 = 8.0;
 const SECTION_GAP: f32 = 32.0;
 
-/// Centered content column, 760 wide with 40 of air each side.
+/// Centered content column, 640 wide with 40 of air each side.
 pub fn page_column() -> Div {
     div()
         .w_full()
@@ -71,10 +71,12 @@ pub fn section(t: &Theme, label: &'static str, block: impl IntoElement) -> Div {
         .child(block)
 }
 
-/// zeron `section_card`: radius 12, a 4.5% ink fill, no outline.
+/// zeron `section_card`: radius 12, a tinted fill and a subtle edge.
 pub fn card(t: &Theme) -> Div {
     div()
         .rounded(px(12.))
+        .border_1()
+        .border_color(t.hairline)
         .bg(t.ink(0.045))
         .overflow_hidden()
         .flex()
@@ -92,7 +94,7 @@ pub fn row(
     div()
         .mx(px(16.))
         .py(px(12.))
-        .min_h(px(60.))
+        .min_h(px(52.))
         .when(!first, |el| {
             el.border_t_1().border_color(t.border.opacity(0.6))
         })
@@ -127,28 +129,48 @@ pub fn row(
         .child(div().flex_none().child(control))
 }
 
-/// zeron `action_button`: radius 8, at least 32 tall, 10×5 padding, 12.5 pt.
+/// A secondary action in a settings row.
 pub fn button(
     t: &Theme,
     id: impl Into<gpui::ElementId>,
     label: impl Into<SharedString>,
 ) -> Stateful<Div> {
-    let id = id.into();
-    let key = format!("button-{id}");
+    action_button(t, id, label, false)
+}
+
+/// Port of apps/zgx/ui/ds/button.luau, medium size, with each theme's button tones.
+pub fn action_button(
+    t: &Theme,
+    id: impl Into<gpui::ElementId>,
+    label: impl Into<SharedString>,
+    primary: bool,
+) -> Stateful<Div> {
+    let (base, hover, down, ink) = match (t.light, primary) {
+        (false, true) => (
+            0xececeeff,
+            0xffffffff,
+            0xd2d2d7ff,
+            gpui::rgb(0x0b0b0c).into(),
+        ),
+        (true, true) => (0x1b1b1dff, 0x2d2d31ff, 0x000000ff, gpui::white()),
+        (false, false) => (0xffffff14, 0xffffff1f, 0xffffff29, t.text),
+        (true, false) => (0x0000000d, 0x00000014, 0x0000001c, t.text),
+    };
     div()
         .id(id)
+        .min_h(px(32.))
+        .px(px(12.))
+        .rounded(px(8.))
         .flex()
         .items_center()
         .justify_center()
-        .gap(px(6.))
-        .rounded(px(8.))
-        .min_h(px(32.))
-        .px(px(10.))
-        .py(px(5.))
-        .text_size(crate::theme::crisp(12.5))
+        .font_weight(FontWeight::MEDIUM)
+        .text_size(px(13.))
+        .bg(gpui::rgba(base))
+        .text_color(ink)
         .cursor_pointer()
-        .hover_fade(key, t.ink(0.06), t.ink(0.10))
-        .text_color(t.text)
+        .hover(move |s| s.bg(gpui::rgba(hover)))
+        .active(move |s| s.bg(gpui::rgba(down)))
         .child(label.into())
 }
 

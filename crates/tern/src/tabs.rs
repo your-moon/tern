@@ -141,15 +141,15 @@ fn tab_pill(
         .h(px(26.))
         .flex_shrink(1.)
         .min_w(px(72.))
-        .max_w(px(200.))
+        .w(px(112.))
         .pl(px(10.))
         .pr(px(4.))
         .flex()
         .items_center()
-        .gap(px(6.))
+        .gap(px(3.))
         .rounded(px(CONTROL_RADIUS))
         .cursor_pointer()
-        .text_sm()
+        .text_size(px(11.5))
         .when(active, |el| el.bg(t.row_active).text_color(t.text))
         .when(!active, |el| {
             el.text_color(t.muted).hover_fade(

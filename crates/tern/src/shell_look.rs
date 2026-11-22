@@ -246,20 +246,16 @@ impl Shell {
         div()
             .flex_none()
             .relative()
-            .h_full()
             .w(px(width))
             .overflow_hidden()
-            .when_some(self.tile_tint(self.theme.shell), |el, tint| el.bg(tint))
+            .mb(px(4.))
+            .rounded(px(12.))
+            .border_1()
+            .border_color(self.theme.hairline)
+            .bg(self
+                .tile_tint(self.theme.shell)
+                .unwrap_or(self.theme.ink(0.05)))
             .child(content)
-            .child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .bottom_0()
-                    .right_0()
-                    .w(px(1.))
-                    .bg(self.theme.hairline),
-            )
     }
 
     /// The main tile: fills what the side tile leaves. When it shows a terminal over a
@@ -270,6 +266,11 @@ impl Shell {
         let terminal_glass = shows_terminal && self.window_fill().is_some();
         div()
             .flex_1()
+            .mx(px(4.))
+            .mb(px(4.))
+            .rounded(px(12.))
+            .border_1()
+            .border_color(self.theme.hairline)
             .min_w_0()
             .relative()
             .overflow_hidden()

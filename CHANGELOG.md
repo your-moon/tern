@@ -4,6 +4,10 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 
 ## [Unreleased]
 
+### Changed
+
+- The desktop workspace uses Zeron’s inset panels, light and dark control palettes, compact session tabs, settings cards, and two-line host picker.
+
 ### Added
 
 - First-host onboarding opens on an animated seascape and offers a new SSH connection or an import from `~/.ssh/config`. Reduce Motion shows the sunrise immediately.

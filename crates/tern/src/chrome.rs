@@ -104,6 +104,11 @@ pub fn render_titlebar(
                 .flex()
                 .items_center()
                 .gap(px(2.))
+                .p(px(4.))
+                .rounded(px(12.))
+                .bg(t.row_hover)
+                .border_1()
+                .border_color(t.hairline)
                 .child(
                     control("toggle-sidebar", t)
                         .icon_button("Toggle sidebar", t)
@@ -140,7 +145,7 @@ fn control(id: &'static str, t: &Theme) -> gpui::Stateful<gpui::Div> {
         .flex()
         .items_center()
         .justify_center()
-        .rounded(px(6.))
+        .rounded(px(8.))
         .cursor_pointer()
         .hover_fade(
             format!("titlebar-{id}"),
