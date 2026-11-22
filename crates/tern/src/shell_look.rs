@@ -228,7 +228,6 @@ impl Shell {
                 .inset_0()
                 .size_full()
                 .object_fit(gpui::ObjectFit::Cover)
-                // Match the gutters to the titlebar surface around the inset panels.
                 .opacity(
                     self.settings.wallpaper_hero_opacity * (1. - self.window_fill().unwrap_or(0.)),
                 )
@@ -242,17 +241,14 @@ impl Shell {
         self.window_fill().map(|alpha| colour.opacity(alpha))
     }
 
-    /// Zeron desktop sidebar card (ds/sidebar.luau), inset five points from the window.
+    /// Sidebar flush with the window and the adjoining workspace.
     pub(super) fn side_tile(&self, width: f32, content: impl IntoElement) -> gpui::Div {
         div()
             .flex_none()
             .relative()
-            .ml(px(width.min(5.)))
-            .mb(px(5.))
             .w(px(width))
             .min_h_0()
             .overflow_hidden()
-            .rounded(px(12.))
             .bg(if self.settings_page.is_some() {
                 self.tile_tint(self.theme.page_surface())
                     .unwrap_or(self.theme.page_surface())
@@ -271,29 +267,14 @@ impl Shell {
             .child(content)
     }
 
-    /// The main tile: fills what the side tile leaves. When it shows a terminal over a
-    /// full-window wallpaper it paints only the rim, as the terminal draws its own glass at the same
-    /// alpha; anything else it shows (Settings, the empty view) sits on the tile's tint.
+    /// The terminal paints its own translucent background over a wallpaper.
     pub(super) fn main_tile(&self, panel: Hsla) -> gpui::Div {
         let shows_terminal = self.tabs.get(self.active).is_some() && self.settings_page.is_none();
         let tint = self.tile_tint(panel);
-        let terminal_glass = shows_terminal && tint.is_some();
         div()
             .flex_1()
-            .ml(px(5. - self.sidebar_now().min(5.) / 5.))
-            .mr(px(5.))
-            .mb(px(5.))
-            .rounded(px(12.))
-            // GPUI clips child painting to a rectangle. Four points on both axes
-            // keep each child corner inside the 12-point arc, including terminal quads.
-            .when(terminal_glass, |el| {
-                el.border_4().border_color(tint.unwrap_or(panel))
-            })
-            .when(!terminal_glass, |el| {
-                el.border_1()
-                    .border_color(self.theme.hairline)
-                    .p(px(3.))
-                    .bg(tint.unwrap_or(panel))
+            .when(!shows_terminal || tint.is_none(), |el| {
+                el.bg(tint.unwrap_or(panel))
             })
             .min_w_0()
             .relative()

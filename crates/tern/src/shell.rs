@@ -368,7 +368,7 @@ impl Shell {
 
     /// Live drag: follows the pointer without writing the file on every move.
     fn on_sidebar_drag(&mut self, x: f32, cx: &mut Context<Self>) {
-        self.settings.sidebar_width = look::snap(chrome::dragged_width(x - 5.), self.frame.scale);
+        self.settings.sidebar_width = look::snap(chrome::dragged_width(x), self.frame.scale);
         self.settings.sidebar_collapsed = false;
         self.sidebar_tween = None;
         cx.notify();
@@ -380,7 +380,7 @@ impl Shell {
             .absolute()
             .top_0()
             .bottom_0()
-            .left(px(self.sidebar_now() + 5. - chrome::HANDLE_HALF_WIDTH))
+            .left(px(self.sidebar_now() - chrome::HANDLE_HALF_WIDTH))
             .w(px(chrome::HANDLE_HALF_WIDTH * 2.0))
             .occlude()
             .cursor_col_resize()

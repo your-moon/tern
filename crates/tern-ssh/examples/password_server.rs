@@ -628,6 +628,10 @@ impl server::Handler for PasswordServer {
         data: &[u8],
         s: &mut Session,
     ) -> Result<(), Self::Error> {
+        // Subsystem channels consume their own binary input.
+        if !self.sessions.contains_key(&ch) {
+            return Ok(());
+        }
         if self.demo {
             let (out, close) = self.shell.feed(&self.user, &self.password, data);
             if !out.is_empty() {

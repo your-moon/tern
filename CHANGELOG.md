@@ -16,7 +16,7 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 
 - Light and dark appearances remember separate default terminal palettes. Settings follows the window appearance, and the intro cards use Tern’s own SSH and workspace icons.
 
-- A single unnamed terminal uses the host name in the tab bar and appears once in the sidebar. Named terminals and multiple sessions remain individually accessible. The footer follows the active terminal palette, and full-window wallpapers blend into the pane edges. Sidebar keyboard shortcuts act immediately, and pointer toggles respect Reduce Motion.
+- A single unnamed terminal uses the host name in the tab bar and appears once in the sidebar. Named terminals and multiple sessions remain individually accessible. The footer follows the active terminal palette, and the sidebar and workspace meet edge to edge. Sidebar keyboard shortcuts act immediately, and pointer toggles respect Reduce Motion.
 - Closing Settings with the close shortcut returns to the workspace and preserves the active session.
 - Host and Settings sidebars share the window background. Session tabs reserve room for status badges and keep host suffixes visible. Sidebar shortcuts also work from the welcome screen.
 
