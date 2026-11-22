@@ -19,7 +19,7 @@ use crate::theme::themes::{self, Scheme};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ThemeTarget {
-    Default,
+    Default { light: bool },
     Host(String),
 }
 
@@ -64,7 +64,7 @@ fn choices(target: &ThemeTarget) -> Vec<Choice> {
     if matches!(target, ThemeTarget::Host(_)) {
         out.push(Choice::FollowDefault);
     }
-    if matches!(target, ThemeTarget::Default) {
+    if matches!(target, ThemeTarget::Default { .. }) {
         out.push(Choice::Zeron);
     }
     out.extend(themes::all().iter().map(Choice::Scheme));
@@ -106,7 +106,7 @@ impl Shell {
 
     fn theme_value(&self, target: &ThemeTarget) -> Option<String> {
         match target {
-            ThemeTarget::Default => self.settings.terminal_theme.clone(),
+            ThemeTarget::Default { light } => self.settings.terminal_scheme(*light).cloned(),
             ThemeTarget::Host(alias) => self.settings.host_themes.get(alias).cloned(),
         }
     }
@@ -121,7 +121,7 @@ impl Shell {
     ) {
         let value = value.map(str::to_owned);
         let apply = |s: &mut crate::settings::Settings| match target {
-            ThemeTarget::Default => s.terminal_theme = value.clone(),
+            ThemeTarget::Default { light } => *s.terminal_scheme_mut(*light) = value.clone(),
             ThemeTarget::Host(alias) => match &value {
                 Some(v) => {
                     s.host_themes.insert(alias.clone(), v.clone());
@@ -221,7 +221,7 @@ impl Shell {
         let matches = self.matches();
         let active = p.active.min(matches.len().saturating_sub(1));
         let title = match &p.target {
-            ThemeTarget::Default => "Default terminal theme".to_owned(),
+            ThemeTarget::Default { .. } => "Default terminal theme".to_owned(),
             ThemeTarget::Host(alias) => format!("Theme for {alias}"),
         };
         let rows = matches.iter().enumerate().map(|(row, choice)| {

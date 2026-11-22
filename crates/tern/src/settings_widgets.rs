@@ -77,7 +77,11 @@ pub fn card(t: &Theme) -> Div {
         .rounded(px(12.))
         .border_1()
         .border_color(t.hairline)
-        .bg(t.ink(0.045))
+        .bg(if t.light {
+            gpui::rgba(0xffffff66).into()
+        } else {
+            t.ink(0.045)
+        })
         .overflow_hidden()
         .flex()
         .flex_col()
@@ -265,7 +269,11 @@ impl RenderOnce for Switch {
             window.request_animation_frame();
         }
         let t = self.theme;
-        let track: Hsla = if self.on {
+        let track: Hsla = if t.light && self.on {
+            t.accent.opacity(0.82)
+        } else if t.light {
+            gpui::rgba(0x00000017).into()
+        } else if self.on {
             crate::theme::flatten(gpui::black().opacity(0.14), t.accent)
         } else {
             crate::theme::flatten(t.ink(0.18), t.shell)

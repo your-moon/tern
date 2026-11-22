@@ -195,6 +195,15 @@ impl Theme {
         }
     }
 
+    /// Zeron light's raised page surface over the window base.
+    pub fn page_surface(&self) -> Hsla {
+        if self.light {
+            flatten(gpui::rgba(0xffffffc7).into(), self.shell)
+        } else {
+            self.terminal_background
+        }
+    }
+
     /// Zeron desktop field glass and edge, from the two ds/themes palettes.
     pub fn field_fill(&self) -> Hsla {
         gpui::rgba(if self.light { 0xffffff59 } else { 0xebebeb0f }).into()

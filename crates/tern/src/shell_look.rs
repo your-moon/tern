@@ -30,7 +30,7 @@ impl Shell {
         self.settings
             .host_themes
             .get(alias)
-            .or(self.settings.terminal_theme.as_ref())
+            .or(self.settings.terminal_scheme(self.theme.light))
             .and_then(|name| crate::theme::themes::find(name))
     }
 

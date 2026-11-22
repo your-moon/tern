@@ -60,10 +60,12 @@ def main():
     output = Path(__file__).resolve().parents[1] / "crates/tern/assets/intro/marks"
     output.mkdir(parents=True, exist_ok=True)
     agents = (ui / "intro.luau").read_text().split("local AGENTS: { Agent } = {")[1]
-    for block in re.findall(r"\{([^{}]+)\}", agents.split("-- When the agents")[0]):
+    icons = ["remote-server", "terminal", "folder", "key-minimalistic", "magnifer",
+             "file-code", "cloud", "keyboard", "archive-up-minimalistic", "settings"]
+    slots = re.findall(r"\{([^{}]+)\}", agents.split("-- When the agents")[0])
+    for name, block in zip(icons, slots, strict=True):
         values = dict(re.findall(r'(\w+) = ("[^"]+"|[-.\d]+)', block))
-        name = values["mark"].strip('"')
-        card = render_card(ui / "assets/icons" / (name + ".svg"), int(values["s"]))
+        card = render_card(output.parents[1] / "icons" / (name + ".svg"), int(values["s"]))
         sheet = atlas(card, int(values["rot"]), int(values["wob"]))
         sheet.save(output / (name + ".webp"), lossless=True, method=1)
 

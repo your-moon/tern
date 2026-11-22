@@ -6,6 +6,8 @@ All notable changes to tern are recorded here. The format follows [Keep a Change
 
 ### Changed
 
+- Light and dark appearances remember separate default terminal palettes. Settings follows the window appearance, and the intro cards use Tern’s own SSH and workspace icons.
+
 - Host and Settings sidebars share the window background. Session tabs reserve room for status badges and keep host suffixes visible. Sidebar shortcuts also work from the welcome screen.
 
 - The desktop workspace uses Zeron’s inset panels, light and dark control palettes, compact session tabs, settings cards, and two-line host picker.

@@ -16,7 +16,7 @@ struct Mark {
 
 const MARKS: &[Mark] = &[
     Mark {
-        asset: "intro/marks/claude-mark.webp",
+        asset: "intro/marks/remote-server.webp",
         position: (-0.33, 0.2),
         size: 96.0,
         fly: (-160.0, -60.0),
@@ -27,7 +27,7 @@ const MARKS: &[Mark] = &[
         first_angle: -2,
     },
     Mark {
-        asset: "intro/marks/openai-mark.webp",
+        asset: "intro/marks/terminal.webp",
         position: (0.28, 0.12),
         size: 84.0,
         fly: (140.0, -90.0),
@@ -38,7 +38,7 @@ const MARKS: &[Mark] = &[
         first_angle: 0,
     },
     Mark {
-        asset: "intro/marks/opencode-mark-dark.webp",
+        asset: "intro/marks/folder.webp",
         position: (-0.08, 0.1),
         size: 48.0,
         fly: (-30.0, -100.0),
@@ -49,7 +49,7 @@ const MARKS: &[Mark] = &[
         first_angle: 0,
     },
     Mark {
-        asset: "intro/marks/antigravity-mark.webp",
+        asset: "intro/marks/key-minimalistic.webp",
         position: (0.11, 0.21),
         size: 56.0,
         fly: (50.0, -80.0),
@@ -60,7 +60,7 @@ const MARKS: &[Mark] = &[
         first_angle: -3,
     },
     Mark {
-        asset: "intro/marks/devin-mark.webp",
+        asset: "intro/marks/magnifer.webp",
         position: (-0.44, 0.46),
         size: 64.0,
         fly: (-200.0, 10.0),
@@ -71,7 +71,7 @@ const MARKS: &[Mark] = &[
         first_angle: 0,
     },
     Mark {
-        asset: "intro/marks/pi-mark.webp",
+        asset: "intro/marks/file-code.webp",
         position: (0.21, 0.71),
         size: 60.0,
         fly: (80.0, 120.0),
@@ -82,7 +82,7 @@ const MARKS: &[Mark] = &[
         first_angle: -2,
     },
     Mark {
-        asset: "intro/marks/cursor-mark.webp",
+        asset: "intro/marks/cloud.webp",
         position: (0.41, 0.4),
         size: 76.0,
         fly: (190.0, -20.0),
@@ -93,7 +93,7 @@ const MARKS: &[Mark] = &[
         first_angle: 0,
     },
     Mark {
-        asset: "intro/marks/grok-mark.webp",
+        asset: "intro/marks/keyboard.webp",
         position: (-0.17, 0.67),
         size: 68.0,
         fly: (-90.0, 110.0),
@@ -104,7 +104,7 @@ const MARKS: &[Mark] = &[
         first_angle: -3,
     },
     Mark {
-        asset: "intro/marks/hermes-mark.webp",
+        asset: "intro/marks/archive-up-minimalistic.webp",
         position: (0.39, 0.6),
         size: 52.0,
         fly: (170.0, 90.0),
@@ -115,7 +115,7 @@ const MARKS: &[Mark] = &[
         first_angle: 0,
     },
     Mark {
-        asset: "intro/marks/muse-mark.webp",
+        asset: "intro/marks/settings.webp",
         position: (-0.36, 0.82),
         size: 80.0,
         fly: (-140.0, 140.0),

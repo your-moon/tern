@@ -634,7 +634,7 @@ impl Render for Shell {
         let panel_bg = self.panel_background();
         let hero = self.empty_view_hero(window);
         let layers = self.backdrop();
-        let status_line = self.render_status_line(self.veil(panel_bg), cx);
+        let status_line = self.render_status_line(self.veil(t.page_surface()), cx);
         let theme_picker = self.render_theme_picker(window, cx);
         let toast = self.render_toast(window, cx);
         let context_menu = self.render_menu(cx);

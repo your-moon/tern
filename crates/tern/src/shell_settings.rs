@@ -143,7 +143,7 @@ impl Shell {
             // The page is the body's main tile, so it carries the same tint as every other
             // view of it over a wallpaper.
             .child(
-                self.main_tile(self.panel_background()).child(
+                self.main_tile(self.theme.page_surface()).child(
                     div()
                         .id("settings-scroll")
                         .flex_1()
@@ -190,7 +190,14 @@ impl Shell {
             appearance_modes = appearance_modes.child(
                 w::button(&t, id, label)
                     .when(selected, |el| {
-                        el.bg(t.ink(0.18)).font_weight(gpui::FontWeight::MEDIUM)
+                        el.bg(if t.light {
+                            gpui::rgba(0xffffffeb).into()
+                        } else {
+                            t.ink(0.18)
+                        })
+                        .border_1()
+                        .border_color(t.border)
+                        .font_weight(gpui::FontWeight::MEDIUM)
                     })
                     .on_click(cx.listener(move |s, _, _, cx| {
                         s.update_settings(|st| st.appearance = mode, cx);
@@ -247,18 +254,18 @@ impl Shell {
                     false,
                     "Terminal theme",
                     Some(
-                        "For every host without its own; set one per host from the sidebar".into(),
+                        "Default for this appearance. Individual hosts can use their own theme.".into(),
                     ),
                     w::button(
                         &t,
                         "theme-default",
                         self.settings
-                            .terminal_theme
-                            .clone()
+                            .terminal_scheme(t.light)
+                            .cloned()
                             .unwrap_or_else(|| crate::theme::themes::default_name(t.light).to_owned()),
                     )
                     .on_click(cx.listener(|s, _, window, cx| {
-                        s.open_theme_picker(super::ThemeTarget::Default, window, cx)
+                        s.open_theme_picker(super::ThemeTarget::Default { light: s.theme.light }, window, cx)
                     })),
                 )),
             ))
