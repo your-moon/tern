@@ -261,11 +261,6 @@ impl Shell {
         let terminal_glass = shows_terminal && self.window_fill().is_some();
         div()
             .flex_1()
-            .mx(px(4.))
-            .mb(px(4.))
-            .rounded(px(12.))
-            .border_1()
-            .border_color(self.theme.hairline)
             .min_w_0()
             .relative()
             .overflow_hidden()
