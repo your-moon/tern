@@ -247,8 +247,12 @@ impl Shell {
         self.focus_front_pane(window, cx);
     }
 
-    /// ⌘W: a split tab loses the focused pane, a tab with one pane closes.
+    /// Close Settings first. In the workspace, close the focused pane or its single-pane tab.
     pub(crate) fn close_pane_or_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.settings_page.is_some() {
+            self.toggle_settings(window, cx);
+            return;
+        }
         let Some(tab) = self.tabs.get(self.active) else {
             return;
         };
