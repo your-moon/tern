@@ -24,6 +24,10 @@ use crate::password_command::{self as pc, Approved};
 /// shell prompt with an `echo password:` on it is not either.
 pub fn is_password_prompt(line: &str) -> bool {
     let line = line.trim_end();
+    // sudo-rs wraps the PAM password prompt in a context label.
+    if line.eq_ignore_ascii_case("[sudo: authenticate] Password:") {
+        return true;
+    }
     let Some(body) = line.strip_suffix(':') else {
         return false;
     };
@@ -321,6 +325,7 @@ mod tests {
     #[test]
     fn real_prompts_are_recognised_whatever_their_case() {
         for line in [
+            "[sudo: authenticate] Password: ",
             "[sudo] password for test:",
             "[sudo] password for test: ",
             "[SUDO] PASSWORD FOR Test:",
@@ -342,6 +347,8 @@ mod tests {
         for line in [
             // Typed after the prompt, or in the middle of output.
             "echo password: hunter2",
+            "me@box:~$ echo [sudo: authenticate] Password:",
+            "[sudo: authenticate] Password: hunter2",
             "password: is what you type",
             "Password: hunter2",
             "mid password: line of text",
